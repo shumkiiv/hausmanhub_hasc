@@ -69,6 +69,11 @@ The read-only skeleton is limited to the two approved modes and local,
 synthetic verification. HACS metadata, proxy, and direct execution remain out
 of scope.
 
+The next packaging choice is prepared, but not made, in the
+[HACS packaging decision record](docs/hacs-packaging-decision.md). It keeps
+`hacs.json` absent until an owner explicitly approves a private testing or
+public-distribution path.
+
 The required explicit choice is documented in
 [the read-only skeleton decision record](docs/read-only-skeleton-decision.md).
 Its implementation boundary is documented in
