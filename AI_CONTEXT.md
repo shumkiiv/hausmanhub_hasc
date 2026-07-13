@@ -41,6 +41,10 @@ Last updated: 2026-07-13.
 - Kimi reviewed the isolated real-Core smoke check, then confirmed its
   remediations with no remaining findings. See the [Core smoke-check review
   note](LLM_WIKI/Manual/2026-07-13-kimi-home-assistant-core-smoke-check-review.md).
+- Kimi reviewed the expanded real-Core lifecycle check, including both safe
+  modes, rejected unsafe options, reload, and removal, with no remaining
+  findings. See the [expanded Core lifecycle review
+  note](LLM_WIKI/Manual/2026-07-13-kimi-expanded-core-lifecycle-review.md).
 - Kimi reviewed the persisted-config exact-key boundary tests and confirmed the
   final version with no remaining findings. See the [persisted-config review
   note](LLM_WIKI/Manual/2026-07-13-kimi-persisted-config-boundary-review.md).
@@ -54,9 +58,10 @@ Last updated: 2026-07-13.
 Run `python3 -m unittest discover -s tests -v`. This validates only synthetic
 schema data and the in-memory config/options adapter boundary; it does not
 prove shadow parity, grant any authority, or load Home Assistant. Core 2026.7.0
-requires Python 3.14.2 or newer. The isolated Core smoke check is documented
-in `docs/read-only-skeleton.md`; it proves only the safe integration shell can
-load and unload in an empty local Core, never shadow parity or authority.
+requires Python 3.14.2 or newer. The isolated Core lifecycle check is
+documented in `docs/read-only-skeleton.md`; it proves only that both safe
+modes can load, reload, and unload in an empty local Core without service or
+entity surfaces. It never proves shadow parity or grants authority.
 
 ## Next decision gate
 

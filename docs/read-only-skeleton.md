@@ -60,6 +60,9 @@ uv pip install --python /tmp/hasc-core/bin/python homeassistant==2026.7.0
 ```
 
 The script creates a temporary empty Home Assistant configuration, copies the
-local integration into it, checks the safe config/options flows, and removes
-the temporary configuration afterwards. It does not read any real Home
-Assistant configuration, credentials, entities, or devices.
+local integration into it, and removes the temporary configuration afterwards.
+It checks both approved initial modes, a safe change between those modes, a
+real reload, clean removal, and the absence of HASC services and entities. An
+attempt to submit `proxy` through options is required to be rejected before it
+can persist anything. It does not read any real Home Assistant configuration,
+credentials, entities, or devices.

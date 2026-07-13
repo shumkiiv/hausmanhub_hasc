@@ -2,9 +2,9 @@
 
 This is an explicit compatibility smoke check, not a live-home test. It copies
 the integration into a new temporary Home Assistant configuration directory,
-creates only a safe ``shadow`` config entry, and removes all temporary files
-when finished. It never receives credentials, opens a network connection, or
-calls Home Assistant services or devices.
+exercises safe ``read-only`` and ``shadow`` config entries, and removes all
+temporary files when finished. It never receives credentials, opens a network
+connection, or calls Home Assistant services or devices.
 """
 
 from __future__ import annotations
@@ -19,7 +19,9 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant import loader
 from homeassistant.bootstrap import async_from_config_dict
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import InvalidData
 from homeassistant.helpers import entity_registry
 
 
@@ -40,6 +42,154 @@ def assert_result(actual: Any, expected: Any, message: str) -> None:
 
     if actual != expected:
         raise RuntimeError(f"{message}: expected {expected!r}, got {actual!r}")
+
+
+async def async_create_safe_entry(
+    hass: HomeAssistant,
+    domain: str,
+    mode: str,
+) -> ConfigEntry:
+    """Create and load one approved mode through the real config flow."""
+
+    created_entry = await hass.config_entries.flow.async_init(
+        domain,
+        context={"source": config_entries.SOURCE_USER},
+        data={"mode": mode},
+    )
+    assert_result(
+        created_entry["type"],
+        "create_entry",
+        f"{mode} must create an entry",
+    )
+    entry = created_entry["result"]
+    assert_result(entry.data["mode"], mode, "entry must preserve the safe mode")
+    assert_result(
+        entry.data["direct_execution_status"],
+        "direct_execution_blocked",
+        "direct execution must stay blocked",
+    )
+    await hass.async_block_till_done()
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.LOADED,
+        "safe entry must load successfully",
+    )
+    return entry
+
+
+async def async_remove_safe_entry(hass: HomeAssistant, entry_id: str) -> None:
+    """Remove a safe entry and require the inert unload path to succeed."""
+
+    removal = await hass.config_entries.async_remove(entry_id)
+    assert_result(
+        removal["require_restart"],
+        False,
+        "safe entry must unload and remove cleanly",
+    )
+    await hass.async_block_till_done()
+    assert_result(
+        hass.config_entries.async_get_entry(entry_id),
+        None,
+        "removed entry must no longer be registered",
+    )
+    assert_result(
+        entity_registry.async_entries_for_config_entry(
+            entity_registry.async_get(hass),
+            entry_id,
+        ),
+        [],
+        "removed entry must not leave entities behind",
+    )
+
+
+async def async_update_safe_options(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    target_mode: str,
+) -> None:
+    """Reject unsafe options, persist a safe mode, and verify a safe reload."""
+
+    rejected_options_form = await hass.config_entries.options.async_init(entry.entry_id)
+    assert_result(
+        rejected_options_form["type"],
+        "form",
+        "options flow must show a form",
+    )
+    options_before_rejection = dict(entry.options)
+    rejected_flow_id = rejected_options_form["flow_id"]
+    try:
+        await hass.config_entries.options.async_configure(
+            rejected_flow_id,
+            {"mode": "proxy"},
+        )
+    except InvalidData:
+        hass.config_entries.options.async_abort(rejected_flow_id)
+    else:
+        raise RuntimeError("proxy must be rejected by the options schema")
+    assert_result(
+        entry.options,
+        options_before_rejection,
+        "rejected options must not mutate the entry",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.LOADED,
+        "rejected options must keep the entry loaded",
+    )
+
+    options_form = await hass.config_entries.options.async_init(entry.entry_id)
+    assert_result(options_form["type"], "form", "options flow must show a form")
+    safe_options = await hass.config_entries.options.async_configure(
+        options_form["flow_id"],
+        {"mode": target_mode},
+    )
+    assert_result(
+        safe_options["type"],
+        "create_entry",
+        f"{target_mode} must be accepted in options",
+    )
+    await hass.async_block_till_done()
+    assert_result(
+        entry.options.get("mode"),
+        target_mode,
+        "options must preserve the safe mode",
+    )
+    assert_result(
+        entry.data["direct_execution_status"],
+        "direct_execution_blocked",
+        "options must not change the direct execution block",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.LOADED,
+        "updating safe options must keep the entry loaded",
+    )
+    reloaded = await hass.config_entries.async_reload(entry.entry_id)
+    assert_result(reloaded, True, "safe entry must reload successfully")
+    await hass.async_block_till_done()
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.LOADED,
+        "safe entry must stay loaded after a safe reload",
+    )
+
+
+def assert_entry_is_inert(hass: HomeAssistant, domain: str, entry_id: str) -> None:
+    """Ensure a safe entry has neither a service nor an attached entity."""
+
+    assert_result(
+        hass.services.async_services().get(domain),
+        None,
+        "the integration must not register services",
+    )
+    assert_result(
+        entity_registry.async_entries_for_config_entry(
+            entity_registry.async_get(hass),
+            entry_id,
+        ),
+        [],
+        "the integration must not create entities",
+    )
 
 
 async def async_run_check() -> None:
@@ -78,63 +228,25 @@ async def async_run_check() -> None:
                 "proxy must be rejected",
             )
 
-            created_entry = await hass.config_entries.flow.async_init(
-                domain,
-                context={"source": config_entries.SOURCE_USER},
-                data={"mode": "shadow"},
-            )
+            read_only_entry = await async_create_safe_entry(hass, domain, "read-only")
+            await async_update_safe_options(hass, read_only_entry, "shadow")
             assert_result(
-                created_entry["type"],
-                "create_entry",
-                "shadow must create an entry",
+                read_only_entry.data["mode"],
+                "read-only",
+                "options must not mutate the initial entry mode",
             )
-            entry = created_entry["result"]
-            assert_result(entry.data["mode"], "shadow", "entry must preserve the safe mode")
-            assert_result(
-                entry.data["direct_execution_status"],
-                "direct_execution_blocked",
-                "direct execution must stay blocked",
-            )
-            await hass.async_block_till_done()
-            assert_result(
-                entry.state,
-                config_entries.ConfigEntryState.LOADED,
-                "safe entry must load successfully",
-            )
+            assert_entry_is_inert(hass, domain, read_only_entry.entry_id)
+            await async_remove_safe_entry(hass, read_only_entry.entry_id)
 
-            options_form = await hass.config_entries.options.async_init(entry.entry_id)
-            assert_result(options_form["type"], "form", "options flow must show a form")
-            safe_options = await hass.config_entries.options.async_configure(
-                options_form["flow_id"],
-                {"mode": "read-only"},
-            )
+            shadow_entry = await async_create_safe_entry(hass, domain, "shadow")
+            await async_update_safe_options(hass, shadow_entry, "read-only")
             assert_result(
-                safe_options["type"],
-                "create_entry",
-                "read-only must be accepted in options",
+                shadow_entry.data["mode"],
+                "shadow",
+                "options must not mutate the initial entry mode",
             )
-
-            assert_result(
-                hass.services.async_services().get(domain),
-                None,
-                "the integration must not register services",
-            )
-            assert_result(
-                entity_registry.async_entries_for_config_entry(
-                    entity_registry.async_get(hass),
-                    entry.entry_id,
-                ),
-                [],
-                "the integration must not create entities",
-            )
-
-            removal = await hass.config_entries.async_remove(entry.entry_id)
-            assert_result(
-                removal["require_restart"],
-                False,
-                "safe entry must unload and remove cleanly",
-            )
-            await hass.async_block_till_done()
+            assert_entry_is_inert(hass, domain, shadow_entry.entry_id)
+            await async_remove_safe_entry(hass, shadow_entry.entry_id)
         finally:
             await hass.async_stop()
 
