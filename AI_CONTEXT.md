@@ -9,8 +9,9 @@ Last updated: 2026-07-13.
 - Home Assistant baseline: Core 2026.7.0 or newer.
 - A private `custom_components/hausman_hub/` read-only skeleton is approved
   and present. HACS metadata remains intentionally absent.
-- No runtime, device, Node-RED, Home Assistant service, or live API work has
-  been performed.
+- The skeleton passed an isolated runtime smoke check in Home Assistant Core
+  2026.7.0 on Python 3.14.3. It used a disposable empty configuration only;
+  no device, Node-RED, Home Assistant service, or live API work was performed.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
@@ -37,14 +38,18 @@ Last updated: 2026-07-13.
 - Kimi reviewed the isolated config/options-flow adapter test twice: first it
   identified two test-isolation gaps, then confirmed the corrections with no
   remaining findings. See the [adapter review note](LLM_WIKI/Manual/2026-07-13-kimi-config-flow-adapter-review.md).
+- Kimi reviewed the isolated real-Core smoke check, then confirmed its
+  remediations with no remaining findings. See the [Core smoke-check review
+  note](LLM_WIKI/Manual/2026-07-13-kimi-home-assistant-core-smoke-check-review.md).
 
 ## Verification
 
 Run `python3 -m unittest discover -s tests -v`. This validates only synthetic
 schema data and the in-memory config/options adapter boundary; it does not
 prove shadow parity, grant any authority, or load Home Assistant. Core 2026.7.0
-requires Python 3.14.2, so a real isolated Core test remains pending a suitable
-local environment.
+requires Python 3.14.2 or newer. The isolated Core smoke check is documented
+in `docs/read-only-skeleton.md`; it proves only the safe integration shell can
+load and unload in an empty local Core, never shadow parity or authority.
 
 ## Next decision gate
 
