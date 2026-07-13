@@ -34,11 +34,17 @@ Last updated: 2026-07-13.
   safety issue; a type-hint compatibility question was checked against the
   official Home Assistant 2026.7.0 source and is compatible. See the detailed
   [skeleton review note](LLM_WIKI/Manual/2026-07-13-kimi-read-only-skeleton-review.md).
+- Kimi reviewed the isolated config/options-flow adapter test twice: first it
+  identified two test-isolation gaps, then confirmed the corrections with no
+  remaining findings. See the [adapter review note](LLM_WIKI/Manual/2026-07-13-kimi-config-flow-adapter-review.md).
 
 ## Verification
 
 Run `python3 -m unittest discover -s tests -v`. This validates only synthetic
-schema data; it does not prove shadow parity or grant any authority.
+schema data and the in-memory config/options adapter boundary; it does not
+prove shadow parity, grant any authority, or load Home Assistant. Core 2026.7.0
+requires Python 3.14.2, so a real isolated Core test remains pending a suitable
+local environment.
 
 ## Next decision gate
 

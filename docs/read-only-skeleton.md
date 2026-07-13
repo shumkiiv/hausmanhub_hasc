@@ -39,5 +39,14 @@ python3 -m unittest discover -s tests -v
 
 This checks the pure safety rules, manifest, translations, diagnostics
 allow-list, and absence of execution surfaces. It does not load Home Assistant
-or access a live home. A separate Home Assistant environment and an explicit
-approval would be needed before compatibility testing in that runtime.
+or access a live home.
+
+The suite also includes an in-memory adapter test for config and options flow.
+It supplies only the small Home Assistant form API surface used by this package
+and checks the safe paths and the rejected `proxy` path. It is not a Home
+Assistant runtime test and does not claim runtime compatibility.
+
+Home Assistant Core 2026.7.0 requires Python 3.14.2, while this local project
+environment uses Python 3.12. A real Core compatibility run therefore remains
+a separate task in an isolated Python 3.14 environment, still without a live
+home or device access.
