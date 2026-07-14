@@ -14,6 +14,8 @@ Assistant-facing shell around framework-independent safety rules:
   config-entry data;
 - fixed manual guidance texts for review; they do not create issues or make
   changes.
+- an original local brand icon for Home Assistant's interface; it is only an
+  image and does not add a runtime capability.
 
 The inner `domain/` and `application/` layers use standard Python only. The
 Home Assistant modules are thin adapters at the outer boundary.

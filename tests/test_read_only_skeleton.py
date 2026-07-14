@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import fields
 import json
 from pathlib import Path
+import struct
 import sys
 import unittest
 
@@ -46,6 +47,17 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
         self.assertEqual("0.1.0", manifest["version"])
+
+    def test_brand_icon_is_a_square_transparent_png(self) -> None:
+        """Keep the local Home Assistant brand image present and usable."""
+
+        icon = INTEGRATION / "brand" / "icon.png"
+        icon_bytes = icon.read_bytes()
+
+        self.assertEqual(b"\x89PNG\r\n\x1a\n", icon_bytes[:8])
+        self.assertEqual(b"IHDR", icon_bytes[12:16])
+        self.assertEqual((512, 512), struct.unpack(">II", icon_bytes[16:24]))
+        self.assertEqual(6, icon_bytes[25], "icon must keep an alpha channel")
 
     def test_initial_entry_only_contains_an_approved_mode_and_direct_block(self) -> None:
         data = create_initial_entry("read-only")

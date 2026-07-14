@@ -10,6 +10,8 @@ Last updated: 2026-07-14.
 - A public `custom_components/hausman_hub/` read-only skeleton is approved
   and present. It may be added manually as an HACS custom repository; it is
   not in the public HACS catalog.
+- The skeleton contains a local square `brand/icon.png`, so Home Assistant can
+  show its original icon without relying on an external brand asset.
 - The skeleton passed isolated runtime smoke checks in Home Assistant Core
   2026.6.4 and 2026.7.0 on Python 3.14.3. They used disposable empty
   configurations only; no device, Node-RED, Home Assistant service, or live
@@ -42,6 +44,8 @@ Last updated: 2026-07-14.
   a prompt wording mismatch about a test rename; the final code has no related
   defect. See the [2026.6.4 baseline review
   note](LLM_WIKI/Manual/2026-07-14-kimi-core-2026-6-baseline-review.md).
+- Kimi reviewed the local brand icon change with no findings. See the [brand
+  icon review note](LLM_WIKI/Manual/2026-07-14-kimi-local-brand-icon-review.md).
 - Kimi reviewed the initial HACS metadata change with no findings before the
   private-HACS limitation was discovered. Its historical review note is
   [here](LLM_WIKI/Manual/2026-07-14-kimi-private-hacs-metadata-review.md).
