@@ -49,6 +49,12 @@ Last updated: 2026-07-14.
   the exact nine-count shape and all required safe-mode markers. Its aggregate
   values and the diagnostics file were inspected only and were not copied into
   this repository or this context.
+- On 2026-07-14, the owner separately approved Codex direct local Home
+  Assistant observation through a dedicated local non-administrator account.
+  This is outside HASC's runtime boundary: Codex sends GET only, keeps the
+  credential outside GitHub and chat, and does not retain raw home data. The
+  access account is not a technical read-only role, so the no-command rule is
+  an operating constraint. See the [direct local observation decision](LLM_WIKI/Manual/2026-07-14-direct-local-read-observation-decision.md).
 
 ## Durable decisions
 
@@ -74,6 +80,10 @@ Last updated: 2026-07-14.
   direct execution,
   Common/Climate/Automation ownership, or permission to save live home data
   in this repository.
+- The owner later approved a separate, local Codex read-observation path after
+  the Home Assistant UI did not offer the exact `system-read-only` role. It
+  does not relax HASC's own strict route guard or grant HASC any device
+  authority; see the direct local observation decision above.
 - The supported baseline was lowered to Core 2026.6.4 after the isolated
   lifecycle check passed on that exact version. See the [2026.6.4 compatibility
   note](LLM_WIKI/Manual/2026-07-14-core-2026-6-4-compatibility.md).
@@ -144,14 +154,19 @@ on 2026-07-14 it passed with the aggregate summary and guarded authenticated
 loopback route on Core 2026.6.4 and 2026.7.0 using disposable configurations
 only. It proves neither live-home behaviour nor execution authority.
 
+Separately, direct local Codex observation passed a harmless availability
+check, a version-only check, and a count-only current-state check on
+2026-07-14. It used no command or mutating request, retained no raw home data,
+and does not validate or expand HASC runtime authority.
+
 ## Next decision gate
 
 The read-only skeleton is limited to the two approved modes, local synthetic
 verification, the narrowly approved aggregate diagnostics summary, and the
-guarded local count-only path. Before a live local check, the owner must update
-HASC through HACS and create the exact Home Assistant read-only account. Its
-secret stays outside the repository and chat. Public HACS catalog listing,
-proxy, and direct execution remain out of scope.
+guarded local count-only path. The stricter HASC route still requires the exact
+Home Assistant read-only account; the separately approved Codex observation
+path does not bypass it. Its credential stays outside the repository and chat.
+Public HACS catalog listing, proxy, and direct execution remain out of scope.
 
 The public custom-HACS decision and its narrow implementation boundary are
 recorded in the [HACS packaging decision record](docs/hacs-packaging-decision.md).
