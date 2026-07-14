@@ -33,7 +33,9 @@ python3 tools/check_local_release.py
 
 It runs the same fixed local checks below: tests, the three synthetic fixture
 checks, and the safety checks for published and prepared files. It does not
-start Home Assistant or contact a home.
+start Home Assistant or contact a home. An automatic test locks down that
+command list: it must not contain a network address, Home Assistant, `curl`,
+or `wget`, and every named Python file must exist inside this repository.
 
 The individual commands remain available when one result needs closer review:
 

@@ -37,6 +37,21 @@ class LocalReleaseCheckTest(unittest.TestCase):
             ("python-for-test", "tools/check_repository_boundary.py", "--staged"),
         )
 
+    def test_checklist_has_no_network_or_home_assistant_target(self) -> None:
+        checks = release.local_checks("python-for-test")
+        command_text = " ".join(
+            argument for _, command in checks for argument in command[1:]
+        ).lower()
+
+        self.assertNotIn("://", command_text)
+        self.assertNotIn("homeassistant", command_text)
+        self.assertNotIn("curl", command_text)
+        self.assertNotIn("wget", command_text)
+        for _, command in checks:
+            for argument in command[1:]:
+                if argument.endswith(".py"):
+                    self.assertTrue((ROOT / argument).is_file())
+
     def test_checklist_stops_at_the_first_failed_local_check(self) -> None:
         called: list[tuple[str, ...]] = []
 

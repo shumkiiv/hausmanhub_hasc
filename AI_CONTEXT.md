@@ -164,6 +164,11 @@ Last updated: 2026-07-14.
   existing Git-file safety checks, stopping at the first failed check. See the
   [local publication-check review
   note](LLM_WIKI/Manual/2026-07-14-kimi-local-release-check-review.md).
+- Kimi reviewed the added command-list guard with no findings. It confirmed
+  that the local publication command's fixed list cannot acquire a network
+  address, Home Assistant, `curl`, or `wget` without making the local test
+  fail. See the [no-home-target review
+  note](LLM_WIKI/Manual/2026-07-14-kimi-local-release-no-home-target-review.md).
 
 ## Verification
 
