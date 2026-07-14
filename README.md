@@ -65,3 +65,6 @@ custom HACS repository.
 
 Installation does not grant device control. It must not be used to call
 services, send commands, or enable `proxy` or direct execution.
+
+For the short, safe Home Assistant check after installation, see the Russian
+[safe-check guide](docs/home-assistant-safe-check.md).

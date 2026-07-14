@@ -174,6 +174,47 @@ async def async_update_safe_options(
     )
 
 
+async def async_assert_safe_diagnostics(
+    hass: HomeAssistant,
+    domain: str,
+    entry: ConfigEntry,
+    expected_mode: str,
+) -> None:
+    """Load the installed diagnostics adapter and verify its fixed safe report."""
+
+    integration = await loader.async_get_integration(hass, domain)
+    diagnostics_platform = await integration.async_get_platform("diagnostics")
+    snapshot = await diagnostics_platform.async_get_config_entry_diagnostics(hass, entry)
+
+    assert_result(
+        snapshot,
+        {
+            "entry_summary": {
+                "mode": expected_mode,
+                "single_config_entry": True,
+            },
+            "safety_model": {
+                "device_authority": "not_granted",
+                "direct_execution_status": "direct_execution_blocked",
+                "proxy_status": "not_approved",
+            },
+            "shadow_parity": {
+                "parity_status": "unresolved",
+                "evidence_status": "not_collected",
+            },
+            "repairs_summary": {
+                "automatic_repairs": "disabled",
+                "manual_guidance_only": True,
+            },
+            "redaction_report": {
+                "status": "passed",
+                "strategy": "allow_list_only",
+            },
+        },
+        "diagnostics must contain only the fixed safe report",
+    )
+
+
 def assert_entry_is_inert(hass: HomeAssistant, domain: str, entry_id: str) -> None:
     """Ensure a safe entry has neither a service nor an attached entity."""
 
@@ -235,6 +276,12 @@ async def async_run_check() -> None:
                 "read-only",
                 "options must not mutate the initial entry mode",
             )
+            await async_assert_safe_diagnostics(
+                hass,
+                domain,
+                read_only_entry,
+                "shadow",
+            )
             assert_entry_is_inert(hass, domain, read_only_entry.entry_id)
             await async_remove_safe_entry(hass, read_only_entry.entry_id)
 
@@ -244,6 +291,12 @@ async def async_run_check() -> None:
                 shadow_entry.data["mode"],
                 "shadow",
                 "options must not mutate the initial entry mode",
+            )
+            await async_assert_safe_diagnostics(
+                hass,
+                domain,
+                shadow_entry,
+                "read-only",
             )
             assert_entry_is_inert(hass, domain, shadow_entry.entry_id)
             await async_remove_safe_entry(hass, shadow_entry.entry_id)

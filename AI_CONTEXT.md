@@ -12,10 +12,16 @@ Last updated: 2026-07-14.
   not in the public HACS catalog.
 - The skeleton contains a local square `brand/icon.png`, so Home Assistant can
   show its original icon without relying on an external brand asset.
+- A Russian safe-check guide is available at
+  `docs/home-assistant-safe-check.md`. It guides only HACS refresh,
+  installation, and visual confirmation; it explicitly excludes diagnostics
+  archives, configuration files, home addresses, credentials, and device data.
 - The skeleton passed isolated runtime smoke checks in Home Assistant Core
   2026.6.4 and 2026.7.0 on Python 3.14.3. They used disposable empty
   configurations only; no device, Node-RED, Home Assistant service, or live
-  API work was performed.
+  API work was performed. The smoke check also loads the installed diagnostics
+  adapter and verifies its fixed redacted report after each approved mode
+  change.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
@@ -46,6 +52,9 @@ Last updated: 2026-07-14.
   note](LLM_WIKI/Manual/2026-07-14-kimi-core-2026-6-baseline-review.md).
 - Kimi reviewed the local brand icon change with no findings. See the [brand
   icon review note](LLM_WIKI/Manual/2026-07-14-kimi-local-brand-icon-review.md).
+- Kimi reviewed the isolated diagnostics smoke-check extension and the manual
+  safe-check guide with no findings. See the [safe Home Assistant check review
+  note](LLM_WIKI/Manual/2026-07-14-kimi-safe-home-assistant-check-review.md).
 - Kimi reviewed the initial HACS metadata change with no findings before the
   private-HACS limitation was discovered. Its historical review note is
   [here](LLM_WIKI/Manual/2026-07-14-kimi-private-hacs-metadata-review.md).
