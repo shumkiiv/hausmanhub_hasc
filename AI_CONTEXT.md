@@ -154,6 +154,11 @@ Last updated: 2026-07-14.
   were corrected and covered by tests. The final direct Kimi review found no
   remaining issues; see the [repository safety review
   note](LLM_WIKI/Manual/2026-07-14-kimi-repository-safety-check-review.md).
+- Kimi reviewed the isolated safe-update check. It found no issues: the check
+  restarts only a disposable empty Home Assistant after replacing the local
+  test copy, then requires the safe choice, the execution block, and the
+  absence of HASC objects to survive. See the [safe-update review
+  note](LLM_WIKI/Manual/2026-07-14-kimi-safe-update-persistence-review.md).
 
 ## Verification
 
@@ -163,7 +168,10 @@ diagnostics boundaries; it does not prove shadow parity or grant authority.
 The isolated Core lifecycle check is documented in `docs/read-only-skeleton.md`;
 on 2026-07-14 it passed with the aggregate summary and guarded authenticated
 loopback route on Core 2026.6.4 and 2026.7.0 using disposable configurations
-only. It proves neither live-home behaviour nor execution authority.
+only. It also passed its safe-update restart check on both versions: it keeps
+the temporary configuration, replaces only the temporary HASC copy, and then
+requires the approved settings to survive. It proves neither live-home
+behaviour nor execution authority.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on

@@ -81,6 +81,12 @@ The same empty test removes one safe HASC setup completely and then creates a
 new one in the other safe mode. This confirms that removing and installing
 HASC again does not leave an old HASC object, service, or setting behind.
 
+Before that removal, the test saves one safe HASC setup, stops the empty test
+system, replaces its local HASC copy, and starts the empty system again. The
+same safe choice must be present after the restart, HASC must remain without
+services or objects, and direct execution must still be blocked. This checks
+the safe persistence path for an HASC update without touching a real home.
+
 For a manual check of an installed copy, see the Russian
 [safe-check guide](home-assistant-safe-check.md). It asks only for Home
 Assistant screens and explicitly excludes diagnostics archives and home data.

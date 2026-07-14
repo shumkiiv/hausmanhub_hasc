@@ -388,8 +388,33 @@ async def async_assert_authenticated_local_summary_http_access(
         await client.close()
 
 
+async def async_start_empty_home_assistant(config_directory: Path) -> HomeAssistant:
+    """Start one disposable, empty Home Assistant configuration."""
+
+    hass = HomeAssistant(str(config_directory))
+    loader.async_setup(hass)
+    hass.config.skip_pip = True
+    configured_hass = await async_from_config_dict({}, hass)
+    assert_result(
+        configured_hass,
+        hass,
+        "empty Home Assistant configuration must bootstrap successfully",
+    )
+    await hass.async_start()
+    await hass.async_block_till_done()
+    return hass
+
+
+def refresh_test_integration(config_directory: Path, domain: str) -> None:
+    """Replace the temporary integration copy before a disposable restart."""
+
+    integration_target = config_directory / "custom_components" / domain
+    shutil.rmtree(integration_target)
+    shutil.copytree(INTEGRATION_SOURCE, integration_target)
+
+
 async def async_run_check() -> None:
-    """Exercise setup, config flow, options flow, and unload in a blank Core."""
+    """Exercise safe lifecycle, restart, and removal in a blank Core."""
 
     domain = load_integration_domain()
 
@@ -399,19 +424,8 @@ async def async_run_check() -> None:
         integration_target.parent.mkdir(parents=True)
         shutil.copytree(INTEGRATION_SOURCE, integration_target)
 
-        hass = HomeAssistant(str(config_directory))
-        loader.async_setup(hass)
-        hass.config.skip_pip = True
-        configured_hass = await async_from_config_dict({}, hass)
-        assert_result(
-            configured_hass,
-            hass,
-            "empty Home Assistant configuration must bootstrap successfully",
-        )
-        await hass.async_start()
+        hass = await async_start_empty_home_assistant(config_directory)
         try:
-            await hass.async_block_till_done()
-
             rejected_proxy = await hass.config_entries.flow.async_init(
                 domain,
                 context={"source": config_entries.SOURCE_USER},
@@ -431,35 +445,71 @@ async def async_run_check() -> None:
                 "read-only",
                 "options must not mutate the initial entry mode",
             )
-            await async_assert_safe_diagnostics(
-                hass,
-                domain,
-                read_only_entry,
-                "shadow",
-            )
+            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "shadow")
             assert_local_summary_view(hass, domain)
             await async_assert_authenticated_local_summary_http_access(hass)
             assert_entry_is_inert(hass, domain, read_only_entry.entry_id)
-            await async_remove_safe_entry(hass, read_only_entry.entry_id)
 
-            shadow_entry = await async_create_safe_entry(hass, domain, "shadow")
-            await async_update_safe_options(hass, shadow_entry, "read-only")
+            entry_id = read_only_entry.entry_id
+            expected_data = dict(read_only_entry.data)
+            expected_options = dict(read_only_entry.options)
+        finally:
+            await hass.async_stop()
+
+        refresh_test_integration(config_directory, domain)
+        restarted_hass = await async_start_empty_home_assistant(config_directory)
+        try:
+            restored_entry = restarted_hass.config_entries.async_get_entry(entry_id)
+            if restored_entry is None:
+                raise RuntimeError("safe entry must persist after the disposable restart")
+            assert_result(
+                restored_entry.data,
+                expected_data,
+                "restart must preserve the initial safe entry data",
+            )
+            assert_result(
+                restored_entry.options,
+                expected_options,
+                "restart must preserve the selected safe options",
+            )
+            assert_result(
+                restored_entry.state,
+                config_entries.ConfigEntryState.LOADED,
+                "restored safe entry must load successfully",
+            )
+            assert_result(
+                restored_entry.data["direct_execution_status"],
+                "direct_execution_blocked",
+                "restart must not change the direct execution block",
+            )
+            await async_assert_safe_diagnostics(
+                restarted_hass,
+                domain,
+                restored_entry,
+                "shadow",
+            )
+            assert_local_summary_view(restarted_hass, domain)
+            assert_entry_is_inert(restarted_hass, domain, restored_entry.entry_id)
+            await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
+
+            shadow_entry = await async_create_safe_entry(restarted_hass, domain, "shadow")
+            await async_update_safe_options(restarted_hass, shadow_entry, "read-only")
             assert_result(
                 shadow_entry.data["mode"],
                 "shadow",
                 "options must not mutate the initial entry mode",
             )
             await async_assert_safe_diagnostics(
-                hass,
+                restarted_hass,
                 domain,
                 shadow_entry,
                 "read-only",
             )
-            assert_local_summary_view(hass, domain)
-            assert_entry_is_inert(hass, domain, shadow_entry.entry_id)
-            await async_remove_safe_entry(hass, shadow_entry.entry_id)
+            assert_local_summary_view(restarted_hass, domain)
+            assert_entry_is_inert(restarted_hass, domain, shadow_entry.entry_id)
+            await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
         finally:
-            await hass.async_stop()
+            await restarted_hass.async_stop()
 
 
 def main() -> None:
