@@ -40,13 +40,12 @@ class FakeEntry:
 
 
 class ReadOnlySkeletonTest(unittest.TestCase):
-    def test_manifest_declares_one_private_config_entry_without_hacs_metadata(self) -> None:
+    def test_manifest_declares_one_private_config_entry(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
         self.assertEqual("0.1.0", manifest["version"])
-        self.assertFalse((ROOT / "hacs.json").exists())
 
     def test_initial_entry_only_contains_an_approved_mode_and_direct_block(self) -> None:
         data = create_initial_entry("read-only")

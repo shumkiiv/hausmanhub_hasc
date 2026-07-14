@@ -9,8 +9,9 @@ Established on 2026-07-13 for the separate HausMan Hub HASC workstream.
 - License: MIT.
 - Default branch: `main`.
 - Home Assistant baseline: Core 2026.7.0 or newer.
-- HACS metadata: deliberately deferred. Do not add `hacs.json` without a
-  separate decision covering private testing or a public release.
+- HACS metadata: approved on 2026-07-14 only for the repository owner's
+  private testing. The repository remains private and is not a public HACS
+  listing.
 
 ## Allowed scope
 

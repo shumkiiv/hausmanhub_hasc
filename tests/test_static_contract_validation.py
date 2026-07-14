@@ -116,8 +116,15 @@ class StaticContractValidationTest(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("forbidden execution or sensitive field", result.stderr)
 
-    def test_private_read_only_skeleton_exists_without_hacs_metadata(self) -> None:
-        self.assertFalse((ROOT / "hacs.json").exists())
+    def test_private_read_only_skeleton_has_only_approved_hacs_metadata(self) -> None:
+        hacs_metadata = load("hacs.json")
+        self.assertEqual(
+            {
+                "name": "HausMan Hub HASC",
+                "homeassistant": "2026.7.0",
+            },
+            hacs_metadata,
+        )
         self.assertTrue((ROOT / "custom_components" / "hausman_hub" / "manifest.json").is_file())
 
 

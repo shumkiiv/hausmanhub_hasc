@@ -25,7 +25,8 @@ Home Assistant modules are thin adapters at the outer boundary.
   commands.
 - It does not create entities, platforms, `services.yaml`, repairs issues, or
   automatic fixes.
-- It does not add `hacs.json` or otherwise make an HACS packaging decision.
+- Its small `hacs.json` permits only the owner's private HACS installation; it
+  does not make the integration public or change its runtime behavior.
 - `proxy` is absent and direct execution is always
   `direct_execution_blocked`.
 

@@ -1,6 +1,6 @@
 # HASC AI Context
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
 
 ## Project state
 
@@ -8,7 +8,8 @@ Last updated: 2026-07-13.
 - Local checkout: `/home/ivsh/projects/hausmanhub_hasc`.
 - Home Assistant baseline: Core 2026.7.0 or newer.
 - A private `custom_components/hausman_hub/` read-only skeleton is approved
-  and present. HACS metadata remains intentionally absent.
+  and present. Private HACS testing metadata is approved and present; public
+  distribution remains unapproved.
 - The skeleton passed an isolated runtime smoke check in Home Assistant Core
   2026.7.0 on Python 3.14.3. It used a disposable empty configuration only;
   no device, Node-RED, Home Assistant service, or live API work was performed.
@@ -28,6 +29,13 @@ Last updated: 2026-07-13.
   command payloads, or deployment scripts.
 - Every future code change follows Clean Code and Clean Architecture and must
   receive Kimi review before it is considered complete or pushed.
+- The owner approved private HACS testing on 2026-07-14. This permits only the
+  minimal root `hacs.json` and manual installation by a person with access to
+  the private repository. It does not approve a public listing, live testing,
+  proxy, or direct execution.
+- Kimi reviewed the final private-HACS metadata change with no findings. See
+  the [private HACS review
+  note](LLM_WIKI/Manual/2026-07-14-kimi-private-hacs-metadata-review.md).
 - Kimi baseline/review-fix pass found no blocking safety or correctness issue
   in the static harness. The follow-up tightened mismatch validation, made
   negative tests assert their intended reason, and covered the CLI failure path.
@@ -66,13 +74,11 @@ entity surfaces. It never proves shadow parity or grants authority.
 ## Next decision gate
 
 The read-only skeleton is limited to the two approved modes and local,
-synthetic verification. HACS metadata, proxy, and direct execution remain out
-of scope.
+synthetic verification. Public HACS distribution, proxy, and direct execution
+remain out of scope.
 
-The next packaging choice is prepared, but not made, in the
-[HACS packaging decision record](docs/hacs-packaging-decision.md). It keeps
-`hacs.json` absent until an owner explicitly approves a private testing or
-public-distribution path.
+The private HACS decision and its narrow implementation boundary are recorded
+in the [HACS packaging decision record](docs/hacs-packaging-decision.md).
 
 The required explicit choice is documented in
 [the read-only skeleton decision record](docs/read-only-skeleton-decision.md).

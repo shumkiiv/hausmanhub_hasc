@@ -2,8 +2,9 @@
 
 ## Status
 
-Pending explicit owner decision. This record does not add `hacs.json`, change
-repository visibility, or make the integration discoverable through HACS.
+Approved for option 2 on 2026-07-14. The owner approved private HACS testing
+only. The repository stays private and is not submitted to the public HACS
+catalog.
 
 ## Facts already fixed
 
@@ -27,6 +28,22 @@ Choose one path:
 3. **Prepare a public distribution decision.** Do not publish anything yet;
    first define release, support, disclosure, and maintenance requirements in
    a separate owner decision.
+
+## Chosen path
+
+Option 2 is approved for the repository owner. The implementation may add
+only this root-level metadata:
+
+```json
+{
+  "name": "HausMan Hub HASC",
+  "homeassistant": "2026.7.0"
+}
+```
+
+The owner installs the private repository manually in HACS as an
+**Integration** custom repository. This decision does not install it into a
+live Home Assistant instance and does not add a public listing.
 
 ## Required approval wording for option 2
 
