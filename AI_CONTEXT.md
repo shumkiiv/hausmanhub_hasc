@@ -84,6 +84,12 @@ Last updated: 2026-07-14.
   the Home Assistant UI did not offer the exact `system-read-only` role. It
   does not relax HASC's own strict route guard or grant HASC any device
   authority; see the direct local observation decision above.
+- A local repository safety check now scans Git-tracked files or exactly the
+  staged files before publication. It reads file blobs only from Git's index,
+  so it never follows a working-tree symbolic link outside the repository. It
+  detects common runtime/backup file names and credential-shaped data, but is
+  an additional guard rather than a substitute for a human check. It has no
+  Home Assistant, Node-RED, device, or network access.
 - The supported baseline was lowered to Core 2026.6.4 after the isolated
   lifecycle check passed on that exact version. See the [2026.6.4 compatibility
   note](LLM_WIKI/Manual/2026-07-14-core-2026-6-4-compatibility.md).
@@ -143,6 +149,11 @@ Last updated: 2026-07-14.
   confirmed the fixed response shape, exact read-only role, local-source and
   GET-only guards, fail-closed behaviour, and clean architecture boundary. See
   the [local access review note](LLM_WIKI/Manual/2026-07-14-kimi-local-summary-access-review.md).
+- Kimi's first review of the repository safety check found an unsafe
+  working-tree symbolic-link read and an over-broad flow-file name check. Both
+  were corrected and covered by tests. The final direct Kimi review found no
+  remaining issues; see the [repository safety review
+  note](LLM_WIKI/Manual/2026-07-14-kimi-repository-safety-check-review.md).
 
 ## Verification
 
@@ -158,6 +169,10 @@ Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on
 2026-07-14. It used no command or mutating request, retained no raw home data,
 and does not validate or expand HASC runtime authority.
+
+Before publishing, run `python3 tools/check_repository_boundary.py --staged`.
+It is a local Git-only check for accidental credentials and runtime files; it
+does not inspect a live home or grant any authority.
 
 ## Next decision gate
 

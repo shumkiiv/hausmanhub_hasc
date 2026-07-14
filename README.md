@@ -49,6 +49,10 @@ The repository uses standard-library Python checks over synthetic fixtures
 only. See [static validation](docs/static-validation.md) for the local command
 and its safety boundary.
 
+Before publishing, run the local [repository safety check](docs/repository-safety-check.md).
+It looks only for accidentally added credentials and runtime files; it does
+not connect to the home.
+
 All future code follows the [engineering standards](docs/engineering-standards.md),
 including mandatory Kimi review before completion or push.
 

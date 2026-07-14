@@ -29,6 +29,8 @@ python3 -m unittest discover -s tests -v
 python3 tools/validate_fixture.py common fixtures/common_contract/valid_minimal.json
 python3 tools/validate_fixture.py shadow fixtures/shadow_evidence/valid_unresolved.json
 python3 tools/validate_fixture.py diagnostics fixtures/diagnostics/valid_redacted.json
+python3 tools/check_repository_boundary.py
+python3 tools/check_repository_boundary.py --staged
 ```
 
 A pass means only that synthetic data satisfies these static invariants. It
