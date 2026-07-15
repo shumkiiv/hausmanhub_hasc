@@ -2313,6 +2313,22 @@ async def async_run_check() -> None:
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
 
+            await async_update_safe_options(hass, read_only_entry, "read-only")
+            assert_result(
+                read_only_entry.data["mode"],
+                "read-only",
+                "a second safe options update must not mutate the initial entry mode",
+            )
+            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "read-only")
+            assert_local_summary_view(hass, domain)
+            await async_assert_authenticated_local_summary_http_access(hass)
+            assert_entry_has_only_summary_sensors(
+                hass,
+                domain,
+                read_only_entry.entry_id,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+
             ordinary_unload_data = dict(read_only_entry.data)
             ordinary_unload_options = dict(read_only_entry.options)
             ordinary_unload_reader_token = await async_create_test_read_only_access_token(
@@ -2372,7 +2388,7 @@ async def async_run_check() -> None:
                 read_only_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
-            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "shadow")
+            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "read-only")
             assert_local_summary_view(hass, domain)
             await async_assert_authenticated_local_summary_http_access(
                 hass,
@@ -2409,7 +2425,7 @@ async def async_run_check() -> None:
                 read_only_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
-            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "shadow")
+            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "read-only")
             assert_local_summary_view(hass, domain)
             await async_assert_authenticated_local_summary_http_access(
                 hass,
@@ -2488,7 +2504,7 @@ async def async_run_check() -> None:
                 restarted_hass,
                 domain,
                 restored_entry,
-                "shadow",
+                "read-only",
             )
             assert_local_summary_view(restarted_hass, domain)
             assert_entry_has_only_summary_sensors(

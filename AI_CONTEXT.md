@@ -120,6 +120,14 @@ Last updated: 2026-07-16.
   closing interval fails the Core check. A saved entry that failed setup
   remains available for manual repair; because no running HASC remains to
   listen, its owner then explicitly reloads HASC after correcting it.
+- The disposable Core lifecycle now changes one safe HASC setting twice:
+  `read-only` to `shadow` and back to `read-only`. Each save must reload only
+  that one HASC entry exactly once, retain exactly nine aggregate sensors and
+  one authenticated GET-only local page, and preserve blocked direct
+  execution. Every later stop, reactivation, and restart assertion expects the
+  final `read-only` choice. Kimi found no remaining issue in the final review;
+  see the [safe mode cycle review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-safe-mode-cycle-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the
