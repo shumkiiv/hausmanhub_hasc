@@ -137,6 +137,11 @@ Last updated: 2026-07-15.
   Removal must clear its records and values, keep the temporary external
   similar-name record unchanged, and remain absent after the following empty
   restart.
+- A later temporary reinstallation is also ordinarily stopped before the user
+  deactivates it. The stop must retain its safe settings and nine enabled but
+  value-free records; deactivation must then mark those same records disabled,
+  close diagnostics and the local page, persist through the next empty restart,
+  and remain removable without changing the external temporary record.
 - While that user-enabled setup is ordinarily stopped before its temporary
   restart, the same lifecycle tries to add HASC again. Home Assistant must
   refuse the duplicate, retain exactly one still-enabled saved setup and its
@@ -518,6 +523,12 @@ Last updated: 2026-07-15.
   removal, preserves an unrelated similar-name record, and uses no real home.
   See the [ordinary stopped-removal review
   note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-removal-review.md).
+- Kimi reviewed user deactivation after an ordinary HASC stop with no findings.
+  It confirmed that the disposable lifecycle distinguishes this state from an
+  active deactivation, preserves the nine-count/no-control boundary, and
+  carries the disabled state through restart and removal. See the [ordinary
+  stopped-deactivation review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-deactivation-review.md).
 - Kimi reviewed the duplicate-setup guard while HASC is ordinarily stopped.
   Its first pass found a test that depended on exact source formatting; the
   check now uses semantic markers and order instead. The final direct Kimi

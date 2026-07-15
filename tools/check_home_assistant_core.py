@@ -2643,6 +2643,40 @@ async def async_run_check() -> None:
                 ordinary_unload_restarted_hass,
                 reserved_entry,
             )
+            reinstalled_entry_data = dict(reinstalled_entry.data)
+            reinstalled_entry_options = dict(reinstalled_entry.options)
+            await async_unload_safe_entry(
+                ordinary_unload_restarted_hass,
+                reinstalled_entry,
+            )
+            assert_result(
+                dict(reinstalled_entry.data),
+                reinstalled_entry_data,
+                "ordinary unload before deactivation must preserve safe entry data",
+            )
+            assert_result(
+                dict(reinstalled_entry.options),
+                reinstalled_entry_options,
+                "ordinary unload before deactivation must preserve safe entry options",
+            )
+            assert_entry_has_unloaded_summary_sensors(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry.entry_id,
+                expected_entity_ids=None,
+            )
+            await async_assert_closed_diagnostics(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry,
+                "HASC ordinary unload before deactivation",
+            )
+            await async_assert_local_summary_is_unavailable(
+                ordinary_unload_restarted_hass,
+                domain,
+                removal_reader_token,
+                "HASC ordinary unload before deactivation",
+            )
             await async_disable_safe_entry(
                 ordinary_unload_restarted_hass,
                 reinstalled_entry,
@@ -2652,6 +2686,12 @@ async def async_run_check() -> None:
                 domain,
                 reinstalled_entry.entry_id,
                 expected_entity_ids=None,
+            )
+            await async_assert_closed_diagnostics(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry,
+                "HASC deactivation after ordinary unload",
             )
             disabled_reinstall_entry_id = reinstalled_entry.entry_id
             disabled_reinstall_entity_ids = frozenset(

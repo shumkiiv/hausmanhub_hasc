@@ -638,6 +638,39 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index(preservation_call, stopped_removal_start),
         )
 
+    def test_core_smoke_check_deactivates_ordinarily_stopped_hasc(self) -> None:
+        """An ordinary stopped HASC setup must still deactivate cleanly."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        for requirement in (
+            "ordinary unload before deactivation must preserve safe entry data",
+            "ordinary unload before deactivation must preserve safe entry options",
+            '"HASC ordinary unload before deactivation",',
+            '"HASC deactivation after ordinary unload",',
+        ):
+            self.assertIn(requirement, lifecycle_source)
+
+        reinstall_call = "reinstalled_entry = await async_create_safe_entry("
+        unload_call = "await async_unload_safe_entry("
+        deactivation_call = "await async_disable_safe_entry("
+        reinstall_start = lifecycle_source.index(reinstall_call)
+        unload_start = lifecycle_source.index(unload_call, reinstall_start)
+        deactivation_start = lifecycle_source.index(deactivation_call, reinstall_start)
+        self.assertLess(reinstall_start, unload_start)
+        self.assertLess(unload_start, deactivation_start)
+        self.assertLess(
+            lifecycle_source.index("assert_entry_has_unloaded_summary_sensors(", unload_start),
+            deactivation_start,
+        )
+        self.assertLess(
+            deactivation_start,
+            lifecycle_source.index("assert_entry_has_disabled_summary_sensors(", deactivation_start),
+        )
+
     def test_core_smoke_check_rejects_a_second_setup_while_hasc_is_stopped(
         self,
     ) -> None:
