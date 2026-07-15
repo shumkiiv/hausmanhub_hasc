@@ -70,6 +70,10 @@ Last updated: 2026-07-15.
   guarded page; after an in-process deactivation or removal that one retained
   page must fail closed without counts; after a full temporary restart while
   disabled or removed, no such page may exist.
+- Version 0.3.2 keeps a bad saved HASC setup closed. If its saved data violates
+  the fixed safety contract, HASC rejects a reload and, after restart, removes
+  only its own restored count states after Home Assistant finishes startup. It
+  does not alter devices, services, other entities, Climate, or Automation.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
@@ -320,6 +324,11 @@ Last updated: 2026-07-15.
   page remains safely unavailable after deactivation or removal and no page
   returns after a full empty restart. See the [local-page uniqueness review
   note](LLM_WIKI/Manual/2026-07-15-kimi-local-summary-route-uniqueness-review.md).
+- Kimi reviewed the invalid-saved-settings fail-closed fix with no findings. It
+  confirmed that HASC clears only its own restored state placeholders after
+  startup, immediately clears them on a reload, and does not touch a device,
+  service, external entity, or home-control boundary. See the [invalid-settings
+  review note](LLM_WIKI/Manual/2026-07-15-kimi-invalid-persisted-settings-review.md).
 - The old private-first skeleton decision is now clearly marked historical and
   points to the current public manual-HACS decision. Kimi first asked for a
   less brittle document guard; after that correction, its final review found no
@@ -386,6 +395,12 @@ An active setup must have exactly one. After a deactivation or removal in the
 same temporary process, that one retained page must fail closed without counts;
 after a full temporary restart while HASC is disabled or removed, no page may
 return.
+
+The same disposable Core check writes one deliberately unsafe saved HASC mode,
+rejects an immediate reload, then restarts. It requires no HASC runtime data,
+service, device, page, or count state to return. HASC clears only the restored
+states belonging to that invalid HASC entry after Home Assistant startup; it
+does not change other entities or any device-control surface.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on

@@ -743,6 +743,45 @@ def assert_hasc_stays_removed_after_restart(
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
 
 
+def assert_persisted_unsafe_entry_stays_closed(
+    hass: HomeAssistant,
+    domain: str,
+    entry_id: str,
+    expected_data: dict[str, str],
+    reserved_entry: ReservedCollisionEntry,
+) -> None:
+    """Require an invalid saved entry to fail closed after a restart."""
+
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None:
+        raise RuntimeError("the temporary invalid HASC entry must remain inspectable")
+    assert_result(
+        dict(entry.data),
+        expected_data,
+        "restart must preserve the temporary invalid entry data",
+    )
+    if entry.state is config_entries.ConfigEntryState.LOADED:
+        raise RuntimeError("an invalid saved HASC entry must not load after restart")
+    if hass.services.async_services().get(domain) is not None:
+        raise RuntimeError("an invalid saved HASC entry must not restore services")
+    if hass.data.get(domain) is not None:
+        raise RuntimeError("an invalid saved HASC entry must not restore runtime data")
+    if find_local_summary_routes(hass):
+        raise RuntimeError("an invalid saved HASC entry must not restore its local page")
+
+    entries = entity_registry.async_entries_for_config_entry(
+        entity_registry.async_get(hass),
+        entry_id,
+    )
+    if device_registry.async_entries_for_config_entry(device_registry.async_get(hass), entry_id):
+        raise RuntimeError("an invalid saved HASC entry must not restore devices")
+    for summary_sensor in entries:
+        if hass.states.get(summary_sensor.entity_id) is not None:
+            raise RuntimeError("an invalid saved HASC entry must not restore count states")
+
+    assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
+
+
 async def async_create_test_access_token(
     hass: HomeAssistant,
     user: Any,
@@ -1229,6 +1268,11 @@ async def async_run_check() -> None:
             await post_removal_hass.async_stop()
 
         final_hass = await async_start_empty_home_assistant(config_directory)
+        invalid_entry_id: str | None = None
+        invalid_entry_data = {
+            "mode": "proxy",
+            "direct_execution_status": "direct_execution_blocked",
+        }
         try:
             assert_hasc_stays_removed_after_restart(
                 final_hass,
@@ -1236,8 +1280,55 @@ async def async_run_check() -> None:
                 tuple(removed_entries),
                 reserved_entry,
             )
+            invalid_entry = await async_create_safe_entry(final_hass, domain, "read-only")
+            invalid_entry_id = invalid_entry.entry_id
+            invalid_reader_token = await async_create_test_read_only_access_token(
+                final_hass,
+                "HASC temporary invalid-settings test user",
+            )
+            final_hass.config_entries.async_update_entry(
+                invalid_entry,
+                data=invalid_entry_data,
+            )
+            await final_hass.async_block_till_done()
+            assert_result(
+                dict(invalid_entry.data),
+                invalid_entry_data,
+                "the temporary invalid HASC entry must persist unsafe data",
+            )
+            reloaded_invalid_entry = await final_hass.config_entries.async_reload(
+                invalid_entry.entry_id
+            )
+            assert_result(
+                reloaded_invalid_entry,
+                False,
+                "an invalid saved HASC entry must reject reload",
+            )
+            await final_hass.async_block_till_done()
+            if invalid_entry.state is config_entries.ConfigEntryState.LOADED:
+                raise RuntimeError("an invalid saved HASC entry must unload on reload")
+            await async_assert_local_summary_is_unavailable(
+                final_hass,
+                domain,
+                invalid_reader_token,
+                "invalid HASC reload",
+            )
         finally:
             await final_hass.async_stop()
+
+        if invalid_entry_id is None:
+            raise RuntimeError("the lifecycle check must create its temporary invalid entry")
+        invalid_hass = await async_start_empty_home_assistant(config_directory)
+        try:
+            assert_persisted_unsafe_entry_stays_closed(
+                invalid_hass,
+                domain,
+                invalid_entry_id,
+                invalid_entry_data,
+                reserved_entry,
+            )
+        finally:
+            await invalid_hass.async_stop()
 
 
 def main() -> None:

@@ -27,6 +27,7 @@ FAKE_MODULE_NAMES = (
     "homeassistant.helpers.area_registry",
     "homeassistant.helpers.device_registry",
     "homeassistant.helpers.entity_registry",
+    "homeassistant.helpers.start",
 )
 
 
@@ -83,7 +84,7 @@ class FakeConfigEntries:
 
 
 class FakeStates:
-    """Return synthetic states without supporting any mutation."""
+    """Store synthetic states and record removal of an HASC-owned state."""
 
     def __init__(self) -> None:
         self.values = {
@@ -92,9 +93,54 @@ class FakeStates:
             "sensor.synthetic_private_air": SimpleNamespace(state="unknown"),
             "switch.synthetic_private_disabled": SimpleNamespace(state="synthetic_active"),
         }
+        self.removed: list[str] = []
 
     def get(self, entity_id: str) -> SimpleNamespace | None:
         return self.values.get(entity_id)
+
+    def async_remove(self, entity_id: str) -> None:
+        self.removed.append(entity_id)
+        self.values.pop(entity_id, None)
+
+
+class FakeEntityRegistry:
+    """Expose only the registry lookup used by the HASC outer boundary."""
+
+    def __init__(self) -> None:
+        self.entities = {
+            "synthetic-one": SimpleNamespace(
+                domain="sensor",
+                entity_id="sensor.synthetic_private_temperature",
+                disabled_by=None,
+            ),
+            "synthetic-two": SimpleNamespace(
+                domain="switch",
+                entity_id="switch.synthetic_private_light",
+                disabled_by=None,
+            ),
+            "synthetic-three": SimpleNamespace(
+                domain="sensor",
+                entity_id="sensor.synthetic_private_air",
+                disabled_by=None,
+            ),
+            "synthetic-four": SimpleNamespace(
+                domain="light",
+                entity_id="light.synthetic_private_lamp",
+                disabled_by=None,
+            ),
+            "synthetic-five": SimpleNamespace(
+                domain="switch",
+                entity_id="switch.synthetic_private_disabled",
+                disabled_by="synthetic_configuration",
+            ),
+        }
+
+    def async_entries_for_config_entry(self, entry_id: str) -> list[object]:
+        return [
+            entity
+            for entity in self.entities.values()
+            if getattr(entity, "config_entry_id", None) == entry_id
+        ]
 
 
 class FakeHomeAssistant:
@@ -108,35 +154,7 @@ class FakeHomeAssistant:
         self.device_registry = SimpleNamespace(
             devices={"synthetic-device-one": object(), "synthetic-device-two": object()}
         )
-        self.entity_registry = SimpleNamespace(
-            entities={
-                "synthetic-one": SimpleNamespace(
-                    domain="sensor",
-                    entity_id="sensor.synthetic_private_temperature",
-                    disabled_by=None,
-                ),
-                "synthetic-two": SimpleNamespace(
-                    domain="switch",
-                    entity_id="switch.synthetic_private_light",
-                    disabled_by=None,
-                ),
-                "synthetic-three": SimpleNamespace(
-                    domain="sensor",
-                    entity_id="sensor.synthetic_private_air",
-                    disabled_by=None,
-                ),
-                "synthetic-four": SimpleNamespace(
-                    domain="light",
-                    entity_id="light.synthetic_private_lamp",
-                    disabled_by=None,
-                ),
-                "synthetic-five": SimpleNamespace(
-                    domain="switch",
-                    entity_id="switch.synthetic_private_disabled",
-                    disabled_by="synthetic_configuration",
-                ),
-            }
-        )
+        self.entity_registry = FakeEntityRegistry()
         self.states = FakeStates()
 
 
@@ -198,6 +216,11 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     device_registry.async_get = lambda hass: hass.device_registry  # type: ignore[attr-defined]
     entity_registry = ModuleType("homeassistant.helpers.entity_registry")
     entity_registry.async_get = lambda hass: hass.entity_registry  # type: ignore[attr-defined]
+    entity_registry.async_entries_for_config_entry = (  # type: ignore[attr-defined]
+        lambda registry, entry_id: registry.async_entries_for_config_entry(entry_id)
+    )
+    start = ModuleType("homeassistant.helpers.start")
+    start.async_at_started = lambda hass, callback: callback(hass)  # type: ignore[attr-defined]
 
     homeassistant.auth = auth  # type: ignore[attr-defined]
     homeassistant.components = components  # type: ignore[attr-defined]
@@ -209,6 +232,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     helpers.area_registry = area_registry  # type: ignore[attr-defined]
     helpers.device_registry = device_registry  # type: ignore[attr-defined]
     helpers.entity_registry = entity_registry  # type: ignore[attr-defined]
+    helpers.start = start  # type: ignore[attr-defined]
 
     return {
         "homeassistant": homeassistant,
@@ -222,6 +246,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.helpers.area_registry": area_registry,
         "homeassistant.helpers.device_registry": device_registry,
         "homeassistant.helpers.entity_registry": entity_registry,
+        "homeassistant.helpers.start": start,
     }
 
 
@@ -358,6 +383,47 @@ class LocalSummaryAccessTest(unittest.TestCase):
 
         self.assertFalse(asyncio.run(self.integration.async_setup_entry(unsafe_hass, unsafe_entry)))
         self.assertEqual([], unsafe_hass.http.views)
+
+    def test_setup_rejects_invalid_saved_configuration_before_loading(self) -> None:
+        """Stored unsafe values must not open sensors, runtime data, or the page."""
+
+        safe_data = {
+            "mode": "read-only",
+            "direct_execution_status": "direct_execution_blocked",
+        }
+        invalid_configurations = (
+            ({**safe_data, "mode": "proxy"}, {}),
+            ({**safe_data, "direct_execution_status": "allowed"}, {}),
+            ({**safe_data, "synthetic_extra": "ignored"}, {}),
+            (safe_data, {"mode": "proxy"}),
+            (safe_data, {"mode": "read-only", "synthetic_extra": "ignored"}),
+        )
+
+        for data, options in invalid_configurations:
+            with self.subTest(data=data, options=options):
+                unsafe_hass = FakeHomeAssistant()
+                unsafe_entry = FakeEntry(dict(data), dict(options))
+                saved_hasc_state = "sensor.hausman_hub_hasc_entities_count"
+                unsafe_hass.entity_registry.entities["saved-hasc"] = SimpleNamespace(
+                    domain="sensor",
+                    entity_id=saved_hasc_state,
+                    config_entry_id=unsafe_entry.entry_id,
+                    disabled_by=None,
+                )
+                unsafe_hass.states.values[saved_hasc_state] = SimpleNamespace(state="7")
+
+                self.assertFalse(
+                    asyncio.run(self.integration.async_setup_entry(unsafe_hass, unsafe_entry))
+                )
+                self.assertEqual({}, unsafe_hass.data)
+                self.assertEqual([], unsafe_hass.http.views)
+                self.assertEqual([], unsafe_hass.config_entries.forwarded)
+                self.assertEqual([saved_hasc_state], unsafe_hass.states.removed)
+                self.assertNotIn(saved_hasc_state, unsafe_hass.states.values)
+                self.assertIn(
+                    "sensor.synthetic_private_temperature",
+                    unsafe_hass.states.values,
+                )
 
 
 if __name__ == "__main__":

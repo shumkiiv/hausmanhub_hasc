@@ -48,7 +48,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.3.1", manifest["version"])
+        self.assertEqual("0.3.2", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -507,6 +507,32 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn(
             "if find_local_summary_routes(hass):",
             core_check_source,
+        )
+
+    def test_core_smoke_check_closes_invalid_saved_configuration(self) -> None:
+        """An unsafe saved entry must not load after the temporary restart."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        self.assertIn("assert_persisted_unsafe_entry_stays_closed", core_check_source)
+        self.assertIn(
+            "an invalid saved HASC entry must not load after restart",
+            core_check_source,
+        )
+        self.assertIn(
+            "an invalid saved HASC entry must not restore count states",
+            core_check_source,
+        )
+        self.assertIn('"mode": "proxy",', lifecycle_source)
+        self.assertIn("final_hass.config_entries.async_update_entry(", lifecycle_source)
+        self.assertIn("an invalid saved HASC entry must reject reload", lifecycle_source)
+        self.assertIn('"invalid HASC reload",', lifecycle_source)
+        self.assertLess(
+            lifecycle_source.index("await final_hass.async_stop()"),
+            lifecycle_source.index("invalid_hass = await async_start_empty_home_assistant"),
         )
 
     def test_core_smoke_check_removes_state_values_after_removal(self) -> None:
