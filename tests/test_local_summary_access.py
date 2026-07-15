@@ -64,9 +64,26 @@ class FakeConfigEntries:
     """Record platform lifecycle requests without loading a platform."""
 
     def __init__(self, unload_succeeds: bool = True) -> None:
+        self.entries: list[object] = []
+        self.loaded_entries: list[object] = []
         self.forwarded: list[tuple[object, tuple[object, ...]]] = []
+        self.manager_unloads: list[str] = []
         self.unloaded: list[tuple[object, tuple[object, ...]]] = []
         self.unload_succeeds = unload_succeeds
+
+    def async_entries(self, domain: str) -> list[object]:
+        """Return the synthetic saved entries for one integration domain."""
+
+        return [entry for entry in self.entries if getattr(entry, "domain", None) == domain]
+
+    def async_loaded_entries(self, domain: str) -> list[object]:
+        """Return only the synthetic HASC displays that are still running."""
+
+        return [
+            entry
+            for entry in self.loaded_entries
+            if getattr(entry, "domain", None) == domain
+        ]
 
     async def async_forward_entry_setups(
         self,
@@ -74,6 +91,19 @@ class FakeConfigEntries:
         platforms: tuple[object, ...],
     ) -> None:
         self.forwarded.append((entry, platforms))
+        if entry not in self.loaded_entries:
+            self.loaded_entries.append(entry)
+
+    async def async_unload(self, entry_id: str) -> bool:
+        """Stop one running synthetic entry through the manager boundary."""
+
+        self.manager_unloads.append(entry_id)
+        if not self.unload_succeeds:
+            return False
+        self.loaded_entries = [
+            entry for entry in self.loaded_entries if getattr(entry, "entry_id", None) != entry_id
+        ]
+        return True
 
     async def async_unload_platforms(
         self,
@@ -186,8 +216,14 @@ class FakeRequestWithoutUser(dict[str, object]):
 class FakeEntry:
     """Minimal config entry shape used by the safe outer adapter."""
 
-    def __init__(self, data: dict[str, object], options: dict[str, object]) -> None:
-        self.entry_id = "synthetic-hasc-entry"
+    def __init__(
+        self,
+        data: dict[str, object],
+        options: dict[str, object],
+        entry_id: str = "synthetic-hasc-entry",
+    ) -> None:
+        self.entry_id = entry_id
+        self.domain = "hausman_hub"
         self.data = data
         self.options = options
 
@@ -310,6 +346,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             },
             {},
         )
+        self.hass.config_entries.entries = [self.entry]
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
         self.view = self.hass.http.views[0]
 
@@ -372,11 +409,10 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertFalse(hasattr(self.view, "patch"))
         self.assertFalse(hasattr(self.view, "delete"))
 
-        next_entry = FakeEntry(dict(self.entry.data), {})
-        self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, next_entry)))
+        self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
         self.assertEqual(1, len(self.hass.http.views))
         self.assertEqual(
-            [(self.entry, ("sensor",)), (next_entry, ("sensor",))],
+            [(self.entry, ("sensor",)), (self.entry, ("sensor",))],
             self.hass.config_entries.forwarded,
         )
 
@@ -393,6 +429,27 @@ class LocalSummaryAccessTest(unittest.TestCase):
             self.view.get(FakeRequest("192.168.1.20", reader_user("system-read-only")))
         )
         self.assertEqual(503, unloaded_response.status)
+
+    def test_view_fails_closed_if_a_second_saved_hasc_entry_appears(self) -> None:
+        """The retained view must not leak counts during a corrupt live pair."""
+
+        self.hass.config_entries.entries.append(
+            FakeEntry(
+                {
+                    "mode": "shadow",
+                    "direct_execution_status": "direct_execution_blocked",
+                },
+                {},
+                "synthetic-hasc-second",
+            )
+        )
+
+        response = asyncio.run(
+            self.view.get(FakeRequest("127.0.0.1", reader_user("system-read-only")))
+        )
+
+        self.assertEqual(503, response.status)
+        self.assertEqual({"message"}, set(response.payload))
 
     def test_unload_clears_only_hasc_owned_state_values(self) -> None:
         """Turning HASC off must not leave its old counts or touch another state."""
@@ -425,6 +482,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             },
             {},
         )
+        failed_hass.config_entries.entries = [failed_entry]
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(failed_hass, failed_entry)))
 
         hasc_state = "sensor.hausman_hub_hasc_entities_count"
@@ -462,6 +520,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             },
             {},
         )
+        unsafe_hass.config_entries.entries = [unsafe_entry]
 
         self.assertFalse(asyncio.run(self.integration.async_setup_entry(unsafe_hass, unsafe_entry)))
         self.assertEqual([], unsafe_hass.http.views)
@@ -489,6 +548,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             with self.subTest(data=data, options=options):
                 unsafe_hass = FakeHomeAssistant()
                 unsafe_entry = FakeEntry(dict(data), dict(options))
+                unsafe_hass.config_entries.entries = [unsafe_entry]
                 saved_hasc_state = "sensor.hausman_hub_hasc_entities_count"
                 unsafe_hass.entity_registry.entities["saved-hasc"] = SimpleNamespace(
                     domain="sensor",
@@ -518,6 +578,98 @@ class LocalSummaryAccessTest(unittest.TestCase):
                     "sensor.synthetic_private_temperature",
                     unsafe_hass.states.values,
                 )
+
+    def test_setup_rejects_multiple_saved_entries_and_clears_only_their_records(self) -> None:
+        """A corrupt pair of saved HASC entries must not expose either display."""
+
+        safe_data = {
+            "mode": "read-only",
+            "direct_execution_status": "direct_execution_blocked",
+        }
+        first_entry = FakeEntry(dict(safe_data), {}, "synthetic-hasc-first")
+        second_entry = FakeEntry(dict(safe_data), {}, "synthetic-hasc-second")
+        duplicate_hass = FakeHomeAssistant()
+        duplicate_hass.config_entries.entries = [first_entry, second_entry]
+        first_state = "sensor.hausman_hub_hasc_first_saved_count"
+        second_state = "sensor.hausman_hub_hasc_second_saved_count"
+        duplicate_hass.entity_registry.entities["first-saved"] = SimpleNamespace(
+            domain="sensor",
+            entity_id=first_state,
+            config_entry_id=first_entry.entry_id,
+            disabled_by=None,
+        )
+        duplicate_hass.entity_registry.entities["second-saved"] = SimpleNamespace(
+            domain="sensor",
+            entity_id=second_state,
+            config_entry_id=second_entry.entry_id,
+            disabled_by="synthetic_configuration",
+        )
+        duplicate_hass.states.values[first_state] = SimpleNamespace(state="7")
+        duplicate_hass.states.values[second_state] = SimpleNamespace(state="3")
+
+        self.assertFalse(
+            asyncio.run(self.integration.async_setup_entry(duplicate_hass, first_entry))
+        )
+        self.assertFalse(
+            asyncio.run(self.integration.async_setup_entry(duplicate_hass, second_entry))
+        )
+
+        self.assertEqual([], duplicate_hass.http.views)
+        self.assertEqual([], duplicate_hass.config_entries.forwarded)
+        self.assertEqual(
+            [first_entry, second_entry],
+            duplicate_hass.config_entries.entries,
+        )
+        self.assertEqual([first_state, second_state], duplicate_hass.states.removed)
+        self.assertNotIn(first_state, duplicate_hass.states.values)
+        self.assertNotIn(second_state, duplicate_hass.states.values)
+        self.assertEqual(
+            [first_state, second_state],
+            duplicate_hass.entity_registry.removed,
+        )
+        self.assertIn("synthetic-one", duplicate_hass.entity_registry.entities)
+        self.assertIn(
+            "sensor.synthetic_private_temperature",
+            duplicate_hass.states.values,
+        )
+
+    def test_second_saved_entry_closes_an_already_running_hasc_display(self) -> None:
+        """A live corrupt pair must close the existing display before cleanup."""
+
+        first_state = "sensor.hausman_hub_hasc_first_running_count"
+        self.hass.entity_registry.entities["first-running"] = SimpleNamespace(
+            domain="sensor",
+            entity_id=first_state,
+            config_entry_id=self.entry.entry_id,
+            disabled_by=None,
+        )
+        self.hass.states.values[first_state] = SimpleNamespace(state="7")
+        second_entry = FakeEntry(
+            {
+                "mode": "read-only",
+                "direct_execution_status": "direct_execution_blocked",
+            },
+            {},
+            "synthetic-hasc-second",
+        )
+        self.hass.is_running = True
+        self.hass.config_entries.entries.append(second_entry)
+
+        self.assertFalse(
+            asyncio.run(self.integration.async_setup_entry(self.hass, second_entry))
+        )
+
+        self.assertEqual([self.entry.entry_id], self.hass.config_entries.manager_unloads)
+        self.assertEqual([], self.hass.config_entries.loaded_entries)
+        self.assertEqual([first_state], self.hass.states.removed)
+        self.assertNotIn(first_state, self.hass.states.values)
+        self.assertEqual([first_state], self.hass.entity_registry.removed)
+        self.assertIn("synthetic-one", self.hass.entity_registry.entities)
+        response = asyncio.run(
+            self.view.get(FakeRequest("127.0.0.1", reader_user("system-read-only")))
+        )
+        self.assertEqual(503, response.status)
+        self.assertEqual({"message"}, set(response.payload))
 
 
 if __name__ == "__main__":

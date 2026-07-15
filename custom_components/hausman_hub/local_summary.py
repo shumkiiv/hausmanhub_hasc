@@ -96,7 +96,16 @@ class LocalSummaryView(HomeAssistantView):
         runtime = self._hass.data.get(DOMAIN)
         if runtime is None:
             return None
-        return runtime.get(DATA_ACTIVE_ENTRY)
+        entry = runtime.get(DATA_ACTIVE_ENTRY)
+        if entry is None:
+            return None
+        configured_entry_ids = tuple(
+            configured_entry.entry_id
+            for configured_entry in self._hass.config_entries.async_entries(DOMAIN)
+        )
+        if configured_entry_ids != (entry.entry_id,):
+            return None
+        return entry
 
 
 def _is_local_read_only_request(request: Any) -> bool:

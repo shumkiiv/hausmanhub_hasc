@@ -58,9 +58,29 @@ Last updated: 2026-07-15.
   broken: it shows the neutral `read-only` default instead of an unapproved
   saved mode, without repairing, saving, or otherwise changing that setting.
   It does not add a device, service, home-data path, or home-control boundary.
-- The local HASC adapter check also covers a failed unload. In that case it
-  keeps the current safe display intact rather than partly clearing its values
-  or local page while Home Assistant still has HASC loaded.
+- Version 0.3.7 fails closed if a damaged saved configuration contains more
+  than one HASC entry, including a user-deactivated one. If another saved
+  entry appears while HASC is already working, it first closes the active
+  summary and ordinarily unloads the existing HASC display before it clears
+  only the captured HASC entries' stale count records. The retained local
+  route then returns only unavailable, never counts. Both saved records remain
+  for manual repair; HASC never chooses, deletes, or activates one
+  automatically. A disposable Core lifecycle covers both an enabled pair and
+  an enabled plus user-deactivated pair, before and after restart: after
+  removal, a remaining enabled entry requires an explicit reload, while a
+  remaining disabled entry requires explicit activation before it can recreate
+  exactly nine safe counts. If every saved duplicate is already
+  user-deactivated, Core does not start HASC at all, so no count state or page
+  exists; its disabled registry rows remain until the owner repairs the saved
+  pair.
+- Kimi independently reviewed the final live and restart duplicate-entry
+  closure with no findings. See the [live duplicate fail-closed review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-live-duplicate-fail-closed-review.md).
+- The local HASC adapter check also covers a failed ordinary unload with one
+  saved HASC setup. In that case it keeps the current safe display intact
+  rather than partly clearing its values or local page while Home Assistant
+  still has HASC loaded. This is separate from the damaged multi-entry case,
+  which must close the display.
 - The disposable Core lifecycle separately unloads and starts one safe,
   still-user-enabled HASC setup. In the gap, its saved setup and nine enabled
   records remain but all count states and the guarded page fail closed; starting

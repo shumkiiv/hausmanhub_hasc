@@ -48,7 +48,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.3.6", manifest["version"])
+        self.assertEqual("0.3.7", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -689,6 +689,55 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index("assert_deactivated_entry_stays_inactive_after_restart("),
             lifecycle_source.index("await async_enable_safe_entry(restarted_hass, restored_entry)"),
         )
+
+    def test_core_smoke_check_closes_multiple_saved_hasc_entries(self) -> None:
+        """A corrupted saved pair must show nothing until one entry is removed."""
+
+        integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        self.assertIn("async_entries(entry.domain)", integration_source)
+        self.assertLess(
+            integration_source.index("async_entries(entry.domain)"),
+            integration_source.index("async_forward_entry_setups"),
+        )
+        self.assertIn("_close_running_duplicate_hasc_entries", integration_source)
+        self.assertIn("async_loaded_entries(domain)", integration_source)
+        self.assertIn("_clear_restored_hasc_records", integration_source)
+        self.assertIn("async_add_disposable_persisted_duplicate_entry", core_check_source)
+        self.assertIn("assert_persisted_duplicate_entries_stay_closed", core_check_source)
+        self.assertIn("async_assert_persisted_duplicate_entry_lifecycle", core_check_source)
+        self.assertIn(
+            "a duplicate saved HASC entry must not load",
+            core_check_source,
+        )
+        self.assertIn(
+            "duplicate saved HASC entries must not restore count records",
+            core_check_source,
+        )
+        self.assertIn(
+            "removing the duplicate must retain only the original HASC entry",
+            core_check_source,
+        )
+        self.assertEqual(
+            2,
+            lifecycle_source.count("async_assert_persisted_duplicate_entry_lifecycle("),
+        )
+        self.assertIn("first_entry_is_user_disabled=True", lifecycle_source)
+        self.assertIn("first_entry_is_user_disabled=False", lifecycle_source)
+        self.assertIn(
+            "removing a duplicate must not automatically load the remaining HASC",
+            core_check_source,
+        )
+        self.assertIn(
+            "the remaining enabled HASC entry must reload after duplicate removal",
+            core_check_source,
+        )
+        self.assertIn("expect_retained_local_summary_route=True", core_check_source)
+        self.assertIn("adding a duplicate saved HASC entry", core_check_source)
 
     def test_core_smoke_check_keeps_one_local_summary_route(self) -> None:
         """The temporary lifecycle must never accumulate duplicate local pages."""

@@ -141,6 +141,22 @@ setup, keep the single saved setup turned off, and leave its nine records,
 values, and local page unavailable. Only the normal explicit activation may
 restore the same nine safe counts.
 
+The empty check also deliberately creates malformed saved pairs: one with two
+enabled valid-looking entries, and one with a user-deactivated valid entry and
+a user-enabled duplicate. The duplicate is inserted only through the
+temporary Core test manager. If one HASC entry was already working, adding the
+second immediately closes its nine-count display; the retained GET-only route
+returns only an unavailable response. After a restart, HASC must leave both
+saved records available for manual repair but load neither one. It must clear
+the old nine records, their values, runtime data, services, and local page. It
+never chooses, deletes, or activates either saved record. After the test
+removes one record, an enabled remaining record must stay closed until an
+explicit normal reload; a user-deactivated remaining record must stay closed
+until an explicit normal activation. Only then may it restore exactly nine
+count sensors, fixed diagnostics, and the authenticated GET-only page. These
+malformed-pair tests run only in the disposable empty configuration and never
+touch a real Home Assistant setup.
+
 The empty check also reserves one HASC-like internal sensor name before a new
 safe setup. HASC must still create all nine count sensors under distinct,
 HASC-prefixed names. This protects a new installation from being blocked by a

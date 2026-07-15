@@ -19,10 +19,19 @@ if TYPE_CHECKING:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load the safe count display without acquiring runtime authority."""
 
+    configured_entry_ids = tuple(
+        configured_entry.entry_id
+        for configured_entry in hass.config_entries.async_entries(entry.domain)
+    )
+    if configured_entry_ids != (entry.entry_id,):
+        await _close_running_duplicate_hasc_entries(hass, entry.domain)
+        _clear_restored_hasc_records(hass, configured_entry_ids + (entry.entry_id,))
+        return False
+
     try:
         effective_configuration(entry.data, entry.options)
     except ConfigurationViolation:
-        _clear_restored_hasc_records_for_invalid_entry(hass, entry)
+        _clear_restored_hasc_records(hass, (entry.entry_id,))
         return False
 
     # Imports stay at the outer boundary so framework-independent tests can run
@@ -36,17 +45,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _clear_restored_hasc_records_for_invalid_entry(
+async def _close_running_duplicate_hasc_entries(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    domain: str,
 ) -> None:
-    """Remove only stale HASC count records when saved settings are unsafe.
+    """Close only active HASC displays when more than one record is saved.
+
+    A damaged saved pair can also appear while one HASC entry is already
+    running. Close its local summary before awaiting the ordinary integration
+    unload, then let Home Assistant stop only those loaded HASC displays. The
+    saved entries remain untouched for the owner to repair manually.
+    """
+
+    from .local_summary import clear_local_summary_access
+
+    loaded_entries = tuple(hass.config_entries.async_loaded_entries(domain))
+    for loaded_entry in loaded_entries:
+        clear_local_summary_access(hass, loaded_entry)
+    for loaded_entry in loaded_entries:
+        await hass.config_entries.async_unload(loaded_entry.entry_id)
+
+
+def _clear_restored_hasc_records(
+    hass: HomeAssistant,
+    entry_ids: tuple[str, ...],
+) -> None:
+    """Remove stale HASC count records when saved settings must stay closed.
 
     Home Assistant can restore previous entity states before an integration gets
-    a chance to reject invalid persisted settings. Clearing only the records
-    owned by this HASC entry makes the rejection fail closed without changing
-    devices, services, other entities, or anything outside HASC. A later safe
-    reload creates the same fixed nine count sensors again.
+    a chance to reject invalid settings or multiple saved HASC entries.
+    Clearing only records owned by the captured HASC entries makes rejection
+    fail closed without changing saved settings, devices, services, other
+    entities, or anything outside HASC. A later safe reload with exactly one
+    valid entry creates the same fixed nine count sensors again.
     """
 
     from homeassistant.core import callback
@@ -56,13 +87,14 @@ def _clear_restored_hasc_records_for_invalid_entry(
     @callback
     def clear_hasc_records_after_start(_: HomeAssistant) -> None:
         entities = entity_registry.async_get(hass)
-        entries = entity_registry.async_entries_for_config_entry(
-            entities,
-            entry.entry_id,
-        )
-        for registered_entity in entries:
-            hass.states.async_remove(registered_entity.entity_id)
-            entities.async_remove(registered_entity.entity_id)
+        for entry_id in dict.fromkeys(entry_ids):
+            entries = entity_registry.async_entries_for_config_entry(
+                entities,
+                entry_id,
+            )
+            for registered_entity in entries:
+                hass.states.async_remove(registered_entity.entity_id)
+                entities.async_remove(registered_entity.entity_id)
 
     # The entity registry writes unavailable placeholders during startup, so
     # wait for that normal framework step before cleanup. A running system has

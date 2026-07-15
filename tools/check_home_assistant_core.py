@@ -223,6 +223,53 @@ async def async_assert_second_entry_is_rejected(
     )
 
 
+async def async_add_disposable_persisted_duplicate_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> ConfigEntry:
+    """Insert one valid duplicate only in the empty Core test configuration.
+
+    The normal user flow correctly refuses a second HASC setup. This helper
+    deliberately bypasses that flow only inside ``TemporaryDirectory`` so the
+    running empty Core and a later restart can prove that malformed saved
+    duplicates fail closed. It does not read or write a real Home Assistant
+    configuration.
+    """
+
+    duplicate_entry = ConfigEntry(
+        created_at=entry.created_at,
+        data=dict(entry.data),
+        discovery_keys=entry.discovery_keys,
+        domain=entry.domain,
+        entry_id=f"{entry.entry_id}-persisted-duplicate",
+        minor_version=entry.minor_version,
+        modified_at=entry.modified_at,
+        options=dict(entry.options),
+        pref_disable_new_entities=entry.pref_disable_new_entities,
+        pref_disable_polling=entry.pref_disable_polling,
+        source=entry.source,
+        subentries_data=tuple(
+            subentry.as_dict() for subentry in entry.subentries.values()
+        ),
+        title=entry.title,
+        unique_id=entry.unique_id,
+        version=entry.version,
+    )
+    await hass.config_entries.async_add(duplicate_entry)
+    await hass.async_block_till_done()
+    assert_result(
+        {
+            configured_entry.entry_id
+            for configured_entry in hass.config_entries.async_entries(entry.domain)
+        },
+        {entry.entry_id, duplicate_entry.entry_id},
+        "the disposable duplicate fixture must retain two saved HASC entries",
+    )
+    if duplicate_entry.state is config_entries.ConfigEntryState.LOADED:
+        raise RuntimeError("a disposable duplicate HASC entry must fail closed")
+    return duplicate_entry
+
+
 async def async_remove_safe_entry(
     hass: HomeAssistant,
     entry_id: str,
@@ -955,6 +1002,88 @@ def assert_persisted_unsafe_entry_stays_closed(
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
 
 
+def assert_persisted_duplicate_entries_stay_closed(
+    hass: HomeAssistant,
+    domain: str,
+    first_entry_id: str,
+    duplicate_entry_id: str,
+    first_entry_disabled_by: ConfigEntryDisabler | None,
+    expected_data: dict[str, str],
+    expected_options: dict[str, Any],
+    expected_stale_entity_ids: frozenset[str],
+    reserved_entry: ReservedCollisionEntry,
+    expect_retained_local_summary_route: bool = False,
+) -> tuple[ConfigEntry, ConfigEntry]:
+    """Require a saved HASC pair to expose no active HASC data."""
+
+    entries_by_id = {
+        entry.entry_id: entry for entry in hass.config_entries.async_entries(domain)
+    }
+    assert_result(
+        set(entries_by_id),
+        {first_entry_id, duplicate_entry_id},
+        "a malformed saved pair must retain both HASC entries for manual repair",
+    )
+    first_entry = entries_by_id[first_entry_id]
+    duplicate_entry = entries_by_id[duplicate_entry_id]
+    assert_result(
+        first_entry.disabled_by,
+        first_entry_disabled_by,
+        "the first HASC entry must retain its saved activation state",
+    )
+    assert_result(
+        duplicate_entry.disabled_by,
+        None,
+        "the disposable duplicate must remain user-enabled for the guard check",
+    )
+    for configured_entry in (first_entry, duplicate_entry):
+        assert_result(
+            dict(configured_entry.data),
+            expected_data,
+            "a malformed duplicate must not change saved HASC data",
+        )
+        assert_result(
+            dict(configured_entry.options),
+            expected_options,
+            "a malformed duplicate must not change saved HASC options",
+        )
+        if configured_entry.state is config_entries.ConfigEntryState.LOADED:
+            raise RuntimeError("a duplicate saved HASC entry must not load")
+
+    if hass.services.async_services().get(domain) is not None:
+        raise RuntimeError("duplicate saved HASC entries must not restore services")
+    if expect_retained_local_summary_route:
+        runtime = hass.data.get(domain)
+        if not isinstance(runtime, dict):
+            raise RuntimeError("a live duplicate must retain its fail-closed local route")
+        assert_result(
+            runtime.get(LOCAL_SUMMARY_ACTIVE_ENTRY),
+            None,
+            "a live duplicate must clear the active local summary entry",
+        )
+        if len(find_local_summary_routes(hass)) != 1:
+            raise RuntimeError("a live duplicate must retain exactly one closed local route")
+    else:
+        if hass.data.get(domain) is not None:
+            raise RuntimeError("duplicate saved HASC entries must not restore runtime data")
+        if find_local_summary_routes(hass):
+            raise RuntimeError("duplicate saved HASC entries must not restore the local page")
+
+    entities = entity_registry.async_get(hass)
+    devices = device_registry.async_get(hass)
+    for entry_id in (first_entry_id, duplicate_entry_id):
+        if entity_registry.async_entries_for_config_entry(entities, entry_id):
+            raise RuntimeError("duplicate saved HASC entries must not restore count records")
+        if device_registry.async_entries_for_config_entry(devices, entry_id):
+            raise RuntimeError("duplicate saved HASC entries must not restore devices")
+    for entity_id in expected_stale_entity_ids:
+        if hass.states.get(entity_id) is not None:
+            raise RuntimeError("duplicate saved HASC entries must not restore count states")
+
+    assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
+    return first_entry, duplicate_entry
+
+
 async def async_assert_corrected_entry_stays_safe_after_restart(
     hass: HomeAssistant,
     domain: str,
@@ -1184,6 +1313,219 @@ def install_legacy_sensor_names_for_test(integration_target: Path) -> None:
             raise RuntimeError("temporary legacy sensor setup no longer matches the source")
         source = source.replace(current_line, "")
     sensor_path.write_text(source, encoding="utf-8")
+
+
+async def async_assert_persisted_duplicate_entry_lifecycle(
+    config_directory: Path,
+    domain: str,
+    previous_removed_entries: tuple[RemovedHascEntry, ...],
+    reserved_entry: ReservedCollisionEntry,
+    first_entry_is_user_disabled: bool,
+) -> tuple[RemovedHascEntry, RemovedHascEntry]:
+    """Prove a saved HASC pair stays closed until one record is removed.
+
+    The check runs both relevant saved states: an enabled pair, where the
+    remaining entry requires an explicit reload after repair, and a pair with
+    one user-deactivated entry, where it requires an explicit activation.
+    """
+
+    seed_hass = await async_start_empty_home_assistant(config_directory)
+    first_entry_id: str | None = None
+    duplicate_entry_id: str | None = None
+    expected_data: dict[str, str] | None = None
+    expected_options: dict[str, Any] | None = None
+    expected_stale_entity_ids: frozenset[str] | None = None
+    expected_first_disabled_by = (
+        ConfigEntryDisabler.USER if first_entry_is_user_disabled else None
+    )
+    scenario_name = (
+        "user-deactivated first entry" if first_entry_is_user_disabled else "enabled pair"
+    )
+    try:
+        assert_hasc_stays_removed_after_restart(
+            seed_hass,
+            domain,
+            previous_removed_entries,
+            reserved_entry,
+        )
+        first_entry = await async_create_safe_entry(seed_hass, domain, "read-only")
+        assert_entry_has_only_summary_sensors(
+            seed_hass,
+            domain,
+            first_entry.entry_id,
+            expected_entity_ids=None,
+        )
+        assert_reserved_name_does_not_block_hasc(
+            seed_hass,
+            first_entry.entry_id,
+            reserved_entry,
+        )
+        if first_entry_is_user_disabled:
+            await async_disable_safe_entry(seed_hass, first_entry)
+            assert_entry_has_disabled_summary_sensors(
+                seed_hass,
+                domain,
+                first_entry.entry_id,
+                expected_entity_ids=None,
+            )
+        first_entry_id = first_entry.entry_id
+        expected_data = dict(first_entry.data)
+        expected_options = dict(first_entry.options)
+        expected_stale_entity_ids = frozenset(
+            registry_entry.entity_id
+            for registry_entry in entity_registry.async_entries_for_config_entry(
+                entity_registry.async_get(seed_hass),
+                first_entry.entry_id,
+            )
+        )
+        assert_result(
+            len(expected_stale_entity_ids),
+            len(SUMMARY_SENSOR_KEYS),
+            "the duplicate fixture must start with nine count records",
+        )
+        duplicate_entry = await async_add_disposable_persisted_duplicate_entry(
+            seed_hass,
+            first_entry,
+        )
+        duplicate_entry_id = duplicate_entry.entry_id
+        closed_first_entry, _ = assert_persisted_duplicate_entries_stay_closed(
+            seed_hass,
+            domain,
+            first_entry_id,
+            duplicate_entry_id,
+            expected_first_disabled_by,
+            expected_data,
+            expected_options,
+            expected_stale_entity_ids,
+            reserved_entry,
+            expect_retained_local_summary_route=True,
+        )
+        if not first_entry_is_user_disabled:
+            assert_result(
+                closed_first_entry.state,
+                config_entries.ConfigEntryState.NOT_LOADED,
+                "adding a duplicate must unload the remaining enabled HASC",
+            )
+        duplicate_reader_token = await async_create_test_read_only_access_token(
+            seed_hass,
+            f"HASC live duplicate {scenario_name} test user",
+        )
+        await async_assert_local_summary_is_unavailable(
+            seed_hass,
+            domain,
+            duplicate_reader_token,
+            "adding a duplicate saved HASC entry",
+        )
+    finally:
+        await seed_hass.async_stop()
+
+    if (
+        first_entry_id is None
+        or duplicate_entry_id is None
+        or expected_data is None
+        or expected_options is None
+        or expected_stale_entity_ids is None
+    ):
+        raise RuntimeError("the duplicate lifecycle must create both temporary entries")
+
+    duplicate_hass = await async_start_empty_home_assistant(config_directory)
+    duplicate_removal: RemovedHascEntry | None = None
+    recovered_removal: RemovedHascEntry | None = None
+    try:
+        first_entry, duplicate_entry = assert_persisted_duplicate_entries_stay_closed(
+            duplicate_hass,
+            domain,
+            first_entry_id,
+            duplicate_entry_id,
+            expected_first_disabled_by,
+            expected_data,
+            expected_options,
+            expected_stale_entity_ids,
+            reserved_entry,
+        )
+        duplicate_removal = await async_remove_safe_entry(
+            duplicate_hass,
+            duplicate_entry.entry_id,
+        )
+        assert_result(
+            [entry.entry_id for entry in duplicate_hass.config_entries.async_entries(domain)],
+            [first_entry.entry_id],
+            "removing the duplicate must retain only the original HASC entry",
+        )
+        if first_entry_is_user_disabled:
+            await async_enable_safe_entry(duplicate_hass, first_entry)
+        else:
+            if first_entry.state is config_entries.ConfigEntryState.LOADED:
+                raise RuntimeError(
+                    "removing a duplicate must not automatically load the remaining HASC"
+                )
+            reloaded = await duplicate_hass.config_entries.async_reload(first_entry.entry_id)
+            assert_result(
+                reloaded,
+                True,
+                "the remaining enabled HASC entry must reload after duplicate removal",
+            )
+            await duplicate_hass.async_block_till_done()
+            assert_result(
+                first_entry.state,
+                config_entries.ConfigEntryState.LOADED,
+                "an explicitly reloaded remaining HASC entry must load successfully",
+            )
+        assert_entry_has_only_summary_sensors(
+            duplicate_hass,
+            domain,
+            first_entry.entry_id,
+            expected_entity_ids=None,
+        )
+        assert_reserved_name_does_not_block_hasc(
+            duplicate_hass,
+            first_entry.entry_id,
+            reserved_entry,
+        )
+        await async_assert_safe_diagnostics(
+            duplicate_hass,
+            domain,
+            first_entry,
+            "read-only",
+        )
+        assert_local_summary_view(duplicate_hass, domain)
+        await async_assert_authenticated_local_summary_http_access(
+            duplicate_hass,
+            f"HASC corrected {scenario_name} temporary",
+        )
+        recovery_reader_token = await async_create_test_read_only_access_token(
+            duplicate_hass,
+            f"HASC corrected {scenario_name} removal test user",
+        )
+        recovered_removal = await async_remove_safe_entry(
+            duplicate_hass,
+            first_entry.entry_id,
+        )
+        await async_assert_local_summary_is_unavailable(
+            duplicate_hass,
+            domain,
+            recovery_reader_token,
+            f"corrected {scenario_name} removal",
+        )
+        assert_reserved_collision_entry_is_unchanged(duplicate_hass, reserved_entry)
+    finally:
+        await duplicate_hass.async_stop()
+
+    if duplicate_removal is None or recovered_removal is None:
+        raise RuntimeError("the duplicate lifecycle must remove both temporary entries")
+
+    final_hass = await async_start_empty_home_assistant(config_directory)
+    try:
+        assert_hasc_stays_removed_after_restart(
+            final_hass,
+            domain,
+            (*previous_removed_entries, duplicate_removal, recovered_removal),
+            reserved_entry,
+        )
+    finally:
+        await final_hass.async_stop()
+
+    return duplicate_removal, recovered_removal
 
 
 async def async_assert_invalid_saved_data_lifecycle(
@@ -2209,6 +2551,24 @@ async def async_run_check() -> None:
                 reserved_entry,
                 UNSAFE_EXTRA_FIELD_OPTIONS,
                 "extra-field options",
+            )
+        )
+        removed_entries.extend(
+            await async_assert_persisted_duplicate_entry_lifecycle(
+                config_directory,
+                domain,
+                tuple(removed_entries),
+                reserved_entry,
+                first_entry_is_user_disabled=True,
+            )
+        )
+        removed_entries.extend(
+            await async_assert_persisted_duplicate_entry_lifecycle(
+                config_directory,
+                domain,
+                tuple(removed_entries),
+                reserved_entry,
+                first_entry_is_user_disabled=False,
             )
         )
 
