@@ -2541,11 +2541,14 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     scenario_name: str,
     restart_before_activation: bool = False,
     repair_after_rejected_activation: bool = False,
+    reclose_after_recovery: bool = False,
 ) -> RemovedHascEntry:
     """Prove manual activation cannot bypass one unsafe saved HASC setting."""
 
     if (unsafe_data is None) is (unsafe_options is None):
         raise RuntimeError("unsafe activation must change exactly one saved mapping")
+    if reclose_after_recovery and not repair_after_rejected_activation:
+        raise RuntimeError("repeat closure requires a completed safe recovery")
 
     unsafe_hass = await async_start_empty_home_assistant(config_directory)
     activation_hass: HomeAssistant | None = None
@@ -2731,6 +2734,38 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 )
             )
             expect_retained_local_summary_route = True
+            assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
+        if reclose_after_recovery:
+            if activation_reader_token is None:
+                raise RuntimeError(
+                    "recovered HASC must keep a reader token before repeat closure"
+                )
+            await async_save_unsafe_hasc_setting_without_reading_home(
+                activation_hass,
+                domain,
+                activation_entry,
+                f"{scenario_name} after recovery",
+                data=unsafe_data,
+                options=unsafe_options,
+            )
+            assert_result(
+                dict(activation_entry.data),
+                expected_data,
+                "repeated unsafe data must remain available for manual repair",
+            )
+            assert_result(
+                dict(activation_entry.options),
+                expected_options,
+                "repeated unsafe options must remain available for manual repair",
+            )
+            await async_assert_unsafe_saved_update_closes_hasc(
+                activation_hass,
+                domain,
+                activation_entry,
+                unsafe_entry_entity_ids,
+                activation_reader_token,
+                f"{scenario_name} after recovery",
+            )
             assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
         removed_entry = await async_remove_safe_entry(
             activation_hass,
@@ -3651,6 +3686,7 @@ async def async_run_check() -> None:
                 scenario_name="unsafe direct-execution repair after restart",
                 restart_before_activation=True,
                 repair_after_rejected_activation=True,
+                reclose_after_recovery=True,
             )
         )
         removed_entries.extend(
