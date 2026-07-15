@@ -508,6 +508,34 @@ async def async_assert_safe_diagnostics(
     assert_safe_home_summary(home_summary)
 
 
+async def async_assert_closed_diagnostics(
+    hass: HomeAssistant,
+    domain: str,
+    entry: ConfigEntry,
+    unavailable_after: str,
+) -> None:
+    """Require an inactive or ambiguous setup to read no home data at all."""
+
+    integration = await loader.async_get_integration(hass, domain)
+    diagnostics_platform = await integration.async_get_platform("diagnostics")
+    original_collect_home_summary = diagnostics_platform.collect_home_summary
+
+    def fail_if_home_is_read(*_: object, **__: object) -> object:
+        raise RuntimeError("closed diagnostics must not read the home summary")
+
+    diagnostics_platform.collect_home_summary = fail_if_home_is_read
+    try:
+        snapshot = await diagnostics_platform.async_get_config_entry_diagnostics(hass, entry)
+    finally:
+        diagnostics_platform.collect_home_summary = original_collect_home_summary
+
+    assert_result(
+        snapshot,
+        {"diagnostics_status": "unavailable"},
+        f"diagnostics must stay closed after {unavailable_after}",
+    )
+
+
 def assert_safe_home_summary(home_summary: Any) -> None:
     """Validate the only permitted dynamic diagnostics section.
 
@@ -1406,6 +1434,18 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
                 config_entries.ConfigEntryState.NOT_LOADED,
                 "adding a duplicate must unload the remaining enabled HASC",
             )
+        await async_assert_closed_diagnostics(
+            seed_hass,
+            domain,
+            closed_first_entry,
+            f"adding a duplicate with {scenario_name}",
+        )
+        await async_assert_closed_diagnostics(
+            seed_hass,
+            domain,
+            duplicate_entry,
+            f"adding a duplicate with {scenario_name}",
+        )
         duplicate_reader_token = await async_create_test_read_only_access_token(
             seed_hass,
             f"HASC live duplicate {scenario_name} test user",
@@ -1442,6 +1482,18 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
             expected_options,
             expected_stale_entity_ids,
             reserved_entry,
+        )
+        await async_assert_closed_diagnostics(
+            duplicate_hass,
+            domain,
+            first_entry,
+            f"restarting a duplicate with {scenario_name}",
+        )
+        await async_assert_closed_diagnostics(
+            duplicate_hass,
+            domain,
+            duplicate_entry,
+            f"restarting a duplicate with {scenario_name}",
         )
         duplicate_removal = await async_remove_safe_entry(
             duplicate_hass,
@@ -1500,6 +1552,12 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
         recovered_removal = await async_remove_safe_entry(
             duplicate_hass,
             first_entry.entry_id,
+        )
+        await async_assert_closed_diagnostics(
+            duplicate_hass,
+            domain,
+            first_entry,
+            f"removing the corrected {scenario_name}",
         )
         await async_assert_local_summary_is_unavailable(
             duplicate_hass,
@@ -2057,6 +2115,12 @@ async def async_run_check() -> None:
                 read_only_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
+            await async_assert_closed_diagnostics(
+                hass,
+                domain,
+                read_only_entry,
+                "HASC ordinary unload",
+            )
             await async_assert_local_summary_is_unavailable(
                 hass,
                 domain,
@@ -2097,6 +2161,12 @@ async def async_run_check() -> None:
                 domain,
                 read_only_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_closed_diagnostics(
+                hass,
+                domain,
+                read_only_entry,
+                "HASC deactivation",
             )
             await async_assert_local_summary_is_unavailable(
                 hass,
@@ -2161,6 +2231,12 @@ async def async_run_check() -> None:
                 restored_entry,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
+            await async_assert_closed_diagnostics(
+                restarted_hass,
+                domain,
+                restored_entry,
+                "HASC deactivation restart",
+            )
             await async_assert_second_entry_is_rejected(
                 restarted_hass,
                 domain,
@@ -2221,6 +2297,12 @@ async def async_run_check() -> None:
                 domain,
                 restored_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_closed_diagnostics(
+                restarted_hass,
+                domain,
+                restored_entry,
+                "ordinary HASC stop before restart",
             )
             await async_assert_second_entry_is_rejected(
                 restarted_hass,
@@ -2467,6 +2549,12 @@ async def async_run_check() -> None:
             )
             removed_entries.append(
                 await async_remove_safe_entry(post_removal_hass, fresh_entry.entry_id)
+            )
+            await async_assert_closed_diagnostics(
+                post_removal_hass,
+                domain,
+                fresh_entry,
+                "HASC removal",
             )
             await async_assert_local_summary_is_unavailable(
                 post_removal_hass,

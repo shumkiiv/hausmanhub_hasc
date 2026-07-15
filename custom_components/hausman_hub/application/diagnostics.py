@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..domain.observation import HomeSummary
-from ..domain.configuration import DIRECT_EXECUTION_BLOCKED
+from ..domain.configuration import DIRECT_EXECUTION_BLOCKED, SafeConfiguration
 from .configuration import effective_configuration
 from .local_summary import home_summary_payload
 
@@ -24,7 +24,18 @@ def diagnostics_snapshot(
     and arbitrary config data never enter the export in the first place.
     """
 
-    configuration = effective_configuration(entry_data, options)
+    return diagnostics_snapshot_for_configuration(
+        effective_configuration(entry_data, options),
+        home_summary,
+    )
+
+
+def diagnostics_snapshot_for_configuration(
+    configuration: SafeConfiguration,
+    home_summary: HomeSummary,
+) -> dict[str, object]:
+    """Return the approved snapshot for an already-validated active setup."""
+
     return {
         "entry_summary": {
             "mode": configuration.mode,
@@ -49,3 +60,9 @@ def diagnostics_snapshot(
             "strategy": "allow_list_only_with_aggregate_home_summary",
         },
     }
+
+
+def unavailable_diagnostics_snapshot() -> dict[str, str]:
+    """Return the fixed report used without reading any home information."""
+
+    return {"diagnostics_status": "unavailable"}

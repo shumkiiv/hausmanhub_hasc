@@ -15,6 +15,8 @@ Assistant-facing shell around framework-independent safety rules:
 - an options flow that can change only between those same two modes;
 - a diagnostics snapshot assembled from a strict allow-list, rather than from
   config-entry data;
+- a fixed unavailable diagnostics response when HASC is not the one loaded
+  setup. It contains no count and does not read the home;
 - fixed manual guidance texts for review; they do not create issues or make
   changes.
 - an original local brand icon for Home Assistant's interface; it is only an
@@ -156,6 +158,11 @@ until an explicit normal activation. Only then may it restore exactly nine
 count sensors, fixed diagnostics, and the authenticated GET-only page. These
 malformed-pair tests run only in the disposable empty configuration and never
 touch a real Home Assistant setup.
+
+The same empty check asks for diagnostics while HASC is ordinarily stopped,
+user-deactivated, removed, or part of either malformed pair. In every closed
+case the report contains only the fixed unavailable status; a temporary guard
+makes the check fail if diagnostics tries to read the home summary.
 
 The empty check also reserves one HASC-like internal sensor name before a new
 safe setup. HASC must still create all nine count sensors under distinct,

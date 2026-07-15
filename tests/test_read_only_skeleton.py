@@ -19,7 +19,10 @@ from custom_components.hausman_hub.application.configuration import (  # noqa: E
     create_options,
     effective_configuration,
 )
-from custom_components.hausman_hub.application.diagnostics import diagnostics_snapshot  # noqa: E402
+from custom_components.hausman_hub.application.diagnostics import (  # noqa: E402
+    diagnostics_snapshot,
+    unavailable_diagnostics_snapshot,
+)
 from custom_components.hausman_hub.application.observation import create_home_summary  # noqa: E402
 from custom_components.hausman_hub.application.local_summary import (  # noqa: E402
     HOME_SUMMARY_COUNT_KEYS,
@@ -48,7 +51,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.3.7", manifest["version"])
+        self.assertEqual("0.3.8", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -257,6 +260,26 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             set(snapshot["home_summary"]),
         )
         self.assertEqual({"status", "strategy"}, set(snapshot["redaction_report"]))
+
+    def test_unavailable_diagnostics_never_include_home_data(self) -> None:
+        """An inactive HASC setup must return only one static status."""
+
+        self.assertEqual(
+            {"diagnostics_status": "unavailable"},
+            unavailable_diagnostics_snapshot(),
+        )
+
+    def test_diagnostics_adapter_checks_activity_before_reading_the_home(self) -> None:
+        """The outer adapter must close before it can collect any home summary."""
+
+        diagnostics_source = (INTEGRATION / "diagnostics.py").read_text(encoding="utf-8")
+
+        self.assertIn("_single_loaded_entry", diagnostics_source)
+        self.assertIn("unavailable_diagnostics_snapshot", diagnostics_source)
+        self.assertLess(
+            diagnostics_source.index("if active_entry is None"),
+            diagnostics_source.index("collect_home_summary("),
+        )
 
     def test_home_summary_contains_totals_but_no_names_or_identifiers(self) -> None:
         """The application layer must receive and export counts only."""

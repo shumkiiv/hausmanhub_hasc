@@ -73,6 +73,16 @@ Last updated: 2026-07-15.
   user-deactivated, Core does not start HASC at all, so no count state or page
   exists; its disabled registry rows remain until the owner repairs the saved
   pair.
+- Version 0.3.8 closes diagnostics on the same boundary. It returns only the
+  fixed unavailable status, without calling the local home-summary reader,
+  unless exactly one saved HASC entry is currently loaded and safely
+  configured. The isolated Core check covers ordinary unload, user
+  deactivation before and after restart, removal through a stale object, and
+  both malformed duplicate pairs. It patches the temporary diagnostics reader
+  to fail if a closed report attempts to observe the home.
+- Kimi independently reviewed the closed diagnostics change with no findings.
+  See the [closed diagnostics review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-closed-diagnostics-review.md).
 - Kimi independently reviewed the final live and restart duplicate-entry
   closure with no findings. See the [live duplicate fail-closed review
   note](LLM_WIKI/Manual/2026-07-15-kimi-live-duplicate-fail-closed-review.md).
