@@ -418,6 +418,28 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
 
+    def test_core_smoke_check_keeps_hasc_removed_after_restart(self) -> None:
+        """A final empty restart must not silently restore a removed HASC."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("RemovedHascEntry", core_check_source)
+        self.assertIn("assert_hasc_stays_removed_after_restart", core_check_source)
+        self.assertIn(
+            "post_removal_hass = await async_start_empty_home_assistant",
+            core_check_source,
+        )
+        self.assertIn(
+            "removed HASC must not restore config entries after restart",
+            core_check_source,
+        )
+        self.assertIn(
+            "removed HASC must not restore local summary route after restart",
+            core_check_source,
+        )
+
     def test_home_summary_rejects_impossible_totals(self) -> None:
         """Bad aggregate data cannot reach diagnostics silently."""
 

@@ -113,6 +113,10 @@ The local nine-count page remains registered so a later safe setup can reuse
 it without creating a duplicate. After each removal, however, an authenticated
 temporary read-only user must receive only an unavailable response, never any
 of the nine counts. The nine temporary count states must also be absent.
+After the final removal, the empty test system starts once more. HASC must stay
+absent there: no setup, sensor, device, service, count state, runtime data, or
+local page may return, while the unrelated temporary external record remains
+unchanged.
 
 For a manual check of an installed copy, see the Russian
 [safe-check guide](home-assistant-safe-check.md). It asks only for Home

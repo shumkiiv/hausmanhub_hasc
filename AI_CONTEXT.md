@@ -39,7 +39,10 @@ Last updated: 2026-07-15.
   authenticated temporary exact read-only user must receive only an unavailable
   response from the retained local summary route, with none of the nine counts.
   It also requires every removed HASC count state to be absent from the
-  temporary state machine.
+  temporary state machine. After the final removal, a third empty Home
+  Assistant instance uses the same temporary configuration and must not restore
+  any HASC setup, object, state, runtime data, or local route; the unrelated
+  temporary external record must still be unchanged.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
@@ -254,6 +257,11 @@ Last updated: 2026-07-15.
   removal, then rejects any state left afterward without reading or printing a
   count value. See the [state-cleanup review
   note](LLM_WIKI/Manual/2026-07-15-kimi-state-cleanup-after-removal-review.md).
+- Kimi reviewed the isolated final-restart cleanup check with no findings. It
+  confirmed that a third empty Home Assistant instance keeps HASC absent after
+  removal while preserving the unrelated external record, without HTTP or home
+  access. See the [final-restart cleanup review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-final-restart-cleanup-review.md).
 - The old private-first skeleton decision is now clearly marked historical and
   points to the current public manual-HACS decision. Kimi first asked for a
   less brittle document guard; after that correction, its final review found no
@@ -284,7 +292,10 @@ HASC state names before each removal and requires all of those states to be
 absent afterward, without reading their values. It also requires no HASC device
 registry entry and no device attachment for each HASC sensor. It also tries a
 second safe setup and requires Home Assistant to refuse it while preserving the
-original nine-sensor setup.
+original nine-sensor setup. After the final removal it starts a third empty
+Home Assistant instance with the same temporary configuration and requires no
+HASC entry, entity, device, service, state, runtime data, or local route to
+return, while the unrelated temporary external record remains unchanged.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on

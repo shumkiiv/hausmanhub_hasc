@@ -53,6 +53,7 @@ PROTECTED_SUMMARY_SENSOR_ENTITY_IDS = frozenset(
 RESERVED_SUMMARY_SENSOR_ENTITY_ID = "sensor.hausman_hub_hasc_areas_count"
 EXTERNAL_COLLISION_PLATFORM = "homeassistant"
 LOCAL_SUMMARY_ACTIVE_ENTRY = "local_summary_active_entry"
+LOCAL_SUMMARY_PATH = "/api/hausman_hub/local-summary"
 # These are the generic names Home Assistant produced for version 0.3.0.
 # They are fixed here only to prove that an existing registry keeps them on
 # update; no live Home Assistant names are read or stored by this check.
@@ -81,6 +82,14 @@ class ReservedCollisionEntry:
     platform: str
     config_entry_id: str | None
     device_id: str | None
+
+
+@dataclass(frozen=True)
+class RemovedHascEntry:
+    """Keep only disposable HASC identifiers needed after the final restart."""
+
+    entry_id: str
+    entity_ids: frozenset[str]
 
 
 def load_integration_domain() -> str:
@@ -185,10 +194,13 @@ async def async_assert_second_entry_is_rejected(
     )
 
 
-async def async_remove_safe_entry(hass: HomeAssistant, entry_id: str) -> None:
-    """Remove a safe entry and require the inert unload path to succeed."""
+async def async_remove_safe_entry(
+    hass: HomeAssistant,
+    entry_id: str,
+) -> RemovedHascEntry:
+    """Remove a safe entry and retain only names needed for restart checks."""
 
-    owned_entity_ids = tuple(
+    owned_entity_ids = frozenset(
         entry.entity_id
         for entry in entity_registry.async_entries_for_config_entry(
             entity_registry.async_get(hass),
@@ -218,6 +230,7 @@ async def async_remove_safe_entry(hass: HomeAssistant, entry_id: str) -> None:
     for entity_id in owned_entity_ids:
         if hass.states.get(entity_id) is not None:
             raise RuntimeError("removed entry must not leave state values behind")
+    return RemovedHascEntry(entry_id=entry_id, entity_ids=owned_entity_ids)
 
 
 async def async_update_safe_options(
@@ -532,6 +545,19 @@ def assert_reserved_collision_entry_is_unchanged(
     )
 
 
+def find_local_summary_route(hass: HomeAssistant) -> Any | None:
+    """Find the fixed local route without making an HTTP request."""
+
+    return next(
+        (
+            candidate
+            for candidate in hass.http.app.router.resources()
+            if getattr(candidate, "canonical", None) == LOCAL_SUMMARY_PATH
+        ),
+        None,
+    )
+
+
 def assert_local_summary_view(hass: HomeAssistant, domain: str) -> None:
     """Require one authenticated GET-only route for the approved nine counts."""
 
@@ -553,20 +579,45 @@ def assert_local_summary_view(hass: HomeAssistant, domain: str) -> None:
         "local summary view must not allow cross-origin access",
     )
 
-    path = "/api/hausman_hub/local-summary"
-    resource = next(
-        (
-            candidate
-            for candidate in hass.http.app.router.resources()
-            if getattr(candidate, "canonical", None) == path
-        ),
-        None,
-    )
+    resource = find_local_summary_route(hass)
     if resource is None:
         raise RuntimeError("local summary GET route must be registered")
     methods = {route.method for route in resource}
     if not methods or not methods <= {"GET", "HEAD", "OPTIONS"}:
         raise RuntimeError(f"local summary route must be GET-only, got {methods!r}")
+
+
+def assert_hasc_stays_removed_after_restart(
+    hass: HomeAssistant,
+    domain: str,
+    removed_entries: tuple[RemovedHascEntry, ...],
+    reserved_entry: ReservedCollisionEntry,
+) -> None:
+    """Require the final empty restart to keep HASC completely absent."""
+
+    if not removed_entries:
+        raise RuntimeError("the lifecycle check must record removals before restart")
+    if hass.config_entries.async_entries(domain):
+        raise RuntimeError("removed HASC must not restore config entries after restart")
+    if hass.services.async_services().get(domain) is not None:
+        raise RuntimeError("removed HASC must not restore services after restart")
+    if hass.data.get(domain) is not None:
+        raise RuntimeError("removed HASC must not restore runtime data after restart")
+    if find_local_summary_route(hass) is not None:
+        raise RuntimeError("removed HASC must not restore local summary route after restart")
+
+    entities = entity_registry.async_get(hass)
+    devices = device_registry.async_get(hass)
+    for removed_entry in removed_entries:
+        if entity_registry.async_entries_for_config_entry(entities, removed_entry.entry_id):
+            raise RuntimeError("removed HASC must not restore entities after restart")
+        if device_registry.async_entries_for_config_entry(devices, removed_entry.entry_id):
+            raise RuntimeError("removed HASC must not restore devices after restart")
+        for entity_id in removed_entry.entity_ids:
+            if hass.states.get(entity_id) is not None:
+                raise RuntimeError("removed HASC must not restore state values after restart")
+
+    assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
 
 
 async def async_create_test_access_token(
@@ -800,6 +851,8 @@ async def async_run_check() -> None:
             await hass.async_stop()
 
         refresh_test_integration(config_directory, domain)
+        removed_entries: list[RemovedHascEntry] = []
+        reserved_entry: ReservedCollisionEntry | None = None
         restarted_hass = await async_start_empty_home_assistant(config_directory)
         try:
             removal_reader_token = await async_create_test_read_only_access_token(
@@ -842,7 +895,9 @@ async def async_run_check() -> None:
                 restored_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
-            await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
+            removed_entries.append(
+                await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
+            )
             await async_assert_local_summary_is_unavailable_after_removal(
                 restarted_hass,
                 domain,
@@ -875,7 +930,9 @@ async def async_run_check() -> None:
                 shadow_entry.entry_id,
                 reserved_entry,
             )
-            await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
+            removed_entries.append(
+                await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
+            )
             await async_assert_local_summary_is_unavailable_after_removal(
                 restarted_hass,
                 domain,
@@ -900,7 +957,9 @@ async def async_run_check() -> None:
                 reserved_entry,
             )
             assert_reserved_collision_entry_is_unchanged(restarted_hass, reserved_entry)
-            await async_remove_safe_entry(restarted_hass, reinstalled_entry.entry_id)
+            removed_entries.append(
+                await async_remove_safe_entry(restarted_hass, reinstalled_entry.entry_id)
+            )
             await async_assert_local_summary_is_unavailable_after_removal(
                 restarted_hass,
                 domain,
@@ -909,6 +968,19 @@ async def async_run_check() -> None:
             assert_reserved_collision_entry_is_unchanged(restarted_hass, reserved_entry)
         finally:
             await restarted_hass.async_stop()
+
+        if reserved_entry is None:
+            raise RuntimeError("the lifecycle check must reserve its external fixture")
+        post_removal_hass = await async_start_empty_home_assistant(config_directory)
+        try:
+            assert_hasc_stays_removed_after_restart(
+                post_removal_hass,
+                domain,
+                tuple(removed_entries),
+                reserved_entry,
+            )
+        finally:
+            await post_removal_hass.async_stop()
 
 
 def main() -> None:
