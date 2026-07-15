@@ -117,6 +117,21 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             for document in (packaging_decision, skeleton_guide, context):
                 self.assertNotIn(outdated_instruction, document)
 
+    def test_local_access_guide_keeps_the_extra_page_optional(self) -> None:
+        """The guide must not make ordinary nine-count viewing wait for a future step."""
+
+        local_access_guide = (ROOT / "docs" / "read-only-local-access.md").read_text(
+            encoding="utf-8"
+        )
+        plain_guide = " ".join(local_access_guide.split())
+
+        self.assertIn("Если дополнительная страница не нужна", plain_guide)
+        self.assertIn(
+            "Обычные девять строк и диагностика всё равно останутся доступны.",
+            plain_guide,
+        )
+        self.assertNotIn("следующий короткий шаг будет описан", plain_guide)
+
     def test_brand_icon_is_a_square_transparent_png(self) -> None:
         """Keep the local Home Assistant brand image present and usable."""
 

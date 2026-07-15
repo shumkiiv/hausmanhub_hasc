@@ -17,6 +17,12 @@ Last updated: 2026-07-16.
   visual confirmation, and the local aggregate diagnostic summary; it still
   explicitly excludes sharing diagnostics archives, configuration files, home
   addresses, credentials, names, identifiers, and device data.
+- The optional local-viewer guide now ends with a simple choice: when the page
+  is not needed, no action is required; when Home Assistant does not offer the
+  exact read-only role, do not configure that optional page or edit internal
+  files. Ordinary nine counts and diagnostics still work. Kimi found no issue
+  in this wording or its focused local test; see the [local access guidance
+  review](LLM_WIKI/Manual/2026-07-16-kimi-local-access-guidance-review.md).
 - The Home Assistant setup screen uses plain labels: `Только чтение` and
   `Проверка без изменений` in Russian, with matching English labels. Its text
   no longer describes this public repository as private, and a local test
