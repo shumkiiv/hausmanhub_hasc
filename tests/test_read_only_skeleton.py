@@ -51,7 +51,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.3.11", manifest["version"])
+        self.assertEqual("0.3.12", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -997,6 +997,22 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         self.assertIn(
             "opening {scenario_name} options must not repair saved options",
+            core_check_source,
+        )
+        self.assertIn(
+            "async_assert_unsafe_summary_refresh_is_unavailable_without_reading",
+            core_check_source,
+        )
+        self.assertIn(
+            "an unsafe HASC summary refresh must not read the home",
+            core_check_source,
+        )
+        self.assertIn(
+            "summary refresh must fail closed",
+            core_check_source,
+        )
+        self.assertIn(
+            "summary sensor must become unavailable",
             core_check_source,
         )
         self.assertIn("corrected HASC data removal", core_check_source)

@@ -29,9 +29,11 @@ from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_READ_ONLY
 from homeassistant import loader
 from homeassistant.bootstrap import async_from_config_dict
 from homeassistant.config_entries import ConfigEntry, ConfigEntryDisabler
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import InvalidData
 from homeassistant.helpers import device_registry, entity_registry
+from homeassistant.helpers.entity_platform import async_get_platforms
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -505,6 +507,56 @@ async def async_assert_broken_options_form_defaults_to_read_only(
         saved_options,
         f"opening {scenario_name} options must not repair saved options",
     )
+
+
+async def async_assert_unsafe_summary_refresh_is_unavailable_without_reading(
+    hass: HomeAssistant,
+    domain: str,
+    expected_entity_ids: frozenset[str],
+    scenario_name: str,
+) -> None:
+    """Require a running count display to close before a damaged update reads home."""
+
+    coordinators_by_id: dict[int, object] = {}
+    for entity_platform in async_get_platforms(hass, domain):
+        for entity_id, entity in entity_platform.entities.items():
+            if entity_id in expected_entity_ids:
+                coordinator = getattr(entity, "coordinator", None)
+                if coordinator is None:
+                    raise RuntimeError(f"{scenario_name} summary sensor needs a coordinator")
+                coordinators_by_id[id(coordinator)] = coordinator
+    if len(coordinators_by_id) != 1:
+        raise RuntimeError(f"{scenario_name} must retain one summary coordinator")
+    coordinator = next(iter(coordinators_by_id.values()))
+
+    integration = await loader.async_get_integration(hass, domain)
+    sensor_platform = await integration.async_get_platform("sensor")
+    original_collect_home_summary = sensor_platform.collect_home_summary
+
+    def fail_if_home_is_read(*_: object, **__: object) -> object:
+        raise RuntimeError("an unsafe HASC summary refresh must not read the home")
+
+    sensor_platform.collect_home_summary = fail_if_home_is_read
+    try:
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+    finally:
+        sensor_platform.collect_home_summary = original_collect_home_summary
+
+    assert_result(
+        getattr(coordinator, "last_update_success", None),
+        False,
+        f"{scenario_name} summary refresh must fail closed",
+    )
+    for entity_id in expected_entity_ids:
+        state = hass.states.get(entity_id)
+        if state is None:
+            raise RuntimeError(f"{scenario_name} summary sensor must become unavailable")
+        assert_result(
+            state.state,
+            STATE_UNAVAILABLE,
+            f"{scenario_name} summary sensor must become unavailable",
+        )
 
 
 async def async_assert_safe_diagnostics(
@@ -1881,6 +1933,12 @@ async def async_assert_invalid_saved_data_lifecycle(
             invalid_entry,
             f"{scenario_name} saved main settings",
         )
+        await async_assert_unsafe_summary_refresh_is_unavailable_without_reading(
+            invalid_data_hass,
+            domain,
+            invalid_entry_entity_ids,
+            f"{scenario_name} saved main settings",
+        )
         await async_assert_closed_diagnostics(
             invalid_data_hass,
             domain,
@@ -2126,6 +2184,12 @@ async def async_assert_invalid_saved_options_lifecycle(
         await async_assert_broken_options_form_defaults_to_read_only(
             invalid_options_hass,
             invalid_options_entry,
+            f"{scenario_name} saved options",
+        )
+        await async_assert_unsafe_summary_refresh_is_unavailable_without_reading(
+            invalid_options_hass,
+            domain,
+            invalid_options_entity_ids,
             f"{scenario_name} saved options",
         )
         await async_assert_closed_diagnostics(

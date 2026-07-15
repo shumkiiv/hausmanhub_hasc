@@ -16,8 +16,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 
+from .application.configuration import ConfigurationViolation, effective_configuration
 from .application.local_summary import HOME_SUMMARY_COUNT_KEYS, home_summary_payload
 from .const import DOMAIN
 from .home_observation import collect_home_summary
@@ -32,7 +37,7 @@ class HomeSummaryCoordinator(DataUpdateCoordinator[dict[str, int]]):
     """Refresh one redacted aggregate snapshot for all nine display sensors."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Keep one entry identifier only to exclude HASC's own sensors."""
+        """Pass the saved entry so every refresh can validate it again."""
 
         super().__init__(
             hass,
@@ -42,13 +47,20 @@ class HomeSummaryCoordinator(DataUpdateCoordinator[dict[str, int]]):
             update_interval=SUMMARY_UPDATE_INTERVAL,
             always_update=False,
         )
-        self._entry_id = entry.entry_id
 
     async def _async_update_data(self) -> dict[str, int]:
-        """Project local registry facts immediately to the approved nine counts."""
+        """Fail closed before reading the home when saved settings are damaged."""
+
+        entry = self.config_entry
+        if entry is None:
+            raise UpdateFailed("HASC saved configuration is unavailable")
+        try:
+            effective_configuration(entry.data, entry.options)
+        except ConfigurationViolation as error:
+            raise UpdateFailed("HASC saved configuration is unsafe") from error
 
         return home_summary_payload(
-            collect_home_summary(self.hass, self._entry_id)
+            collect_home_summary(self.hass, entry.entry_id)
         )
 
 

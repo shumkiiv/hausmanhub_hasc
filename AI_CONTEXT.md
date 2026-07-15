@@ -104,6 +104,17 @@ Last updated: 2026-07-15.
   says `shadow`. Opening that screen leaves both saved mappings unchanged;
   the disposable Core check covers every damaged main-setting and option
   variant before it closes the entry for manual repair.
+- Version 0.3.12 validates the complete saved configuration before every
+  scheduled nine-count refresh. If a running entry becomes damaged, the
+  coordinator raises a fixed local failure before it calls the home-summary
+  reader, and all nine display sensors become unavailable. The disposable
+  Core check damages every existing main-setting and option variant while the
+  display is running, replaces the reader with a failing function, forces the
+  live coordinator refresh, and requires unavailable sensors, closed
+  diagnostics, and a closed local page.
+- Kimi independently reviewed the live count-refresh closure with no
+  findings. See the [live count-refresh review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-live-summary-refresh-review.md).
 - Kimi independently reviewed the closed diagnostics change with no findings.
   See the [closed diagnostics review
   note](LLM_WIKI/Manual/2026-07-15-kimi-closed-diagnostics-review.md).
