@@ -70,6 +70,14 @@ LEGACY_SUMMARY_SENSOR_ENTITY_IDS = frozenset(
         "sensor.unavailable_entities",
     }
 )
+UNSAFE_PROXY_DATA = {
+    "mode": "proxy",
+    "direct_execution_status": "direct_execution_blocked",
+}
+UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA = {
+    "mode": "read-only",
+    "direct_execution_status": "allowed",
+}
 UNSAFE_PROXY_OPTIONS = {"mode": "proxy"}
 UNSAFE_EXTRA_FIELD_OPTIONS = {
     "mode": "shadow",
@@ -754,6 +762,7 @@ def assert_persisted_unsafe_entry_stays_closed(
     entry_id: str,
     expected_data: dict[str, str],
     expected_options: dict[str, Any],
+    expected_entity_ids: frozenset[str],
     reserved_entry: ReservedCollisionEntry,
 ) -> None:
     """Require an invalid saved entry to fail closed after a restart."""
@@ -784,10 +793,12 @@ def assert_persisted_unsafe_entry_stays_closed(
         entity_registry.async_get(hass),
         entry_id,
     )
+    if entries:
+        raise RuntimeError("an invalid saved HASC entry must not restore entity registry records")
     if device_registry.async_entries_for_config_entry(device_registry.async_get(hass), entry_id):
         raise RuntimeError("an invalid saved HASC entry must not restore devices")
-    for summary_sensor in entries:
-        if hass.states.get(summary_sensor.entity_id) is not None:
+    for entity_id in expected_entity_ids:
+        if hass.states.get(entity_id) is not None:
             raise RuntimeError("an invalid saved HASC entry must not restore count states")
 
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
@@ -1024,6 +1035,221 @@ def install_legacy_sensor_names_for_test(integration_target: Path) -> None:
     sensor_path.write_text(source, encoding="utf-8")
 
 
+async def async_assert_invalid_saved_data_lifecycle(
+    config_directory: Path,
+    domain: str,
+    previous_removed_entries: tuple[RemovedHascEntry, ...],
+    reserved_entry: ReservedCollisionEntry,
+    unsafe_data: dict[str, str],
+    scenario_name: str,
+) -> RemovedHascEntry:
+    """Prove one unsafe saved main-settings block stays closed until corrected."""
+
+    invalid_data_hass = await async_start_empty_home_assistant(config_directory)
+    invalid_entry_id: str | None = None
+    invalid_entry_entity_ids: frozenset[str] | None = None
+    recovered_entry_data: dict[str, str] | None = None
+    recovered_entry_options: dict[str, Any] | None = None
+    saved_unsafe_data = dict(unsafe_data)
+    try:
+        assert_hasc_stays_removed_after_restart(
+            invalid_data_hass,
+            domain,
+            previous_removed_entries,
+            reserved_entry,
+        )
+        invalid_entry = await async_create_safe_entry(invalid_data_hass, domain, "read-only")
+        invalid_entry_id = invalid_entry.entry_id
+        recovered_entry_data = dict(invalid_entry.data)
+        recovered_entry_options = dict(invalid_entry.options)
+        invalid_entry_entity_ids = frozenset(
+            entry.entity_id
+            for entry in entity_registry.async_entries_for_config_entry(
+                entity_registry.async_get(invalid_data_hass),
+                invalid_entry.entry_id,
+            )
+        )
+        assert_result(
+            len(invalid_entry_entity_ids),
+            len(SUMMARY_SENSOR_KEYS),
+            "the temporary invalid-data HASC entry must start with nine count sensors",
+        )
+        await async_assert_safe_diagnostics(
+            invalid_data_hass,
+            domain,
+            invalid_entry,
+            "read-only",
+        )
+        assert_entry_has_only_summary_sensors(
+            invalid_data_hass,
+            domain,
+            invalid_entry.entry_id,
+            expected_entity_ids=invalid_entry_entity_ids,
+        )
+        assert_local_summary_view(invalid_data_hass, domain)
+        invalid_reader_token = await async_create_test_read_only_access_token(
+            invalid_data_hass,
+            f"HASC temporary {scenario_name} test user",
+        )
+        invalid_data_hass.config_entries.async_update_entry(
+            invalid_entry,
+            data=saved_unsafe_data,
+        )
+        await invalid_data_hass.async_block_till_done()
+        assert_result(
+            dict(invalid_entry.data),
+            saved_unsafe_data,
+            "the temporary unsafe HASC data must persist",
+        )
+        reloaded_invalid_entry = await invalid_data_hass.config_entries.async_reload(
+            invalid_entry.entry_id
+        )
+        assert_result(
+            reloaded_invalid_entry,
+            False,
+            "an unsafe saved HASC data entry must reject reload",
+        )
+        await invalid_data_hass.async_block_till_done()
+        if invalid_entry.state is config_entries.ConfigEntryState.LOADED:
+            raise RuntimeError("unsafe saved HASC data must unload on reload")
+        if entity_registry.async_entries_for_config_entry(
+            entity_registry.async_get(invalid_data_hass),
+            invalid_entry.entry_id,
+        ):
+            raise RuntimeError("unsafe saved HASC data must clear entity registry records on reload")
+        await async_assert_local_summary_is_unavailable(
+            invalid_data_hass,
+            domain,
+            invalid_reader_token,
+            f"{scenario_name} reload",
+        )
+    finally:
+        await invalid_data_hass.async_stop()
+
+    if (
+        invalid_entry_id is None
+        or invalid_entry_entity_ids is None
+        or recovered_entry_data is None
+        or recovered_entry_options is None
+    ):
+        raise RuntimeError(f"the lifecycle check must create its temporary {scenario_name} entry")
+
+    recovered_data_hass = await async_start_empty_home_assistant(config_directory)
+    try:
+        assert_persisted_unsafe_entry_stays_closed(
+            recovered_data_hass,
+            domain,
+            invalid_entry_id,
+            saved_unsafe_data,
+            recovered_entry_options,
+            invalid_entry_entity_ids,
+            reserved_entry,
+        )
+        recovered_entry = recovered_data_hass.config_entries.async_get_entry(invalid_entry_id)
+        if recovered_entry is None:
+            raise RuntimeError("the temporary invalid HASC entry must remain repairable")
+        recovered_data_hass.config_entries.async_update_entry(
+            recovered_entry,
+            data=recovered_entry_data,
+        )
+        await recovered_data_hass.async_block_till_done()
+        reloaded_recovered_entry = await recovered_data_hass.config_entries.async_reload(
+            recovered_entry.entry_id
+        )
+        assert_result(
+            reloaded_recovered_entry,
+            True,
+            "a manually corrected HASC data entry must reload successfully",
+        )
+        await recovered_data_hass.async_block_till_done()
+        assert_result(
+            dict(recovered_entry.data),
+            recovered_entry_data,
+            "manual data correction must restore approved entry data",
+        )
+        assert_result(
+            dict(recovered_entry.options),
+            recovered_entry_options,
+            "manual data correction must preserve approved options",
+        )
+        assert_result(
+            recovered_entry.state,
+            config_entries.ConfigEntryState.LOADED,
+            "a manually corrected HASC data entry must load safely",
+        )
+        await async_assert_safe_diagnostics(
+            recovered_data_hass,
+            domain,
+            recovered_entry,
+            "read-only",
+        )
+        assert_entry_has_only_summary_sensors(
+            recovered_data_hass,
+            domain,
+            recovered_entry.entry_id,
+            expected_entity_ids=invalid_entry_entity_ids,
+        )
+        assert_local_summary_view(recovered_data_hass, domain)
+        await async_assert_authenticated_local_summary_http_access(
+            recovered_data_hass,
+            f"HASC corrected {scenario_name} temporary",
+        )
+        assert_reserved_collision_entry_is_unchanged(recovered_data_hass, reserved_entry)
+    finally:
+        await recovered_data_hass.async_stop()
+
+    recovered_data_restart_hass = await async_start_empty_home_assistant(config_directory)
+    removed_entry: RemovedHascEntry | None = None
+    try:
+        recovered_entry = await async_assert_corrected_entry_stays_safe_after_restart(
+            recovered_data_restart_hass,
+            domain,
+            invalid_entry_id,
+            recovered_entry_data,
+            recovered_entry_options,
+            invalid_entry_entity_ids,
+            reserved_entry,
+        )
+        recovery_removal_reader_token = await async_create_test_read_only_access_token(
+            recovered_data_restart_hass,
+            f"HASC corrected {scenario_name} removal test user",
+        )
+        removed_entry = await async_remove_safe_entry(
+            recovered_data_restart_hass,
+            recovered_entry.entry_id,
+        )
+        await async_assert_local_summary_is_unavailable(
+            recovered_data_restart_hass,
+            domain,
+            recovery_removal_reader_token,
+            "corrected HASC data removal",
+        )
+        assert_reserved_collision_entry_is_unchanged(
+            recovered_data_restart_hass,
+            reserved_entry,
+        )
+    finally:
+        await recovered_data_restart_hass.async_stop()
+
+    if removed_entry is None:
+        raise RuntimeError(f"the lifecycle check must remove its corrected {scenario_name} entry")
+
+    recovered_data_removal_hass = await async_start_empty_home_assistant(
+        config_directory
+    )
+    try:
+        assert_hasc_stays_removed_after_restart(
+            recovered_data_removal_hass,
+            domain,
+            (*previous_removed_entries, removed_entry),
+            reserved_entry,
+        )
+    finally:
+        await recovered_data_removal_hass.async_stop()
+
+    return removed_entry
+
+
 async def async_assert_invalid_saved_options_lifecycle(
     config_directory: Path,
     domain: str,
@@ -1110,6 +1336,13 @@ async def async_assert_invalid_saved_options_lifecycle(
         await invalid_options_hass.async_block_till_done()
         if invalid_options_entry.state is config_entries.ConfigEntryState.LOADED:
             raise RuntimeError("unsafe saved HASC options must unload on reload")
+        if entity_registry.async_entries_for_config_entry(
+            entity_registry.async_get(invalid_options_hass),
+            invalid_options_entry.entry_id,
+        ):
+            raise RuntimeError(
+                "unsafe saved HASC options must clear entity registry records on reload"
+            )
         await async_assert_local_summary_is_unavailable(
             invalid_options_hass,
             domain,
@@ -1135,6 +1368,7 @@ async def async_assert_invalid_saved_options_lifecycle(
             invalid_options_entry_id,
             invalid_options_data,
             saved_unsafe_options,
+            invalid_options_entity_ids,
             reserved_entry,
         )
         recovered_options_entry = invalid_options_restarted_hass.config_entries.async_get_entry(
@@ -1556,175 +1790,26 @@ async def async_run_check() -> None:
         finally:
             await post_removal_hass.async_stop()
 
-        final_hass = await async_start_empty_home_assistant(config_directory)
-        invalid_entry_id: str | None = None
-        invalid_entry_entity_ids: frozenset[str] | None = None
-        invalid_entry_data = {
-            "mode": "proxy",
-            "direct_execution_status": "direct_execution_blocked",
-        }
-        recovered_entry_data: dict[str, str] | None = None
-        recovered_entry_options: dict[str, Any] | None = None
-        try:
-            assert_hasc_stays_removed_after_restart(
-                final_hass,
+        removed_entries.append(
+            await async_assert_invalid_saved_data_lifecycle(
+                config_directory,
                 domain,
                 tuple(removed_entries),
                 reserved_entry,
+                UNSAFE_PROXY_DATA,
+                "invalid-mode data",
             )
-            invalid_entry = await async_create_safe_entry(final_hass, domain, "read-only")
-            invalid_entry_id = invalid_entry.entry_id
-            recovered_entry_data = dict(invalid_entry.data)
-            recovered_entry_options = dict(invalid_entry.options)
-            invalid_entry_entity_ids = frozenset(
-                entry.entity_id
-                for entry in entity_registry.async_entries_for_config_entry(
-                    entity_registry.async_get(final_hass),
-                    invalid_entry.entry_id,
-                )
-            )
-            assert_result(
-                len(invalid_entry_entity_ids),
-                len(SUMMARY_SENSOR_KEYS),
-                "the temporary invalid HASC entry must start with nine count sensors",
-            )
-            invalid_reader_token = await async_create_test_read_only_access_token(
-                final_hass,
-                "HASC temporary invalid-settings test user",
-            )
-            final_hass.config_entries.async_update_entry(
-                invalid_entry,
-                data=invalid_entry_data,
-            )
-            await final_hass.async_block_till_done()
-            assert_result(
-                dict(invalid_entry.data),
-                invalid_entry_data,
-                "the temporary invalid HASC entry must persist unsafe data",
-            )
-            reloaded_invalid_entry = await final_hass.config_entries.async_reload(
-                invalid_entry.entry_id
-            )
-            assert_result(
-                reloaded_invalid_entry,
-                False,
-                "an invalid saved HASC entry must reject reload",
-            )
-            await final_hass.async_block_till_done()
-            if invalid_entry.state is config_entries.ConfigEntryState.LOADED:
-                raise RuntimeError("an invalid saved HASC entry must unload on reload")
-            await async_assert_local_summary_is_unavailable(
-                final_hass,
-                domain,
-                invalid_reader_token,
-                "invalid HASC reload",
-            )
-        finally:
-            await final_hass.async_stop()
-
-        if (
-            invalid_entry_id is None
-            or invalid_entry_entity_ids is None
-            or recovered_entry_data is None
-            or recovered_entry_options is None
-        ):
-            raise RuntimeError("the lifecycle check must create its temporary invalid entry")
-        invalid_hass = await async_start_empty_home_assistant(config_directory)
-        try:
-            assert_persisted_unsafe_entry_stays_closed(
-                invalid_hass,
-                domain,
-                invalid_entry_id,
-                invalid_entry_data,
-                recovered_entry_options,
-                reserved_entry,
-            )
-            recovered_entry = invalid_hass.config_entries.async_get_entry(invalid_entry_id)
-            if recovered_entry is None:
-                raise RuntimeError("the temporary invalid HASC entry must remain repairable")
-            invalid_hass.config_entries.async_update_entry(
-                recovered_entry,
-                data=recovered_entry_data,
-            )
-            await invalid_hass.async_block_till_done()
-            reloaded_recovered_entry = await invalid_hass.config_entries.async_reload(
-                recovered_entry.entry_id
-            )
-            assert_result(
-                reloaded_recovered_entry,
-                True,
-                "a manually corrected HASC entry must reload successfully",
-            )
-            await invalid_hass.async_block_till_done()
-            assert_result(
-                recovered_entry.data,
-                recovered_entry_data,
-                "manual correction must restore only approved entry data",
-            )
-            assert_result(
-                recovered_entry.state,
-                config_entries.ConfigEntryState.LOADED,
-                "a manually corrected HASC entry must load safely",
-            )
-            await async_assert_safe_diagnostics(
-                invalid_hass,
-                domain,
-                recovered_entry,
-                "read-only",
-            )
-            assert_entry_has_only_summary_sensors(
-                invalid_hass,
-                domain,
-                recovered_entry.entry_id,
-                expected_entity_ids=invalid_entry_entity_ids,
-            )
-            assert_local_summary_view(invalid_hass, domain)
-            await async_assert_authenticated_local_summary_http_access(
-                invalid_hass,
-                "HASC corrected-settings temporary",
-            )
-            assert_reserved_collision_entry_is_unchanged(invalid_hass, reserved_entry)
-        finally:
-            await invalid_hass.async_stop()
-
-        recovered_hass = await async_start_empty_home_assistant(config_directory)
-        try:
-            recovered_entry = await async_assert_corrected_entry_stays_safe_after_restart(
-                recovered_hass,
-                domain,
-                invalid_entry_id,
-                recovered_entry_data,
-                recovered_entry_options,
-                invalid_entry_entity_ids,
-                reserved_entry,
-            )
-            recovery_removal_reader_token = await async_create_test_read_only_access_token(
-                recovered_hass,
-                "HASC corrected-settings removal test user",
-            )
-            removed_entries.append(
-                await async_remove_safe_entry(recovered_hass, recovered_entry.entry_id)
-            )
-            await async_assert_local_summary_is_unavailable(
-                recovered_hass,
-                domain,
-                recovery_removal_reader_token,
-                "corrected HASC removal",
-            )
-            assert_reserved_collision_entry_is_unchanged(recovered_hass, reserved_entry)
-        finally:
-            await recovered_hass.async_stop()
-
-        recovered_removal_hass = await async_start_empty_home_assistant(config_directory)
-        try:
-            assert_hasc_stays_removed_after_restart(
-                recovered_removal_hass,
+        )
+        removed_entries.append(
+            await async_assert_invalid_saved_data_lifecycle(
+                config_directory,
                 domain,
                 tuple(removed_entries),
                 reserved_entry,
+                UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA,
+                "unblocked-execution data",
             )
-        finally:
-            await recovered_removal_hass.async_stop()
+        )
 
         removed_entries.append(
             await async_assert_invalid_saved_options_lifecycle(

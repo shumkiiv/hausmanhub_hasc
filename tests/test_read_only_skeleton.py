@@ -48,7 +48,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.3.2", manifest["version"])
+        self.assertEqual("0.3.3", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -510,7 +510,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
     def test_core_smoke_check_closes_invalid_saved_configuration(self) -> None:
-        """An unsafe saved entry must not load after the temporary restart."""
+        """Every unsafe saved main setting must close through a temporary restart."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -526,13 +526,41 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "an invalid saved HASC entry must not restore count states",
             core_check_source,
         )
-        self.assertIn('"mode": "proxy",', lifecycle_source)
-        self.assertIn("final_hass.config_entries.async_update_entry(", lifecycle_source)
-        self.assertIn("an invalid saved HASC entry must reject reload", lifecycle_source)
-        self.assertIn('"invalid HASC reload",', lifecycle_source)
+        self.assertIn(
+            "an invalid saved HASC entry must not restore entity registry records",
+            core_check_source,
+        )
+        self.assertIn(
+            "unsafe saved HASC data must clear entity registry records on reload",
+            core_check_source,
+        )
+        self.assertIn(
+            "unsafe saved HASC options must clear entity registry records on reload",
+            core_check_source,
+        )
+        self.assertIn("async_assert_invalid_saved_data_lifecycle", core_check_source)
+        self.assertIn("UNSAFE_PROXY_DATA", core_check_source)
+        self.assertIn("UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA", core_check_source)
+        self.assertIn('"direct_execution_status": "allowed",', core_check_source)
+        self.assertEqual(
+            2,
+            lifecycle_source.count("async_assert_invalid_saved_data_lifecycle("),
+        )
+        self.assertIn('"invalid-mode data",', lifecycle_source)
+        self.assertIn('"unblocked-execution data",', lifecycle_source)
+        self.assertIn(
+            "an unsafe saved HASC data entry must reject reload",
+            core_check_source,
+        )
+        self.assertIn("corrected HASC data removal", core_check_source)
+        self.assertIn("(*previous_removed_entries, removed_entry)", core_check_source)
         self.assertLess(
-            lifecycle_source.index("await final_hass.async_stop()"),
-            lifecycle_source.index("invalid_hass = await async_start_empty_home_assistant"),
+            lifecycle_source.index("UNSAFE_PROXY_DATA"),
+            lifecycle_source.index("UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA"),
+        )
+        self.assertLess(
+            core_check_source.index("invalid_data_hass = await async_start_empty_home_assistant"),
+            core_check_source.index("recovered_data_hass = await async_start_empty_home_assistant"),
         )
 
     def test_core_smoke_check_recovers_corrected_saved_configuration(self) -> None:
@@ -543,36 +571,36 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
 
-        self.assertIn("recovered_entry_data", lifecycle_source)
-        self.assertIn("invalid_entry_entity_ids", lifecycle_source)
-        self.assertIn("recovered_entry_options", lifecycle_source)
+        self.assertIn("recovered_entry_data", core_check_source)
+        self.assertIn("invalid_entry_entity_ids", core_check_source)
+        self.assertIn("recovered_entry_options", core_check_source)
         self.assertIn("async_assert_corrected_entry_stays_safe_after_restart", core_check_source)
         self.assertIn(
-            "a manually corrected HASC entry must reload successfully",
-            lifecycle_source,
+            "a manually corrected HASC data entry must reload successfully",
+            core_check_source,
         )
         self.assertIn(
-            "manual correction must restore only approved entry data",
-            lifecycle_source,
+            "manual data correction must restore approved entry data",
+            core_check_source,
         )
-        self.assertIn("HASC corrected-settings temporary", lifecycle_source)
+        self.assertIn("HASC corrected {scenario_name} temporary", core_check_source)
         self.assertIn("HASC corrected-settings restart temporary", core_check_source)
         self.assertIn(
             "restart must preserve the manually corrected safe entry data",
             core_check_source,
         )
-        self.assertIn("corrected HASC removal", lifecycle_source)
+        self.assertIn("corrected HASC data removal", core_check_source)
         self.assertLess(
-            lifecycle_source.index("assert_persisted_unsafe_entry_stays_closed("),
-            lifecycle_source.index("reloaded_recovered_entry ="),
+            core_check_source.index("assert_persisted_unsafe_entry_stays_closed("),
+            core_check_source.index("reloaded_recovered_entry ="),
         )
         self.assertLess(
-            lifecycle_source.index("reloaded_recovered_entry ="),
-            lifecycle_source.index("recovered_hass = await async_start_empty_home_assistant"),
+            core_check_source.index("reloaded_recovered_entry ="),
+            core_check_source.index("recovered_data_restart_hass = await async_start_empty_home_assistant"),
         )
         self.assertLess(
-            lifecycle_source.index("recovered_hass = await async_start_empty_home_assistant"),
-            lifecycle_source.index("recovered_removal_hass ="),
+            core_check_source.index("recovered_data_restart_hass = await async_start_empty_home_assistant"),
+            core_check_source.index("recovered_data_removal_hass ="),
         )
 
     def test_core_smoke_check_closes_and_recovers_invalid_saved_options(self) -> None:
@@ -700,12 +728,16 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source,
         )
         self.assertIn(
-            "final_hass = await async_start_empty_home_assistant(config_directory)",
+            "await async_assert_invalid_saved_data_lifecycle(",
             lifecycle_source,
+        )
+        self.assertIn(
+            "recovered_data_removal_hass = await async_start_empty_home_assistant",
+            core_check_source,
         )
         self.assertGreaterEqual(
             lifecycle_source.count("assert_hasc_stays_removed_after_restart("),
-            2,
+            1,
         )
 
     def test_home_summary_rejects_impossible_totals(self) -> None:

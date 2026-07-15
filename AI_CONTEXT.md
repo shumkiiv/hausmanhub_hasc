@@ -70,10 +70,13 @@ Last updated: 2026-07-15.
   guarded page; after an in-process deactivation or removal that one retained
   page must fail closed without counts; after a full temporary restart while
   disabled or removed, no such page may exist.
-- Version 0.3.2 keeps a bad saved HASC setup closed. If its saved data violates
-  the fixed safety contract, HASC rejects a reload and, after restart, removes
-  only its own restored count states after Home Assistant finishes startup. It
-  does not alter devices, services, other entities, Climate, or Automation.
+- Version 0.3.3 keeps a bad saved HASC setup closed. If its saved data violates
+  the fixed safety contract, HASC rejects a reload and removes only its own
+  restored count states and stale HASC records, both after startup and during a
+  running-system reload. Its delayed startup cleanup is explicitly scheduled
+  on Home Assistant's main loop, and the local test fake rejects an unmarked
+  startup callback. It does not alter devices, services, other entities,
+  Climate, or Automation.
 - The same disposable lifecycle now corrects only its own deliberately bad
   saved data back to the exact original safe data, then starts one more empty
   Home Assistant while the corrected HASC setup remains installed. That restart
@@ -342,6 +345,11 @@ Last updated: 2026-07-15.
   startup, immediately clears them on a reload, and does not touch a device,
   service, external entity, or home-control boundary. See the [invalid-settings
   review note](LLM_WIKI/Manual/2026-07-15-kimi-invalid-persisted-settings-review.md).
+- The v0.3.3 Kimi review cycle first found stale HASC registry records and a
+  startup callback that needed the Home Assistant loop-safety marker. Both
+  were corrected, with a local test that rejects an unmarked callback. The
+  final focused Kimi review found no issues; see the [invalid-record cleanup
+  review note](LLM_WIKI/Manual/2026-07-15-kimi-invalid-record-cleanup-review.md).
 - Kimi reviewed recovery after a corrected temporary saved setting with no
   findings. It confirmed the additional persistence restart, exact same
   nine-count sensor names, fixed diagnostics, GET-only local page, collision

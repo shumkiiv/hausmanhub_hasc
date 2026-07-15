@@ -134,6 +134,7 @@ class FakeEntityRegistry:
                 disabled_by="synthetic_configuration",
             ),
         }
+        self.removed: list[str] = []
 
     def async_entries_for_config_entry(self, entry_id: str) -> list[object]:
         return [
@@ -141,6 +142,13 @@ class FakeEntityRegistry:
             for entity in self.entities.values()
             if getattr(entity, "config_entry_id", None) == entry_id
         ]
+
+    def async_remove(self, entity_id: str) -> None:
+        self.removed.append(entity_id)
+        for registry_id, entity in tuple(self.entities.items()):
+            if entity.entity_id == entity_id:
+                del self.entities[registry_id]
+                return
 
 
 class FakeHomeAssistant:
@@ -209,6 +217,14 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     const.Platform = SimpleNamespace(SENSOR="sensor")  # type: ignore[attr-defined]
     core = ModuleType("homeassistant.core")
     core.HomeAssistant = FakeHomeAssistant  # type: ignore[attr-defined]
+
+    def callback(function: object) -> object:
+        """Mark a synthetic callback as safe for the Home Assistant loop."""
+
+        setattr(function, "_hass_callback", True)
+        return function
+
+    core.callback = callback  # type: ignore[attr-defined]
     helpers = ModuleType("homeassistant.helpers")
     area_registry = ModuleType("homeassistant.helpers.area_registry")
     area_registry.async_get = lambda hass: hass.area_registry  # type: ignore[attr-defined]
@@ -220,7 +236,15 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         lambda registry, entry_id: registry.async_entries_for_config_entry(entry_id)
     )
     start = ModuleType("homeassistant.helpers.start")
-    start.async_at_started = lambda hass, callback: callback(hass)  # type: ignore[attr-defined]
+
+    def async_at_started(hass: object, startup_callback: object) -> None:
+        """Require the same loop-safe callback contract as Home Assistant."""
+
+        if not getattr(startup_callback, "_hass_callback", False):
+            raise RuntimeError("Home Assistant startup callbacks must be loop-safe")
+        startup_callback(hass)
+
+    start.async_at_started = async_at_started  # type: ignore[attr-defined]
 
     homeassistant.auth = auth  # type: ignore[attr-defined]
     homeassistant.components = components  # type: ignore[attr-defined]
@@ -420,6 +444,14 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertEqual([], unsafe_hass.config_entries.forwarded)
                 self.assertEqual([saved_hasc_state], unsafe_hass.states.removed)
                 self.assertNotIn(saved_hasc_state, unsafe_hass.states.values)
+                self.assertEqual([saved_hasc_state], unsafe_hass.entity_registry.removed)
+                self.assertEqual(
+                    [],
+                    unsafe_hass.entity_registry.async_entries_for_config_entry(
+                        unsafe_entry.entry_id
+                    ),
+                )
+                self.assertIn("synthetic-one", unsafe_hass.entity_registry.entities)
                 self.assertIn(
                     "sensor.synthetic_private_temperature",
                     unsafe_hass.states.values,

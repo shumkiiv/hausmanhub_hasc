@@ -22,7 +22,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         effective_configuration(entry.data, entry.options)
     except ConfigurationViolation:
-        _clear_restored_states_for_invalid_entry(hass, entry)
+        _clear_restored_hasc_records_for_invalid_entry(hass, entry)
         return False
 
     # Imports stay at the outer boundary so framework-independent tests can run
@@ -36,33 +36,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-def _clear_restored_states_for_invalid_entry(
+def _clear_restored_hasc_records_for_invalid_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    """Remove only stale HASC count states when saved settings are unsafe.
+    """Remove only stale HASC count records when saved settings are unsafe.
 
     Home Assistant can restore previous entity states before an integration gets
-    a chance to reject invalid persisted settings. Clearing only the states
+    a chance to reject invalid persisted settings. Clearing only the records
     owned by this HASC entry makes the rejection fail closed without changing
-    devices, services, other entities, or anything outside HASC.
+    devices, services, other entities, or anything outside HASC. A later safe
+    reload creates the same fixed nine count sensors again.
     """
 
+    from homeassistant.core import callback
     from homeassistant.helpers import entity_registry
     from homeassistant.helpers.start import async_at_started
 
-    def clear_states_after_start(_: HomeAssistant) -> None:
+    @callback
+    def clear_hasc_records_after_start(_: HomeAssistant) -> None:
+        entities = entity_registry.async_get(hass)
         entries = entity_registry.async_entries_for_config_entry(
-            entity_registry.async_get(hass),
+            entities,
             entry.entry_id,
         )
         for registered_entity in entries:
             hass.states.async_remove(registered_entity.entity_id)
+            entities.async_remove(registered_entity.entity_id)
 
-    # The entity registry writes unavailable placeholders during startup. Run
-    # after that normal framework step, or immediately when a running system
-    # reloads an invalid entry.
-    async_at_started(hass, clear_states_after_start)
+    # The entity registry writes unavailable placeholders during startup, so
+    # wait for that normal framework step before cleanup. A running system has
+    # already passed startup and must clear the stale HASC records immediately.
+    if getattr(hass, "is_running", False):
+        clear_hasc_records_after_start(hass)
+    else:
+        async_at_started(hass, clear_hasc_records_after_start)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
