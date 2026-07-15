@@ -91,10 +91,11 @@ Last updated: 2026-07-15.
   diagnostic number sensors, not devices, controls, new home data, proxy, or
   execution. The decision is recorded in
   [the summary-display decision](docs/read-only-home-summary-display-decision.md).
-- Version `0.2.0` has a public GitHub release at
-  https://github.com/shumkiiv/hausmanhub_hasc/releases/tag/v0.2.0. The owner
-  confirmed the corresponding HACS update and Home Assistant restart on
-  2026-07-14. This is not an independent live-home verification by Codex.
+- Version `0.3.0` has a public GitHub release at
+  https://github.com/shumkiiv/hausmanhub_hasc/releases/tag/v0.3.0. It adds only
+  the approved nine diagnostic count sensors. The owner previously confirmed
+  the v0.2.0 HACS update and Home Assistant restart on 2026-07-14; that is not
+  an independent live-home verification by Codex.
 - A local repository safety check now scans Git-tracked files or exactly the
   staged files before publication. It reads file blobs only from Git's index,
   so it never follows a working-tree symbolic link outside the repository. It
