@@ -13,6 +13,8 @@ and no other HASC entity or service.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from http import HTTPStatus
 import importlib
@@ -127,6 +129,36 @@ def assert_result(actual: Any, expected: Any, message: str) -> None:
 
     if actual != expected:
         raise RuntimeError(f"{message}: expected {expected!r}, got {actual!r}")
+
+
+@asynccontextmanager
+async def async_block_home_summary_reads(
+    hass: HomeAssistant,
+    domain: str,
+    scenario_name: str,
+) -> AsyncIterator[None]:
+    """Make every HASC home-summary reader fail during one safety action."""
+
+    integration = await loader.async_get_integration(hass, domain)
+    adapters = (
+        await integration.async_get_platform("sensor"),
+        await integration.async_get_platform("diagnostics"),
+        await integration.async_get_platform("local_summary"),
+    )
+    original_collectors = tuple(
+        (adapter, adapter.collect_home_summary) for adapter in adapters
+    )
+
+    def fail_if_home_is_read(*_: object, **__: object) -> object:
+        raise RuntimeError(f"{scenario_name} must not read the home")
+
+    for adapter, _ in original_collectors:
+        adapter.collect_home_summary = fail_if_home_is_read
+    try:
+        yield
+    finally:
+        for adapter, original_collect_home_summary in original_collectors:
+            adapter.collect_home_summary = original_collect_home_summary
 
 
 async def async_create_safe_entry(
@@ -393,6 +425,69 @@ async def async_enable_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> No
     )
 
 
+async def async_enable_unsafe_entry_without_reading_home(
+    hass: HomeAssistant,
+    domain: str,
+    entry: ConfigEntry,
+    scenario_name: str,
+) -> None:
+    """Prove explicit activation cannot load an unsafe disabled HASC setup."""
+
+    assert_result(
+        entry.disabled_by,
+        ConfigEntryDisabler.USER,
+        f"{scenario_name} must begin user-disabled",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.NOT_LOADED,
+        f"{scenario_name} must begin not loaded",
+    )
+    reload_calls: list[str] = []
+    original_async_reload = hass.config_entries.async_reload
+
+    async def async_recording_reload(entry_id: str) -> bool:
+        """Record the one framework reload attempted for unsafe activation."""
+
+        reload_calls.append(entry_id)
+        return await original_async_reload(entry_id)
+
+    hass.config_entries.async_reload = async_recording_reload
+    try:
+        async with async_block_home_summary_reads(hass, domain, scenario_name):
+            enabled = await hass.config_entries.async_set_disabled_by(entry.entry_id, None)
+            assert_result(enabled, False, f"{scenario_name} must reject unsafe activation")
+            await hass.async_block_till_done()
+    finally:
+        hass.config_entries.async_reload = original_async_reload
+
+    assert_result(
+        entry.disabled_by,
+        None,
+        f"{scenario_name} must record the user's activation attempt",
+    )
+    assert_result(
+        reload_calls,
+        [entry.entry_id],
+        f"{scenario_name} must attempt exactly one HASC reload",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.SETUP_ERROR,
+        f"{scenario_name} must leave unsafe HASC closed with a setup error",
+    )
+    assert_result(
+        entry.data["direct_execution_status"],
+        "direct_execution_blocked",
+        f"{scenario_name} must keep direct execution blocked",
+    )
+    assert_result(
+        hass.services.async_services().get(domain),
+        None,
+        f"{scenario_name} must not register services",
+    )
+
+
 async def async_update_safe_options(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -494,20 +589,8 @@ async def async_update_inactive_safe_options_without_reading_home(
         expected_disabled_by,
         "inactive safe options must begin with the expected user state",
     )
-    integration = await loader.async_get_integration(hass, domain)
-    adapters = (
-        await integration.async_get_platform("sensor"),
-        await integration.async_get_platform("diagnostics"),
-        await integration.async_get_platform("local_summary"),
-    )
-    original_collectors = tuple(
-        (adapter, adapter.collect_home_summary) for adapter in adapters
-    )
     reload_calls: list[str] = []
     original_async_reload = hass.config_entries.async_reload
-
-    def fail_if_home_is_read(*_: object, **__: object) -> object:
-        raise RuntimeError("inactive safe options must not read the home")
 
     async def async_recording_reload(entry_id: str) -> bool:
         """Record any unexpected attempt to restart inactive HASC."""
@@ -515,21 +598,18 @@ async def async_update_inactive_safe_options_without_reading_home(
         reload_calls.append(entry_id)
         return await original_async_reload(entry_id)
 
-    for adapter, _ in original_collectors:
-        adapter.collect_home_summary = fail_if_home_is_read
     hass.config_entries.async_reload = async_recording_reload
     try:
-        options_form = await hass.config_entries.options.async_init(entry.entry_id)
-        assert_result(options_form["type"], "form", "inactive options must show a form")
-        safe_options = await hass.config_entries.options.async_configure(
-            options_form["flow_id"],
-            {"mode": target_mode},
-        )
-        await hass.async_block_till_done()
+        async with async_block_home_summary_reads(hass, domain, "inactive safe options"):
+            options_form = await hass.config_entries.options.async_init(entry.entry_id)
+            assert_result(options_form["type"], "form", "inactive options must show a form")
+            safe_options = await hass.config_entries.options.async_configure(
+                options_form["flow_id"],
+                {"mode": target_mode},
+            )
+            await hass.async_block_till_done()
     finally:
         hass.config_entries.async_reload = original_async_reload
-        for adapter, original_collect_home_summary in original_collectors:
-            adapter.collect_home_summary = original_collect_home_summary
 
     assert_result(
         safe_options["type"],
@@ -1509,30 +1589,16 @@ async def async_save_unsafe_hasc_setting_without_reading_home(
     if (data is None) is (options is None):
         raise RuntimeError("the unsafe HASC update must change exactly one saved mapping")
 
-    integration = await loader.async_get_integration(hass, domain)
-    adapters = (
-        await integration.async_get_platform("sensor"),
-        await integration.async_get_platform("diagnostics"),
-        await integration.async_get_platform("local_summary"),
-    )
-    original_collectors = tuple(
-        (adapter, adapter.collect_home_summary) for adapter in adapters
-    )
-
-    def fail_if_home_is_read(*_: object, **__: object) -> object:
-        raise RuntimeError(f"{scenario_name} automatic closure must not read the home")
-
-    for adapter, _ in original_collectors:
-        adapter.collect_home_summary = fail_if_home_is_read
-    try:
+    async with async_block_home_summary_reads(
+        hass,
+        domain,
+        f"{scenario_name} automatic closure",
+    ):
         if data is not None:
             hass.config_entries.async_update_entry(entry, data=data)
         else:
             hass.config_entries.async_update_entry(entry, options=options)
         await hass.async_block_till_done()
-    finally:
-        for adapter, original_collect_home_summary in original_collectors:
-            adapter.collect_home_summary = original_collect_home_summary
 
 
 async def async_assert_unsafe_saved_update_closes_hasc(
@@ -2352,6 +2418,165 @@ async def async_assert_invalid_saved_options_lifecycle(
         )
     finally:
         await recovered_options_removal_hass.async_stop()
+
+    return removed_entry
+
+
+async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
+    config_directory: Path,
+    domain: str,
+    previous_removed_entries: tuple[RemovedHascEntry, ...],
+    reserved_entry: ReservedCollisionEntry,
+) -> RemovedHascEntry:
+    """Prove manual activation cannot bypass unsafe saved-mode protection."""
+
+    unsafe_hass = await async_start_empty_home_assistant(config_directory)
+    removed_entry: RemovedHascEntry | None = None
+    try:
+        assert_hasc_stays_removed_after_restart(
+            unsafe_hass,
+            domain,
+            previous_removed_entries,
+            reserved_entry,
+        )
+        unsafe_entry = await async_create_safe_entry(unsafe_hass, domain, "read-only")
+        unsafe_entry_entity_ids = frozenset(
+            entry.entity_id
+            for entry in entity_registry.async_entries_for_config_entry(
+                entity_registry.async_get(unsafe_hass),
+                unsafe_entry.entry_id,
+            )
+        )
+        assert_result(
+            len(unsafe_entry_entity_ids),
+            len(SUMMARY_SENSOR_KEYS),
+            "the unsafe-activation fixture must begin with nine count sensors",
+        )
+        unsafe_reader_token = await async_create_test_read_only_access_token(
+            unsafe_hass,
+            "HASC unsafe-activation test user",
+        )
+        await async_disable_safe_entry(unsafe_hass, unsafe_entry)
+        assert_entry_has_disabled_summary_sensors(
+            unsafe_hass,
+            domain,
+            unsafe_entry.entry_id,
+            unsafe_entry_entity_ids,
+        )
+        await async_assert_closed_diagnostics(
+            unsafe_hass,
+            domain,
+            unsafe_entry,
+            "user deactivation before unsafe activation",
+        )
+        await async_assert_local_summary_is_unavailable(
+            unsafe_hass,
+            domain,
+            unsafe_reader_token,
+            "user deactivation before unsafe activation",
+        )
+
+        safe_data = dict(unsafe_entry.data)
+        await async_save_unsafe_hasc_setting_without_reading_home(
+            unsafe_hass,
+            domain,
+            unsafe_entry,
+            "unsafe saved mode before user activation",
+            options=UNSAFE_PROXY_OPTIONS,
+        )
+        assert_result(
+            dict(unsafe_entry.data),
+            safe_data,
+            "unsafe options must not mutate the direct-execution safety data",
+        )
+        assert_result(
+            dict(unsafe_entry.options),
+            UNSAFE_PROXY_OPTIONS,
+            "the unsafe activation fixture must retain its damaged options",
+        )
+        assert_result(
+            unsafe_entry.disabled_by,
+            ConfigEntryDisabler.USER,
+            "saving unsafe options must keep HASC user-disabled",
+        )
+        assert_result(
+            unsafe_entry.state,
+            config_entries.ConfigEntryState.NOT_LOADED,
+            "saving unsafe options must keep disabled HASC not loaded",
+        )
+        assert_entry_has_disabled_summary_sensors(
+            unsafe_hass,
+            domain,
+            unsafe_entry.entry_id,
+            unsafe_entry_entity_ids,
+        )
+        await async_assert_closed_diagnostics(
+            unsafe_hass,
+            domain,
+            unsafe_entry,
+            "unsafe saved mode before user activation",
+        )
+        await async_assert_local_summary_is_unavailable(
+            unsafe_hass,
+            domain,
+            unsafe_reader_token,
+            "unsafe saved mode before user activation",
+        )
+
+        await async_enable_unsafe_entry_without_reading_home(
+            unsafe_hass,
+            domain,
+            unsafe_entry,
+            "user activation with unsafe saved mode",
+        )
+        assert_result(
+            dict(unsafe_entry.data),
+            safe_data,
+            "unsafe activation must preserve the direct-execution safety data",
+        )
+        assert_result(
+            dict(unsafe_entry.options),
+            UNSAFE_PROXY_OPTIONS,
+            "unsafe activation must leave manual repair possible",
+        )
+        await async_assert_unsafe_saved_update_closes_hasc(
+            unsafe_hass,
+            domain,
+            unsafe_entry,
+            unsafe_entry_entity_ids,
+            unsafe_reader_token,
+            "user activation with unsafe saved mode",
+        )
+        removed_entry = await async_remove_safe_entry(unsafe_hass, unsafe_entry.entry_id)
+        await async_assert_closed_diagnostics(
+            unsafe_hass,
+            domain,
+            unsafe_entry,
+            "removing unsafe user-activation fixture",
+        )
+        await async_assert_local_summary_is_unavailable(
+            unsafe_hass,
+            domain,
+            unsafe_reader_token,
+            "removing unsafe user-activation fixture",
+        )
+        assert_reserved_collision_entry_is_unchanged(unsafe_hass, reserved_entry)
+    finally:
+        await unsafe_hass.async_stop()
+
+    if removed_entry is None:
+        raise RuntimeError("the unsafe user-activation fixture must remove its HASC entry")
+
+    removal_hass = await async_start_empty_home_assistant(config_directory)
+    try:
+        assert_hasc_stays_removed_after_restart(
+            removal_hass,
+            domain,
+            (*previous_removed_entries, removed_entry),
+            reserved_entry,
+        )
+    finally:
+        await removal_hass.async_stop()
 
     return removed_entry
 
@@ -3184,6 +3409,14 @@ async def async_run_check() -> None:
                 reserved_entry,
                 UNSAFE_EXTRA_FIELD_OPTIONS,
                 "extra-field options",
+            )
+        )
+        removed_entries.append(
+            await async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
+                config_directory,
+                domain,
+                tuple(removed_entries),
+                reserved_entry,
             )
         )
         removed_entries.extend(

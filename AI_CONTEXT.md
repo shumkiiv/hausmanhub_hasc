@@ -148,6 +148,15 @@ Last updated: 2026-07-16.
   the newly saved `shadow` mode. Kimi found no issue; see the [disabled
   restart safe-options review
   note](LLM_WIKI/Manual/2026-07-16-kimi-disabled-restart-safe-options-review.md).
+- A separate disposable check now gives a user-disabled HASC setup a deliberately
+  unsafe saved `proxy` option and then attempts explicit user activation. Home
+  Assistant rejects the activation, leaves HASC closed with a setup error, and
+  keeps direct execution blocked. The broken option remains only for manual
+  repair; no home summary is read and no count values, diagnostics, or local
+  page become available. The check then removes the temporary setup and proves
+  it stays absent after an empty restart. Kimi found no issue; see the [unsafe
+  user-activation review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-user-activation-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the
