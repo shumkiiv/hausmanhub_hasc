@@ -1,6 +1,6 @@
 # HASC AI Context
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
 
 ## Project state
 
@@ -180,6 +180,11 @@ Last updated: 2026-07-14.
 - Kimi reviewed the GitHub local-quality workflow before publication and found
   no safety or boundary issues. See the [GitHub local-quality review
   note](LLM_WIKI/Manual/2026-07-14-kimi-github-local-quality-review.md).
+- Kimi reviewed the staged-release-version guard after a first independent
+  review identified an omitted file-type change. The guard and its test were
+  corrected; Kimi's final review found no remaining issues. See the
+  [staged-release-version review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-staged-release-version-review.md).
 
 ## Verification
 
@@ -201,8 +206,9 @@ and does not validate or expand HASC runtime authority.
 
 Before publishing, run `python3 tools/check_local_release.py` after staging
 the intended files. It runs the local tests, synthetic fixture checks, and the
-Git-file safety checks as one fixed list. It does not inspect a live home or
-grant any authority.
+Git-file safety checks as one fixed list. It also requires a higher integration
+version if a staged change touches HASC itself or `hacs.json`. It does not
+inspect a live home or grant any authority.
 
 The repository also runs that same fixed command in GitHub after a change to
 `main` or a proposed change. Its workflow has only `contents: read`, disables

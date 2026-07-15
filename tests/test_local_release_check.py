@@ -28,6 +28,7 @@ class LocalReleaseCheckTest(unittest.TestCase):
                 "common synthetic fixture",
                 "shadow synthetic fixture",
                 "diagnostics synthetic fixture",
+                "staged release version",
                 "published-file safety",
                 "staged-file safety",
             ),

@@ -50,6 +50,10 @@ only. After preparing a commit, run `python3 tools/check_local_release.py` for
 the one-command local check. See [static validation](docs/static-validation.md)
 for its safety boundary and the individual commands.
 
+If a change touches HASC itself or its HACS setup file, the same command also
+requires a higher integration version. This prevents an HACS-visible change
+from being published under an old version number.
+
 Before publishing, run the local [repository safety check](docs/repository-safety-check.md).
 It looks only for accidentally added credentials and runtime files; it does
 not connect to the home.

@@ -54,6 +54,10 @@ def local_checks(python_executable: str) -> tuple[Check, ...]:
                 "fixtures/diagnostics/valid_redacted.json",
             ),
         ),
+        (
+            "staged release version",
+            (python_executable, "tools/check_staged_release_version.py"),
+        ),
         ("published-file safety", (python_executable, "tools/check_repository_boundary.py")),
         (
             "staged-file safety",
