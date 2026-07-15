@@ -2544,6 +2544,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     reclose_after_recovery: bool = False,
     repair_after_repeat_closure: bool = False,
     restart_after_repeat_repair: bool = False,
+    reclose_after_repeat_repair_restart: bool = False,
 ) -> RemovedHascEntry:
     """Prove manual activation cannot bypass one unsafe saved HASC setting."""
 
@@ -2555,6 +2556,8 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         raise RuntimeError("repeat repair requires a completed repeat closure")
     if restart_after_repeat_repair and not repair_after_repeat_closure:
         raise RuntimeError("repeat repair restart requires a completed repeat repair")
+    if reclose_after_repeat_repair_restart and not restart_after_repeat_repair:
+        raise RuntimeError("restart repeat closure requires a completed repeat repair restart")
 
     unsafe_hass = await async_start_empty_home_assistant(config_directory)
     activation_hass: HomeAssistant | None = None
@@ -2807,6 +2810,38 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 f"HASC {scenario_name} repeat-repair restart removal test user",
             )
             expect_retained_local_summary_route = True
+        if reclose_after_repeat_repair_restart:
+            if activation_reader_token is None:
+                raise RuntimeError(
+                    "restarted HASC must keep a reader token before repeat closure"
+                )
+            await async_save_unsafe_hasc_setting_without_reading_home(
+                activation_hass,
+                domain,
+                activation_entry,
+                f"{scenario_name} after repeat-repair restart",
+                data=unsafe_data,
+                options=unsafe_options,
+            )
+            assert_result(
+                dict(activation_entry.data),
+                expected_data,
+                "restart repeat unsafe data must remain available for manual repair",
+            )
+            assert_result(
+                dict(activation_entry.options),
+                expected_options,
+                "restart repeat unsafe options must remain available for manual repair",
+            )
+            await async_assert_unsafe_saved_update_closes_hasc(
+                activation_hass,
+                domain,
+                activation_entry,
+                unsafe_entry_entity_ids,
+                activation_reader_token,
+                f"{scenario_name} after repeat-repair restart",
+            )
+            assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
         removed_entry = await async_remove_safe_entry(
             activation_hass,
             activation_entry.entry_id,
@@ -3729,6 +3764,7 @@ async def async_run_check() -> None:
                 reclose_after_recovery=True,
                 repair_after_repeat_closure=True,
                 restart_after_repeat_repair=True,
+                reclose_after_repeat_repair_restart=True,
             )
         )
         removed_entries.extend(

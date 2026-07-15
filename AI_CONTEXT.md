@@ -197,6 +197,12 @@ Last updated: 2026-07-16.
   Kimi found no issue; see the [unsafe direct-execution repeat-repair restart
   review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-repair-restart-review.md).
+- After that restart, another unsafe direct-execution marker still causes an
+  immediate closure before any home read. The restarted guard clears all nine
+  counts, diagnostics, and the local page while retaining the bad saved value
+  only for manual repair. Kimi found no issue; see the [unsafe direct-
+  execution repeat-repair restart-closure review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-repair-restart-closure-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the
