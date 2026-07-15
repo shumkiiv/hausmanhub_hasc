@@ -57,6 +57,11 @@ Last updated: 2026-07-15.
 - The local HASC adapter check also covers a failed unload. In that case it
   keeps the current safe display intact rather than partly clearing its values
   or local page while Home Assistant still has HASC loaded.
+- The disposable Core lifecycle separately unloads and starts one safe,
+  still-user-enabled HASC setup. In the gap, its saved setup and nine enabled
+  records remain but all count states and the guarded page fail closed; starting
+  the same setup restores only the same nine safe counts, diagnostics, and
+  GET-only page. This runs in a temporary empty configuration only.
 - Both HASC setup forms now have an isolated input-boundary check: even if a
   form receives invented extra fields beside a safe mode, it persists only the
   fixed approved data shape. This is local test coverage only and adds no
@@ -401,6 +406,11 @@ Last updated: 2026-07-15.
   than partly clearing state or the local page, with no new home access or
   control. See the [failed-unload review
   note](LLM_WIKI/Manual/2026-07-15-kimi-failed-unload-review.md).
+- Kimi reviewed the separate ordinary Core unload/setup check with no findings.
+  It confirmed that it keeps the user-enabled lifecycle distinct from user
+  deactivation, preserves the fixed safety boundary, and uses a temporary
+  empty Home Assistant only. See the [ordinary unload/setup review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-unload-setup-review.md).
 - Kimi reviewed the isolated extra-input boundary check for both HASC setup
   forms with no findings. It confirmed that the test preserves the fixed safe
   saved shape and adds no runtime, device, service, network, or home-data

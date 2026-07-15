@@ -99,6 +99,16 @@ its nine diagnostic count sensors and no service, and direct execution must
 still be blocked. This checks
 the safe persistence path for an HASC update without touching a real home.
 
+Before the user deactivation, the same empty test also temporarily stops one
+safe, still user-enabled HASC setup and starts that exact saved setup again.
+During the stop its nine sensor records must stay enabled and present, while
+their temporary count values and local summary page become unavailable without
+returning any counts. Starting the same setup again must restore only the same
+nine count sensors, the fixed safe diagnostics report, and the authenticated
+GET-only page. This is separate from user deactivation: it does not mark the
+saved setup or its sensor records as disabled, and it does not touch a real
+home.
+
 Before that first empty system is stopped, the check also uses Home Assistant's
 normal user deactivation control. The saved HASC setup remains, but all nine
 count sensors are marked disabled, their temporary values disappear, and the

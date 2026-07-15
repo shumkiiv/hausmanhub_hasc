@@ -454,6 +454,40 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index("await async_enable_safe_entry(hass, read_only_entry)"),
         )
 
+    def test_core_smoke_check_unloads_and_starts_hasc_without_user_deactivation(
+        self,
+    ) -> None:
+        """Ordinary unload must close values before the same entry starts again."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        for requirement in (
+            "async_unload_safe_entry",
+            "async_setup_safe_entry",
+            "assert_entry_has_unloaded_summary_sensors",
+            "hass.config_entries.async_unload(entry.entry_id)",
+            "hass.config_entries.async_setup(entry.entry_id)",
+            "ordinary unload must not user-deactivate HASC",
+            "an unloaded HASC summary sensor must remain enabled",
+            "an unloaded HASC summary sensor must not keep a state",
+            '"HASC ordinary unload",',
+            '"HASC ordinary setup",',
+        ):
+            self.assertIn(requirement, core_check_source)
+
+        unload_call = "await async_unload_safe_entry(hass, read_only_entry)"
+        setup_call = "await async_setup_safe_entry(hass, read_only_entry)"
+        disable_call = "await async_disable_safe_entry(hass, read_only_entry)"
+        self.assertLess(lifecycle_source.index(unload_call), lifecycle_source.index(setup_call))
+        self.assertLess(
+            lifecycle_source.index("assert_entry_has_unloaded_summary_sensors("),
+            lifecycle_source.index(setup_call),
+        )
+        self.assertLess(lifecycle_source.index(setup_call), lifecycle_source.index(disable_call))
+
     def test_core_smoke_check_removes_a_deactivated_hasc_setup(self) -> None:
         """Deleting a disabled HASC setup must still clear its own records."""
 

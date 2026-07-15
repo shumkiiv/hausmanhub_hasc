@@ -255,6 +255,51 @@ async def async_remove_safe_entry(
     return RemovedHascEntry(entry_id=entry_id, entity_ids=owned_entity_ids)
 
 
+async def async_unload_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Stop a safe entry without removing or user-deactivating its setup."""
+
+    unloaded = await hass.config_entries.async_unload(entry.entry_id)
+    assert_result(unloaded, True, "safe entry must unload successfully")
+    await hass.async_block_till_done()
+
+    retained_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    if retained_entry is None:
+        raise RuntimeError("ordinary unload must retain the saved HASC setup")
+    assert_result(
+        retained_entry.entry_id,
+        entry.entry_id,
+        "ordinary unload must retain the same HASC setup",
+    )
+    assert_result(
+        entry.disabled_by,
+        None,
+        "ordinary unload must not user-deactivate HASC",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.NOT_LOADED,
+        "ordinary unload must leave HASC not loaded",
+    )
+
+
+async def async_setup_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Start the same safe, user-enabled entry after an ordinary unload."""
+
+    started = await hass.config_entries.async_setup(entry.entry_id)
+    assert_result(started, True, "safe entry must start successfully")
+    await hass.async_block_till_done()
+    assert_result(
+        entry.disabled_by,
+        None,
+        "ordinary setup must keep HASC user-enabled",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.LOADED,
+        "ordinary setup must load HASC successfully",
+    )
+
+
 async def async_disable_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Use Home Assistant's normal user deactivation path in the empty check."""
 
@@ -536,6 +581,30 @@ def assert_entry_has_only_summary_sensors(
             raise RuntimeError("every HASC summary sensor must be a whole number") from exc
         if value < 0:
             raise RuntimeError("every HASC summary sensor must be non-negative")
+
+
+def assert_entry_has_unloaded_summary_sensors(
+    hass: HomeAssistant,
+    domain: str,
+    entry_id: str,
+    expected_entity_ids: frozenset[str] | None = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
+) -> None:
+    """Require ordinary unload to retain enabled records but clear values."""
+
+    entries = assert_summary_sensor_registry(
+        hass,
+        domain,
+        entry_id,
+        expected_entity_ids,
+    )
+    for entry in entries:
+        assert_result(
+            entry.disabled_by,
+            None,
+            "an unloaded HASC summary sensor must remain enabled",
+        )
+        if hass.states.get(entry.entity_id) is not None:
+            raise RuntimeError("an unloaded HASC summary sensor must not keep a state")
 
 
 def assert_entry_has_disabled_summary_sensors(
@@ -1550,6 +1619,59 @@ async def async_run_check() -> None:
                 domain,
                 read_only_entry.entry_id,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+
+            ordinary_unload_data = dict(read_only_entry.data)
+            ordinary_unload_options = dict(read_only_entry.options)
+            ordinary_unload_reader_token = await async_create_test_read_only_access_token(
+                hass,
+                "HASC temporary ordinary-unload test user",
+            )
+            await async_unload_safe_entry(hass, read_only_entry)
+            assert_result(
+                read_only_entry.data,
+                ordinary_unload_data,
+                "ordinary unload must not mutate safe entry data",
+            )
+            assert_result(
+                read_only_entry.options,
+                ordinary_unload_options,
+                "ordinary unload must not mutate safe entry options",
+            )
+            assert_entry_has_unloaded_summary_sensors(
+                hass,
+                domain,
+                read_only_entry.entry_id,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_local_summary_is_unavailable(
+                hass,
+                domain,
+                ordinary_unload_reader_token,
+                "HASC ordinary unload",
+            )
+            await async_setup_safe_entry(hass, read_only_entry)
+            assert_result(
+                read_only_entry.data,
+                ordinary_unload_data,
+                "ordinary setup must preserve safe entry data",
+            )
+            assert_result(
+                read_only_entry.options,
+                ordinary_unload_options,
+                "ordinary setup must preserve safe entry options",
+            )
+            assert_entry_has_only_summary_sensors(
+                hass,
+                domain,
+                read_only_entry.entry_id,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "shadow")
+            assert_local_summary_view(hass, domain)
+            await async_assert_authenticated_local_summary_http_access(
+                hass,
+                "HASC ordinary setup",
             )
 
             deactivation_reader_token = await async_create_test_read_only_access_token(
