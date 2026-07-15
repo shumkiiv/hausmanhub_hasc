@@ -2542,6 +2542,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     restart_before_activation: bool = False,
     repair_after_rejected_activation: bool = False,
     reclose_after_recovery: bool = False,
+    repair_after_repeat_closure: bool = False,
 ) -> RemovedHascEntry:
     """Prove manual activation cannot bypass one unsafe saved HASC setting."""
 
@@ -2549,6 +2550,8 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         raise RuntimeError("unsafe activation must change exactly one saved mapping")
     if reclose_after_recovery and not repair_after_rejected_activation:
         raise RuntimeError("repeat closure requires a completed safe recovery")
+    if repair_after_repeat_closure and not reclose_after_recovery:
+        raise RuntimeError("repeat repair requires a completed repeat closure")
 
     unsafe_hass = await async_start_empty_home_assistant(config_directory)
     activation_hass: HomeAssistant | None = None
@@ -2766,6 +2769,21 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 activation_reader_token,
                 f"{scenario_name} after recovery",
             )
+            assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
+        if repair_after_repeat_closure:
+            activation_reader_token = (
+                await async_repair_unsafe_entry_after_rejected_activation(
+                    activation_hass,
+                    domain,
+                    activation_entry,
+                    safe_data,
+                    safe_options,
+                    unsafe_entry_entity_ids,
+                    f"{scenario_name} after repeat closure",
+                    restore_main_data=unsafe_data is not None,
+                )
+            )
+            expect_retained_local_summary_route = True
             assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
         removed_entry = await async_remove_safe_entry(
             activation_hass,
@@ -3687,6 +3705,7 @@ async def async_run_check() -> None:
                 restart_before_activation=True,
                 repair_after_rejected_activation=True,
                 reclose_after_recovery=True,
+                repair_after_repeat_closure=True,
             )
         )
         removed_entries.extend(

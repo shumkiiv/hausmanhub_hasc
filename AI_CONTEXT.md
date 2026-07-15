@@ -185,6 +185,12 @@ Last updated: 2026-07-16.
   repair. Kimi found no issue; see the [unsafe direct-execution repeat-closure
   review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-closure-review.md).
+- A second exact safe manual repair after that repeat closure also remains
+  closed until one separate explicit reload. It cannot read the home or
+  restart HASC while the saved value is being corrected; the explicit reload
+  restores only the same nine counts and safe display. Kimi found no issue;
+  see the [unsafe direct-execution repeat-repair review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-repair-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the
