@@ -99,6 +99,14 @@ its nine diagnostic count sensors and no service, and direct execution must
 still be blocked. This checks
 the safe persistence path for an HASC update without touching a real home.
 
+Before that first empty system is stopped, the check also uses Home Assistant's
+normal user deactivation control. The saved HASC setup remains, but all nine
+count sensors are marked disabled and the local summary page becomes
+unavailable without returning counts. Turning HASC back on must restore the
+same nine enabled count sensors, the fixed safe diagnostics report, and the
+authenticated GET-only page. It must not create a device, service, or any
+control of the home.
+
 The empty check also reserves one HASC-like internal sensor name before a new
 safe setup. HASC must still create all nine count sensors under distinct,
 HASC-prefixed names. This protects a new installation from being blocked by a

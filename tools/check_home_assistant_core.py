@@ -28,7 +28,7 @@ from homeassistant import config_entries
 from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_READ_ONLY
 from homeassistant import loader
 from homeassistant.bootstrap import async_from_config_dict
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryDisabler
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import InvalidData
 from homeassistant.helpers import device_registry, entity_registry
@@ -233,6 +233,45 @@ async def async_remove_safe_entry(
     return RemovedHascEntry(entry_id=entry_id, entity_ids=owned_entity_ids)
 
 
+async def async_disable_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Use Home Assistant's normal user deactivation path in the empty check."""
+
+    disabled = await hass.config_entries.async_set_disabled_by(
+        entry.entry_id,
+        ConfigEntryDisabler.USER,
+    )
+    assert_result(disabled, True, "safe entry must deactivate successfully")
+    await hass.async_block_till_done()
+    assert_result(
+        entry.disabled_by,
+        ConfigEntryDisabler.USER,
+        "deactivated HASC must record user deactivation",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.NOT_LOADED,
+        "deactivated HASC must no longer stay loaded",
+    )
+
+
+async def async_enable_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Restore an entry through Home Assistant's normal user activation path."""
+
+    enabled = await hass.config_entries.async_set_disabled_by(entry.entry_id, None)
+    assert_result(enabled, True, "safe entry must activate successfully")
+    await hass.async_block_till_done()
+    assert_result(
+        entry.disabled_by,
+        None,
+        "reactivated HASC must clear user deactivation",
+    )
+    assert_result(
+        entry.state,
+        config_entries.ConfigEntryState.LOADED,
+        "reactivated HASC must load successfully",
+    )
+
+
 async def async_update_safe_options(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -386,13 +425,13 @@ def assert_safe_home_summary(home_summary: Any) -> None:
         raise RuntimeError("home summary availability counts must equal entity count")
 
 
-def assert_entry_has_only_summary_sensors(
+def assert_summary_sensor_registry(
     hass: HomeAssistant,
     domain: str,
     entry_id: str,
     expected_entity_ids: frozenset[str] | None = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
-) -> None:
-    """Allow only nine approved count sensors and no service.
+) -> list[Any]:
+    """Require only the nine approved HASC sensor registry records.
 
     A fresh installation must use the exact protected names. A collision check
     may instead pass ``None`` to require the protected name prefix only.
@@ -443,6 +482,29 @@ def assert_entry_has_only_summary_sensors(
             None,
             "a HASC summary sensor must not be attached to a device",
         )
+    return entries
+
+
+def assert_entry_has_only_summary_sensors(
+    hass: HomeAssistant,
+    domain: str,
+    entry_id: str,
+    expected_entity_ids: frozenset[str] | None = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
+) -> None:
+    """Require nine enabled count sensors with current non-negative states."""
+
+    entries = assert_summary_sensor_registry(
+        hass,
+        domain,
+        entry_id,
+        expected_entity_ids,
+    )
+    for entry in entries:
+        assert_result(
+            entry.disabled_by,
+            None,
+            "an active HASC summary sensor must be enabled",
+        )
         state = hass.states.get(entry.entity_id)
         if state is None:
             raise RuntimeError("every HASC summary sensor must have a state")
@@ -452,6 +514,28 @@ def assert_entry_has_only_summary_sensors(
             raise RuntimeError("every HASC summary sensor must be a whole number") from exc
         if value < 0:
             raise RuntimeError("every HASC summary sensor must be non-negative")
+
+
+def assert_entry_has_disabled_summary_sensors(
+    hass: HomeAssistant,
+    domain: str,
+    entry_id: str,
+    expected_entity_ids: frozenset[str] | None = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
+) -> None:
+    """Require deactivation to mark all nine count sensors as disabled."""
+
+    entries = assert_summary_sensor_registry(
+        hass,
+        domain,
+        entry_id,
+        expected_entity_ids,
+    )
+    for entry in entries:
+        assert_result(
+            entry.disabled_by,
+            entity_registry.RegistryEntryDisabler.CONFIG_ENTRY,
+            "a deactivated HASC summary sensor must be disabled by its setup",
+        )
 
 
 def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> ReservedCollisionEntry:
@@ -707,12 +791,13 @@ async def async_assert_authenticated_local_summary_http_access(
         await client.close()
 
 
-async def async_assert_local_summary_is_unavailable_after_removal(
+async def async_assert_local_summary_is_unavailable(
     hass: HomeAssistant,
     domain: str,
     reader_token: str,
+    unavailable_after: str,
 ) -> None:
-    """Require the retained GET route to fail closed after HASC removal."""
+    """Require the retained GET route to fail closed without an active entry."""
 
     runtime = hass.data.get(domain)
     if not isinstance(runtime, dict):
@@ -720,7 +805,7 @@ async def async_assert_local_summary_is_unavailable_after_removal(
     assert_result(
         runtime.get(LOCAL_SUMMARY_ACTIVE_ENTRY),
         None,
-        "HASC removal must clear the active local summary entry",
+        f"{unavailable_after} must clear the active local summary entry",
     )
 
     server = TestServer(hass.http.app, host="127.0.0.1")
@@ -734,7 +819,7 @@ async def async_assert_local_summary_is_unavailable_after_removal(
         assert_result(
             unavailable.status,
             HTTPStatus.SERVICE_UNAVAILABLE,
-            "local summary must become unavailable after HASC removal",
+            f"local summary must become unavailable after {unavailable_after}",
         )
         payload = await unavailable.json()
         if not isinstance(payload, dict):
@@ -845,6 +930,37 @@ async def async_run_check() -> None:
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
 
+            deactivation_reader_token = await async_create_test_read_only_access_token(
+                hass,
+                "HASC temporary deactivation test user",
+            )
+            await async_disable_safe_entry(hass, read_only_entry)
+            assert_entry_has_disabled_summary_sensors(
+                hass,
+                domain,
+                read_only_entry.entry_id,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_local_summary_is_unavailable(
+                hass,
+                domain,
+                deactivation_reader_token,
+                "HASC deactivation",
+            )
+            await async_enable_safe_entry(hass, read_only_entry)
+            assert_entry_has_only_summary_sensors(
+                hass,
+                domain,
+                read_only_entry.entry_id,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_safe_diagnostics(hass, domain, read_only_entry, "shadow")
+            assert_local_summary_view(hass, domain)
+            await async_assert_authenticated_local_summary_http_access(
+                hass,
+                "HASC temporary reactivation",
+            )
+
             entry_id = read_only_entry.entry_id
             expected_data = dict(read_only_entry.data)
             expected_options = dict(read_only_entry.options)
@@ -899,10 +1015,11 @@ async def async_run_check() -> None:
             removed_entries.append(
                 await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
             )
-            await async_assert_local_summary_is_unavailable_after_removal(
+            await async_assert_local_summary_is_unavailable(
                 restarted_hass,
                 domain,
                 removal_reader_token,
+                "HASC removal",
             )
 
             reserved_entry = reserve_summary_sensor_name_for_test(restarted_hass)
@@ -934,10 +1051,11 @@ async def async_run_check() -> None:
             removed_entries.append(
                 await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
             )
-            await async_assert_local_summary_is_unavailable_after_removal(
+            await async_assert_local_summary_is_unavailable(
                 restarted_hass,
                 domain,
                 removal_reader_token,
+                "HASC removal",
             )
             assert_reserved_collision_entry_is_unchanged(restarted_hass, reserved_entry)
 
@@ -961,10 +1079,11 @@ async def async_run_check() -> None:
             removed_entries.append(
                 await async_remove_safe_entry(restarted_hass, reinstalled_entry.entry_id)
             )
-            await async_assert_local_summary_is_unavailable_after_removal(
+            await async_assert_local_summary_is_unavailable(
                 restarted_hass,
                 domain,
                 removal_reader_token,
+                "HASC removal",
             )
             assert_reserved_collision_entry_is_unchanged(restarted_hass, reserved_entry)
         finally:
@@ -1022,10 +1141,11 @@ async def async_run_check() -> None:
             removed_entries.append(
                 await async_remove_safe_entry(post_removal_hass, fresh_entry.entry_id)
             )
-            await async_assert_local_summary_is_unavailable_after_removal(
+            await async_assert_local_summary_is_unavailable(
                 post_removal_hass,
                 domain,
                 fresh_removal_reader_token,
+                "HASC removal",
             )
             assert_reserved_collision_entry_is_unchanged(
                 post_removal_hass,

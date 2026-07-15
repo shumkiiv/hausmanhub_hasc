@@ -386,22 +386,46 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
         self.assertIn(
-            "async_assert_local_summary_is_unavailable_after_removal",
+            "async_assert_local_summary_is_unavailable",
             core_check_source,
         )
         self.assertIn(
-            "HASC removal must clear the active local summary entry",
+            '"HASC removal",',
             core_check_source,
         )
         self.assertIn(
-            "local summary must become unavailable after HASC removal",
+            "local summary must become unavailable after {unavailable_after}",
             core_check_source,
         )
         self.assertGreaterEqual(
             core_check_source.count(
-                "await async_assert_local_summary_is_unavailable_after_removal("
+                "await async_assert_local_summary_is_unavailable("
             ),
             4,
+        )
+
+    def test_core_smoke_check_deactivates_hasc_without_leaving_counts_available(
+        self,
+    ) -> None:
+        """The normal deactivation control must close and then safely restore HASC."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        self.assertIn("async_disable_safe_entry", core_check_source)
+        self.assertIn("ConfigEntryDisabler.USER", core_check_source)
+        self.assertIn("async_enable_safe_entry", core_check_source)
+        self.assertIn("assert_entry_has_disabled_summary_sensors", core_check_source)
+        self.assertIn('"HASC deactivation",', lifecycle_source)
+        self.assertIn(
+            "a deactivated HASC summary sensor must be disabled by its setup",
+            core_check_source,
+        )
+        self.assertLess(
+            lifecycle_source.index("await async_disable_safe_entry(hass, read_only_entry)"),
+            lifecycle_source.index("await async_enable_safe_entry(hass, read_only_entry)"),
         )
 
     def test_core_smoke_check_removes_state_values_after_removal(self) -> None:

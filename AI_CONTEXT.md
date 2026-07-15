@@ -49,6 +49,13 @@ Last updated: 2026-07-15.
   setup is removed too, its route immediately fails closed, and a fourth empty
   Home Assistant instance must again contain no HASC data while preserving the
   external record.
+- Before its first temporary restart, the same isolated lifecycle check also
+  uses Home Assistant's ordinary user deactivation and reactivation path. While
+  deactivated, the saved HASC setup is not loaded, its nine registry entries
+  are marked disabled by that setup, and the guarded local page returns only an
+  unavailable response with no count keys. Reactivation must restore the same
+  nine enabled count sensors, safe diagnostics, and authenticated GET-only
+  page, still with no device, service, proxy, or execution capability.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
@@ -279,6 +286,11 @@ Last updated: 2026-07-15.
   count data, and a fourth empty Home Assistant instance remains HASC-free
   while the external record survives. See the [closed-cycle review
   note](LLM_WIKI/Manual/2026-07-15-kimi-closed-fresh-reinstall-cycle-review.md).
+- Kimi reviewed the ordinary deactivation/reactivation lifecycle check with no
+  findings. It confirmed that deactivation marks only HASC's nine temporary
+  count entries disabled and closes the guarded page, while reactivation
+  restores only the same safe observation surface. See the [deactivation
+  review note](LLM_WIKI/Manual/2026-07-15-kimi-deactivation-reactivation-review.md).
 - The old private-first skeleton decision is now clearly marked historical and
   points to the current public manual-HACS decision. Kimi first asked for a
   less brittle document guard; after that correction, its final review found no
@@ -320,6 +332,14 @@ record, and the guarded authenticated local route.
 That fresh setup is then removed, its route must immediately fail closed
 without count data, and a fourth empty Home Assistant instance must contain no
 HASC data while the external record remains unchanged.
+
+Before its first restart, the check also deactivates the saved safe setup
+through Home Assistant's normal user path. The setup must become unloaded, its
+nine registry entries must be marked disabled by that setup, and the guarded
+local route must return only an unavailable response without count keys. After
+reactivation, it must restore the same nine enabled count sensors, safe
+diagnostics, and the authenticated GET-only route without any device, service,
+proxy, or execution capability.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on
