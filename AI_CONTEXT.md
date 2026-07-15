@@ -77,6 +77,11 @@ Last updated: 2026-07-15.
   on Home Assistant's main loop, and the local test fake rejects an unmarked
   startup callback. It does not alter devices, services, other entities,
   Climate, or Automation.
+- The same disposable Core lifecycle now checks three deliberately invalid
+  main saved settings separately: an unsafe mode, a false unblocked-execution
+  marker, and an otherwise safe main setting with one extra synthetic field.
+  Each must close through reload and restart, recover only after the exact safe
+  data is restored, and keep the unrelated temporary record unchanged.
 - The same disposable lifecycle now corrects only its own deliberately bad
   saved data back to the exact original safe data, then starts one more empty
   Home Assistant while the corrected HASC setup remains installed. That restart
@@ -350,6 +355,11 @@ Last updated: 2026-07-15.
   were corrected, with a local test that rejects an unmarked callback. The
   final focused Kimi review found no issues; see the [invalid-record cleanup
   review note](LLM_WIKI/Manual/2026-07-15-kimi-invalid-record-cleanup-review.md).
+- Kimi reviewed the isolated lifecycle for an extra saved main-data field with
+  no findings. It confirmed the third deliberately bad main setting closes
+  through reload and restart, restores only the same nine counts after exact
+  correction, and never touches the external temporary record. See the
+  [extra-main-data review note](LLM_WIKI/Manual/2026-07-15-kimi-extra-saved-main-data-review.md).
 - Kimi reviewed recovery after a corrected temporary saved setting with no
   findings. It confirmed the additional persistence restart, exact same
   nine-count sensor names, fixed diagnostics, GET-only local page, collision

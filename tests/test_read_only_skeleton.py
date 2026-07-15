@@ -541,13 +541,15 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("async_assert_invalid_saved_data_lifecycle", core_check_source)
         self.assertIn("UNSAFE_PROXY_DATA", core_check_source)
         self.assertIn("UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA", core_check_source)
+        self.assertIn("UNSAFE_EXTRA_FIELD_DATA", core_check_source)
         self.assertIn('"direct_execution_status": "allowed",', core_check_source)
         self.assertEqual(
-            2,
+            3,
             lifecycle_source.count("async_assert_invalid_saved_data_lifecycle("),
         )
         self.assertIn('"invalid-mode data",', lifecycle_source)
         self.assertIn('"unblocked-execution data",', lifecycle_source)
+        self.assertIn('"extra-field data",', lifecycle_source)
         self.assertIn(
             "an unsafe saved HASC data entry must reject reload",
             core_check_source,
@@ -557,6 +559,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertLess(
             lifecycle_source.index("UNSAFE_PROXY_DATA"),
             lifecycle_source.index("UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA"),
+        )
+        self.assertLess(
+            lifecycle_source.index("UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA"),
+            lifecycle_source.index("UNSAFE_EXTRA_FIELD_DATA"),
         )
         self.assertLess(
             core_check_source.index("invalid_data_hass = await async_start_empty_home_assistant"),
