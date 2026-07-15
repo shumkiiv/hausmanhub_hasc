@@ -26,7 +26,10 @@ Last updated: 2026-07-15.
   configurations only; no device, Node-RED, Home Assistant service, or live
   API work was performed. The smoke check also loads the installed diagnostics
   adapter and verifies its fixed redacted report after each approved mode
-  change.
+  change. It also reserves one HASC-like sensor name only in that temporary
+  configuration, then proves that a new HASC setup keeps all nine count
+  sensors, does not overwrite the occupied name, and leaves the other eight
+  protected names unchanged.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
@@ -209,6 +212,11 @@ Last updated: 2026-07-15.
   first review suggested an explicit legacy-update check; it was added. The
   final review found no blocking or non-blocking issue. See the
   [v0.3.1 review note](LLM_WIKI/Manual/2026-07-15-kimi-v0-3-1-review.md).
+- Kimi reviewed the isolated occupied-name check twice. The first pass noted
+  that the test should not depend on Home Assistant's exact suffix choice;
+  the check now requires only a different protected HASC name and exact names
+  for the other eight sensors. The final review found no issues. See the
+  [occupied-name review note](LLM_WIKI/Manual/2026-07-15-kimi-occupied-name-check-review.md).
 
 ## Verification
 
@@ -221,7 +229,10 @@ count sensors, and guarded authenticated loopback route on Core 2026.6.4 and
 2026.7.0 using disposable configurations only. It also now starts from a
 temporary v0.3.0-style registry, replaces only the temporary HASC copy, and
 requires the old names to survive while a new entry receives the protected
-v0.3.1 names. It proves neither live-home behaviour nor execution authority.
+v0.3.1 names. Before that new entry, the check reserves one protected-looking
+name only in the disposable registry and requires the occupied name to remain
+external while all nine HASC sensors still appear. It proves neither live-home
+behaviour nor execution authority.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on

@@ -48,6 +48,8 @@ SUMMARY_SENSOR_KEYS = (
 PROTECTED_SUMMARY_SENSOR_ENTITY_IDS = frozenset(
     f"sensor.hausman_hub_hasc_{key}" for key in SUMMARY_SENSOR_KEYS
 )
+RESERVED_SUMMARY_SENSOR_ENTITY_ID = "sensor.hausman_hub_hasc_areas_count"
+EXTERNAL_COLLISION_PLATFORM = "homeassistant"
 # These are the generic names Home Assistant produced for version 0.3.0.
 # They are fixed here only to prove that an existing registry keeps them on
 # update; no live Home Assistant names are read or stored by this check.
@@ -296,9 +298,13 @@ def assert_entry_has_only_summary_sensors(
     hass: HomeAssistant,
     domain: str,
     entry_id: str,
-    expected_entity_ids: frozenset[str] = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
+    expected_entity_ids: frozenset[str] | None = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
 ) -> None:
-    """Allow only the nine approved diagnostic count sensors and no service."""
+    """Allow only nine approved count sensors and no service.
+
+    A fresh installation must use the exact protected names. A collision check
+    may instead pass ``None`` to require the protected name prefix only.
+    """
 
     assert_result(
         hass.services.async_services().get(domain),
@@ -310,15 +316,27 @@ def assert_entry_has_only_summary_sensors(
         entry_id,
     )
     assert_result(
+        len(entries),
+        len(SUMMARY_SENSOR_KEYS),
+        "the integration must create exactly nine summary sensors",
+    )
+    assert_result(
         {entry.unique_id for entry in entries},
         {f"{entry_id}_{key}" for key in SUMMARY_SENSOR_KEYS},
         "the integration must create exactly the approved summary sensors",
     )
-    assert_result(
-        {entry.entity_id for entry in entries},
-        expected_entity_ids,
-        "HASC display entities must keep their expected safe names",
-    )
+    actual_entity_ids = {entry.entity_id for entry in entries}
+    if expected_entity_ids is not None:
+        assert_result(
+            actual_entity_ids,
+            expected_entity_ids,
+            "HASC display entities must keep their expected safe names",
+        )
+    elif any(
+        not entity_id.startswith("sensor.hausman_hub_hasc_")
+        for entity_id in actual_entity_ids
+    ):
+        raise RuntimeError("new HASC display entities must keep the protected prefix")
     for entry in entries:
         state = hass.states.get(entry.entity_id)
         if state is None:
@@ -329,6 +347,61 @@ def assert_entry_has_only_summary_sensors(
             raise RuntimeError("every HASC summary sensor must be a whole number") from exc
         if value < 0:
             raise RuntimeError("every HASC summary sensor must be non-negative")
+
+
+def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> str:
+    """Reserve one HASC-like name only inside the disposable Core check."""
+
+    reserved_entry = entity_registry.async_get(hass).async_get_or_create(
+        "sensor",
+        EXTERNAL_COLLISION_PLATFORM,
+        "reserved_summary_sensor_name",
+        suggested_object_id="hausman_hub_hasc_areas_count",
+    )
+    assert_result(
+        reserved_entry.entity_id,
+        RESERVED_SUMMARY_SENSOR_ENTITY_ID,
+        "the disposable collision fixture must reserve the base HASC-like name",
+    )
+    assert_result(
+        reserved_entry.platform,
+        EXTERNAL_COLLISION_PLATFORM,
+        "the disposable collision fixture must stay outside HASC",
+    )
+    assert_result(
+        reserved_entry.config_entry_id,
+        None,
+        "the disposable collision fixture must not belong to a HASC setup",
+    )
+    return reserved_entry.entity_id
+
+
+def assert_reserved_name_does_not_block_hasc(
+    hass: HomeAssistant,
+    entry_id: str,
+    reserved_entity_id: str,
+) -> None:
+    """Require HASC to keep all nine sensors when a similar name is occupied."""
+
+    entries = entity_registry.async_entries_for_config_entry(
+        entity_registry.async_get(hass),
+        entry_id,
+    )
+    entity_id_by_unique_id = {entry.unique_id: entry.entity_id for entry in entries}
+    collision_sensor_id = entity_id_by_unique_id[f"{entry_id}_areas_count"]
+    if collision_sensor_id == reserved_entity_id:
+        raise RuntimeError("HASC must not reuse an occupied summary sensor name")
+    if not collision_sensor_id.startswith("sensor.hausman_hub_hasc_"):
+        raise RuntimeError("HASC must keep its protected name prefix after a collision")
+    assert_result(
+        {
+            entity_id
+            for unique_id, entity_id in entity_id_by_unique_id.items()
+            if unique_id != f"{entry_id}_areas_count"
+        },
+        PROTECTED_SUMMARY_SENSOR_ENTITY_IDS - {RESERVED_SUMMARY_SENSOR_ENTITY_ID},
+        "only the occupied HASC-like name may change in the disposable collision check",
+    )
 
 
 def assert_local_summary_view(hass: HomeAssistant, domain: str) -> None:
@@ -582,6 +655,7 @@ async def async_run_check() -> None:
             )
             await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
 
+            reserved_entity_id = reserve_summary_sensor_name_for_test(restarted_hass)
             shadow_entry = await async_create_safe_entry(restarted_hass, domain, "shadow")
             await async_update_safe_options(restarted_hass, shadow_entry, "read-only")
             assert_result(
@@ -600,6 +674,12 @@ async def async_run_check() -> None:
                 restarted_hass,
                 domain,
                 shadow_entry.entry_id,
+                expected_entity_ids=None,
+            )
+            assert_reserved_name_does_not_block_hasc(
+                restarted_hass,
+                shadow_entry.entry_id,
+                reserved_entity_id,
             )
             await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
         finally:

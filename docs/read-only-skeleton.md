@@ -92,6 +92,11 @@ its nine diagnostic count sensors and no service, and direct execution must
 still be blocked. This checks
 the safe persistence path for an HASC update without touching a real home.
 
+The empty check also reserves one HASC-like internal sensor name before a new
+safe setup. HASC must still create all nine count sensors under distinct,
+HASC-prefixed names. This protects a new installation from being blocked by a
+name that was already in use, without reading a real home.
+
 For a manual check of an installed copy, see the Russian
 [safe-check guide](home-assistant-safe-check.md). It asks only for Home
 Assistant screens and explicitly excludes diagnostics archives and home data.
