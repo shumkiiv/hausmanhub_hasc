@@ -30,14 +30,14 @@ Last updated: 2026-07-15.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
-- Version 0.3.0 retains one explicitly approved local read-only observation:
+- Version 0.3.1 retains one explicitly approved local read-only observation:
   `home_summary` in diagnostics. It contains exactly nine aggregate counts:
   areas, devices, entities, sensors, and available/unavailable/unknown/not
   reported/disabled entities. Disabled entries are counted separately before
   the adapter reads a state; `not_reported` therefore means an enabled entry
   has no current state. The adapter reduces each permitted local fact
   immediately to a category; it exports no name, identifier, reading, history,
-  address, secret, or raw state. Version 0.3.0 shows the same fixed payload as
+  address, secret, or raw state. Version 0.3.1 shows the same fixed payload as
   exactly nine HASC diagnostic number sensors. They share one redacted local
   snapshot, exclude HASC's own sensors from the house totals, create no HASC
   device or service, and do not call Home Assistant services.
@@ -91,11 +91,17 @@ Last updated: 2026-07-15.
   diagnostic number sensors, not devices, controls, new home data, proxy, or
   execution. The decision is recorded in
   [the summary-display decision](docs/read-only-home-summary-display-decision.md).
-- Version `0.3.0` has a public GitHub release at
-  https://github.com/shumkiiv/hausmanhub_hasc/releases/tag/v0.3.0. It adds only
-  the approved nine diagnostic count sensors. The owner previously confirmed
-  the v0.2.0 HACS update and Home Assistant restart on 2026-07-14; that is not
-  an independent live-home verification by Codex.
+- Version `0.3.1` has a public GitHub release at
+  https://github.com/shumkiiv/hausmanhub_hasc/releases/tag/v0.3.1. It keeps the
+  approved nine diagnostic count sensors only. New installations use a HASC
+  prefix for their internal names; an existing Home Assistant registry keeps
+  the same names through its unchanged permanent keys.
+- On 2026-07-15, after the owner updated and restarted Home Assistant, a direct
+  local Codex check used only GET requests and HTTP status codes. It confirmed
+  that Home Assistant responded, HASC's guarded read-only path was active, and
+  all nine approved HASC count sensors were present. No count value, raw home
+  payload, name, identifier, credential, or other home data was printed or
+  stored.
 - A local repository safety check now scans Git-tracked files or exactly the
   staged files before publication. It reads file blobs only from Git's index,
   so it never follows a working-tree symbolic link outside the repository. It
@@ -199,6 +205,10 @@ Last updated: 2026-07-15.
   the fourth is the intended no-change refresh behavior. No capability or data
   boundary was expanded. See the [nine-count display review
   note](LLM_WIKI/Manual/2026-07-15-kimi-nine-count-display-review.md).
+- Kimi reviewed the v0.3.1 protected-name and upgrade-preservation change. The
+  first review suggested an explicit legacy-update check; it was added. The
+  final review found no blocking or non-blocking issue. See the
+  [v0.3.1 review note](LLM_WIKI/Manual/2026-07-15-kimi-v0-3-1-review.md).
 
 ## Verification
 
@@ -208,10 +218,10 @@ diagnostics boundaries; it does not prove shadow parity or grant authority.
 The isolated Core lifecycle check is documented in `docs/read-only-skeleton.md`;
 on 2026-07-15 it passed with the aggregate summary, exactly nine diagnostic
 count sensors, and guarded authenticated loopback route on Core 2026.6.4 and
-2026.7.0 using disposable configurations only. It also passed its safe-update
-restart check on both versions: it keeps the temporary configuration, replaces
-only the temporary HASC copy, and then requires the approved settings to
-survive. It proves neither live-home behaviour nor execution authority.
+2026.7.0 using disposable configurations only. It also now starts from a
+temporary v0.3.0-style registry, replaces only the temporary HASC copy, and
+requires the old names to survive while a new entry receives the protected
+v0.3.1 names. It proves neither live-home behaviour nor execution authority.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on
