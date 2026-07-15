@@ -351,6 +351,18 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn('"single_instance_allowed"', core_check_source)
         self.assertIn("the integration must retain exactly one setup", core_check_source)
 
+    def test_core_smoke_check_keeps_an_external_collision_entry_after_removal(self) -> None:
+        """HASC cleanup must leave an unrelated similar name untouched."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("ReservedCollisionEntry", core_check_source)
+        self.assertIn("assert_reserved_collision_entry_is_unchanged", core_check_source)
+        self.assertIn("HASC removal must keep the external collision fixture", core_check_source)
+        self.assertIn("HASC removal must not change the external collision fixture", core_check_source)
+
     def test_home_summary_rejects_impossible_totals(self) -> None:
         """Bad aggregate data cannot reach diagnostics silently."""
 

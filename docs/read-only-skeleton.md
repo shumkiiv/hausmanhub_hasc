@@ -102,7 +102,9 @@ the safe persistence path for an HASC update without touching a real home.
 The empty check also reserves one HASC-like internal sensor name before a new
 safe setup. HASC must still create all nine count sensors under distinct,
 HASC-prefixed names. This protects a new installation from being blocked by a
-name that was already in use, without reading a real home.
+name that was already in use, without reading a real home. After HASC is
+removed, that same temporary external record must still exist unchanged. This
+proves that cleanup removes only HASC's own records.
 
 For a manual check of an installed copy, see the Russian
 [safe-check guide](home-assistant-safe-check.md). It asks only for Home

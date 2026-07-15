@@ -13,6 +13,7 @@ and no other HASC entity or service.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import importlib
 import json
 from pathlib import Path
@@ -66,6 +67,18 @@ LEGACY_SUMMARY_SENSOR_ENTITY_IDS = frozenset(
         "sensor.unavailable_entities",
     }
 )
+
+
+@dataclass(frozen=True)
+class ReservedCollisionEntry:
+    """Remember the disposable external entry that HASC must never change."""
+
+    registry_id: str
+    entity_id: str
+    unique_id: str
+    platform: str
+    config_entry_id: str | None
+    device_id: str | None
 
 
 def load_integration_domain() -> str:
@@ -416,7 +429,7 @@ def assert_entry_has_only_summary_sensors(
             raise RuntimeError("every HASC summary sensor must be non-negative")
 
 
-def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> str:
+def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> ReservedCollisionEntry:
     """Reserve one HASC-like name only inside the disposable Core check."""
 
     reserved_entry = entity_registry.async_get(hass).async_get_or_create(
@@ -440,13 +453,25 @@ def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> str:
         None,
         "the disposable collision fixture must not belong to a HASC setup",
     )
-    return reserved_entry.entity_id
+    assert_result(
+        reserved_entry.device_id,
+        None,
+        "the disposable collision fixture must not belong to a device",
+    )
+    return ReservedCollisionEntry(
+        registry_id=reserved_entry.id,
+        entity_id=reserved_entry.entity_id,
+        unique_id=reserved_entry.unique_id,
+        platform=reserved_entry.platform,
+        config_entry_id=reserved_entry.config_entry_id,
+        device_id=reserved_entry.device_id,
+    )
 
 
 def assert_reserved_name_does_not_block_hasc(
     hass: HomeAssistant,
     entry_id: str,
-    reserved_entity_id: str,
+    reserved_entry: ReservedCollisionEntry,
 ) -> None:
     """Require HASC to keep all nine sensors when a similar name is occupied."""
 
@@ -456,7 +481,7 @@ def assert_reserved_name_does_not_block_hasc(
     )
     entity_id_by_unique_id = {entry.unique_id: entry.entity_id for entry in entries}
     collision_sensor_id = entity_id_by_unique_id[f"{entry_id}_areas_count"]
-    if collision_sensor_id == reserved_entity_id:
+    if collision_sensor_id == reserved_entry.entity_id:
         raise RuntimeError("HASC must not reuse an occupied summary sensor name")
     if not collision_sensor_id.startswith("sensor.hausman_hub_hasc_"):
         raise RuntimeError("HASC must keep its protected name prefix after a collision")
@@ -468,6 +493,30 @@ def assert_reserved_name_does_not_block_hasc(
         },
         PROTECTED_SUMMARY_SENSOR_ENTITY_IDS - {RESERVED_SUMMARY_SENSOR_ENTITY_ID},
         "only the occupied HASC-like name may change in the disposable collision check",
+    )
+
+
+def assert_reserved_collision_entry_is_unchanged(
+    hass: HomeAssistant,
+    reserved_entry: ReservedCollisionEntry,
+) -> None:
+    """Require HASC removal to leave the external collision entry unchanged."""
+
+    current_entry = entity_registry.async_get(hass).async_get(reserved_entry.entity_id)
+    if current_entry is None:
+        raise RuntimeError("HASC removal must keep the external collision fixture")
+    current_snapshot = ReservedCollisionEntry(
+        registry_id=current_entry.id,
+        entity_id=current_entry.entity_id,
+        unique_id=current_entry.unique_id,
+        platform=current_entry.platform,
+        config_entry_id=current_entry.config_entry_id,
+        device_id=current_entry.device_id,
+    )
+    assert_result(
+        current_snapshot,
+        reserved_entry,
+        "HASC removal must not change the external collision fixture",
     )
 
 
@@ -729,7 +778,7 @@ async def async_run_check() -> None:
             )
             await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
 
-            reserved_entity_id = reserve_summary_sensor_name_for_test(restarted_hass)
+            reserved_entry = reserve_summary_sensor_name_for_test(restarted_hass)
             shadow_entry = await async_create_safe_entry(restarted_hass, domain, "shadow")
             await async_update_safe_options(restarted_hass, shadow_entry, "read-only")
             assert_result(
@@ -753,9 +802,10 @@ async def async_run_check() -> None:
             assert_reserved_name_does_not_block_hasc(
                 restarted_hass,
                 shadow_entry.entry_id,
-                reserved_entity_id,
+                reserved_entry,
             )
             await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
+            assert_reserved_collision_entry_is_unchanged(restarted_hass, reserved_entry)
         finally:
             await restarted_hass.async_stop()
 
