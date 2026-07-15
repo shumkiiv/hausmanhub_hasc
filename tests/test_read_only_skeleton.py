@@ -519,6 +519,42 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertLess(lifecycle_source.index(stop_call), lifecycle_source.index(restart_call))
         self.assertLess(lifecycle_source.index(restart_call), lifecycle_source.index(recovery_call))
 
+    def test_core_smoke_check_rejects_a_second_setup_while_hasc_is_stopped(
+        self,
+    ) -> None:
+        """An ordinary stop must not permit a second saved HASC setup."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        for requirement in (
+            "expected_entry_state: config_entries.ConfigEntryState",
+            "a rejected second setup must not user-deactivate HASC",
+            "a rejected second setup must keep the existing HASC state",
+            "ConfigEntryState.NOT_LOADED",
+        ):
+            self.assertIn(requirement, core_check_source)
+
+        unload_call = "await async_unload_safe_entry(restarted_hass, restored_entry)"
+        rejection_call = "await async_assert_second_entry_is_rejected("
+        stopped_state_marker = "expected_entry_state=config_entries.ConfigEntryState.NOT_LOADED"
+        rejection_start = lifecycle_source.index(
+            rejection_call,
+            lifecycle_source.index(unload_call),
+        )
+        unavailable_marker = '"HASC ordinary unload before restart",'
+        self.assertLess(lifecycle_source.index(unload_call), rejection_start)
+        self.assertLess(
+            rejection_start,
+            lifecycle_source.index(stopped_state_marker, rejection_start),
+        )
+        self.assertLess(
+            lifecycle_source.index(stopped_state_marker, rejection_start),
+            lifecycle_source.index(unavailable_marker),
+        )
+
     def test_core_smoke_check_removes_a_deactivated_hasc_setup(self) -> None:
         """Deleting a disabled HASC setup must still clear its own records."""
 

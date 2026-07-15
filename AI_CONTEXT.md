@@ -73,6 +73,11 @@ Last updated: 2026-07-15.
   user-enabled, direct execution stays blocked, and it creates no device or
   service. This is separate from a user's deliberate deactivation, which must
   remain inactive across a restart.
+- While that user-enabled setup is ordinarily stopped before its temporary
+  restart, the same lifecycle tries to add HASC again. Home Assistant must
+  refuse the duplicate, retain exactly one still-enabled saved setup and its
+  nine unloaded count records, and keep values and the guarded page closed.
+  It creates no extra sensor, device, service, or control path.
 - Both HASC setup forms now have an isolated input-boundary check: even if a
   form receives invented extra fields beside a safe mode, it persists only the
   fixed approved data shape. This is local test coverage only and adds no
@@ -428,6 +433,11 @@ Last updated: 2026-07-15.
   fixed diagnostics, GET-only local page, and all control prohibitions. See the
   [ordinary unload/restart review
   note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-unload-restart-review.md).
+- Kimi reviewed the duplicate-setup guard while HASC is ordinarily stopped.
+  Its first pass found a test that depended on exact source formatting; the
+  check now uses semantic markers and order instead. The final direct Kimi
+  review found no issues. See the [stopped duplicate-setup review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-duplicate-setup-review.md).
 - Kimi reviewed the isolated extra-input boundary check for both HASC setup
   forms with no findings. It confirmed that the test preserves the fixed safe
   saved shape and adds no runtime, device, service, network, or home-data

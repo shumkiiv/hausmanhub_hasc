@@ -166,8 +166,9 @@ async def async_assert_second_entry_is_rejected(
     hass: HomeAssistant,
     domain: str,
     entry: ConfigEntry,
+    expected_entry_state: config_entries.ConfigEntryState = config_entries.ConfigEntryState.LOADED,
 ) -> None:
-    """Reject a second safe setup without changing the first one."""
+    """Reject a second safe setup without changing the existing one."""
 
     entry_data_before = dict(entry.data)
     entry_options_before = dict(entry.options)
@@ -210,9 +211,14 @@ async def async_assert_second_entry_is_rejected(
         "a rejected second setup must not change the first setup options",
     )
     assert_result(
+        entry.disabled_by,
+        None,
+        "a rejected second setup must not user-deactivate HASC",
+    )
+    assert_result(
         entry.state,
-        config_entries.ConfigEntryState.LOADED,
-        "a rejected second setup must keep the first setup loaded",
+        expected_entry_state,
+        "a rejected second setup must keep the existing HASC state",
     )
 
 
@@ -1853,6 +1859,18 @@ async def async_run_check() -> None:
                 dict(restored_entry.options),
                 ordinary_unload_restart_options,
                 "ordinary unload before restart must preserve safe entry options",
+            )
+            assert_entry_has_unloaded_summary_sensors(
+                restarted_hass,
+                domain,
+                restored_entry.entry_id,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_second_entry_is_rejected(
+                restarted_hass,
+                domain,
+                restored_entry,
+                expected_entry_state=config_entries.ConfigEntryState.NOT_LOADED,
             )
             assert_entry_has_unloaded_summary_sensors(
                 restarted_hass,

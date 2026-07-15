@@ -116,6 +116,11 @@ sensors, fixed safe diagnostics, and authenticated GET-only page, while still
 having no device, service, proxy, or home-control capability. This is separate
 from user deactivation, which must remain inactive after a restart.
 
+While that first safe setup is ordinarily stopped, the empty test also tries to
+add HASC again. Home Assistant must refuse the second setup and keep exactly
+one still-enabled saved setup. Its nine current values and guarded page must
+stay unavailable, and no extra sensor, device, service, or control can appear.
+
 Before that first empty system is stopped, the check also uses Home Assistant's
 normal user deactivation control. The saved HASC setup remains, but all nine
 count sensors are marked disabled, their temporary values disappear, and the
