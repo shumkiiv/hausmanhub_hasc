@@ -949,6 +949,63 @@ async def async_assert_ordinary_unloaded_entry_recovers_after_restart(
     return entry
 
 
+async def async_assert_ordinary_unloaded_entry_can_be_removed(
+    hass: HomeAssistant,
+    domain: str,
+    entry: ConfigEntry,
+    expected_data: dict[str, str],
+    expected_options: dict[str, Any],
+    expected_entity_ids: frozenset[str],
+    reader_token: str,
+) -> RemovedHascEntry:
+    """Require an ordinary stopped, still-enabled HASC entry to remove cleanly."""
+
+    await async_unload_safe_entry(hass, entry)
+    assert_result(
+        dict(entry.data),
+        expected_data,
+        "ordinary unload before removal must preserve safe entry data",
+    )
+    assert_result(
+        dict(entry.options),
+        expected_options,
+        "ordinary unload before removal must preserve safe entry options",
+    )
+    assert_entry_has_unloaded_summary_sensors(
+        hass,
+        domain,
+        entry.entry_id,
+        expected_entity_ids,
+    )
+    await async_assert_closed_diagnostics(
+        hass,
+        domain,
+        entry,
+        "HASC ordinary unload before removal",
+    )
+    await async_assert_local_summary_is_unavailable(
+        hass,
+        domain,
+        reader_token,
+        "HASC ordinary unload before removal",
+    )
+
+    removed_entry = await async_remove_safe_entry(hass, entry.entry_id)
+    await async_assert_closed_diagnostics(
+        hass,
+        domain,
+        entry,
+        "HASC removal after ordinary unload",
+    )
+    await async_assert_local_summary_is_unavailable(
+        hass,
+        domain,
+        reader_token,
+        "HASC removal after ordinary unload",
+    )
+    return removed_entry
+
+
 def assert_hasc_stays_removed_after_restart(
     hass: HomeAssistant,
     domain: str,
@@ -2432,21 +2489,23 @@ async def async_run_check() -> None:
                 ordinary_unload_restart_options,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
-            removed_entries.append(
-                await async_remove_safe_entry(
-                    ordinary_unload_restarted_hass,
-                    restored_entry.entry_id,
-                )
-            )
-            await async_assert_local_summary_is_unavailable(
-                ordinary_unload_restarted_hass,
-                domain,
-                removal_reader_token,
-                "HASC removal",
-            )
-
             reserved_entry = reserve_summary_sensor_name_for_test(
                 ordinary_unload_restarted_hass
+            )
+            removed_entries.append(
+                await async_assert_ordinary_unloaded_entry_can_be_removed(
+                    ordinary_unload_restarted_hass,
+                    domain,
+                    restored_entry,
+                    ordinary_unload_restart_data,
+                    ordinary_unload_restart_options,
+                    LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+                    removal_reader_token,
+                )
+            )
+            assert_reserved_collision_entry_is_unchanged(
+                ordinary_unload_restarted_hass,
+                reserved_entry,
             )
             shadow_entry = await async_create_safe_entry(
                 ordinary_unload_restarted_hass,

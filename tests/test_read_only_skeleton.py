@@ -578,6 +578,49 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertLess(lifecycle_source.index(stop_call), lifecycle_source.index(restart_call))
         self.assertLess(lifecycle_source.index(restart_call), lifecycle_source.index(recovery_call))
 
+    def test_core_smoke_check_removes_ordinarily_stopped_hasc(self) -> None:
+        """An ordinary stopped, still-enabled HASC setup must remove cleanly."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+        helper_source = core_check_source.split(
+            "async def async_assert_ordinary_unloaded_entry_can_be_removed(", 1
+        )[1].split("\n\ndef assert_hasc_stays_removed_after_restart", 1)[0]
+
+        for requirement in (
+            "ordinary stopped, still-enabled HASC entry to remove cleanly",
+            "ordinary unload before removal must preserve safe entry data",
+            "ordinary unload before removal must preserve safe entry options",
+            '"HASC ordinary unload before removal",',
+            '"HASC removal after ordinary unload",',
+        ):
+            self.assertIn(requirement, helper_source)
+
+        unload_call = "await async_unload_safe_entry(hass, entry)"
+        removal_call = "await async_remove_safe_entry(hass, entry.entry_id)"
+        self.assertLess(helper_source.index(unload_call), helper_source.index(removal_call))
+        self.assertIn(
+            "await async_assert_ordinary_unloaded_entry_can_be_removed(",
+            lifecycle_source,
+        )
+        recovery_call = "await async_assert_ordinary_unloaded_entry_recovers_after_restart("
+        stopped_removal_call = "await async_assert_ordinary_unloaded_entry_can_be_removed("
+        self.assertLess(
+            lifecycle_source.index(recovery_call),
+            lifecycle_source.index(stopped_removal_call),
+        )
+        reservation_call = "reserved_entry = reserve_summary_sensor_name_for_test("
+        preservation_call = "assert_reserved_collision_entry_is_unchanged("
+        reservation_start = lifecycle_source.index(reservation_call)
+        stopped_removal_start = lifecycle_source.index(stopped_removal_call)
+        self.assertLess(reservation_start, stopped_removal_start)
+        self.assertLess(
+            stopped_removal_start,
+            lifecycle_source.index(preservation_call, stopped_removal_start),
+        )
+
     def test_core_smoke_check_rejects_a_second_setup_while_hasc_is_stopped(
         self,
     ) -> None:

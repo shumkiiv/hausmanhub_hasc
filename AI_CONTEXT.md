@@ -120,6 +120,13 @@ Last updated: 2026-07-15.
   user-enabled, direct execution stays blocked, and it creates no device or
   service. This is separate from a user's deliberate deactivation, which must
   remain inactive across a restart.
+- After that automatic recovery, the same temporary user-enabled setup is
+  ordinarily stopped once more and removed before it starts again. While
+  stopped, its saved settings and nine enabled registry records must remain
+  intact but all values, diagnostics, and the guarded page must stay closed.
+  Removal must clear its records and values, keep the temporary external
+  similar-name record unchanged, and remain absent after the following empty
+  restart.
 - While that user-enabled setup is ordinarily stopped before its temporary
   restart, the same lifecycle tries to add HASC again. Home Assistant must
   refuse the duplicate, retain exactly one still-enabled saved setup and its
@@ -495,6 +502,12 @@ Last updated: 2026-07-15.
   fixed diagnostics, GET-only local page, and all control prohibitions. See the
   [ordinary unload/restart review
   note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-unload-restart-review.md).
+- Kimi reviewed removal of an ordinarily stopped, still-user-enabled HASC
+  setup with no findings. It confirmed that the temporary test keeps the same
+  nine-count and no-control boundary, closes both read paths before and after
+  removal, preserves an unrelated similar-name record, and uses no real home.
+  See the [ordinary stopped-removal review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-removal-review.md).
 - Kimi reviewed the duplicate-setup guard while HASC is ordinarily stopped.
   Its first pass found a test that depended on exact source formatting; the
   check now uses semantic markers and order instead. The final direct Kimi
