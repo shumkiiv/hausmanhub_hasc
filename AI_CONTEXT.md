@@ -161,10 +161,16 @@ Last updated: 2026-07-15.
   similar-name record unchanged, and remain absent after the following empty
   restart.
 - A later temporary reinstallation is also ordinarily stopped before the user
-  deactivates it. The stop must retain its safe settings and nine enabled but
-  value-free records; deactivation must then mark those same records disabled,
-  close diagnostics and the local page, persist through the next empty restart,
-  and remain removable without changing the external temporary record.
+  deactivates it. The stop retains its safe settings and nine enabled but
+  value-free records; deactivation marks those same records disabled and closes
+  diagnostics and the local page. The same setup is then immediately
+  reactivated before a restart: it must restore the unchanged settings, the
+  same nine safe counts, diagnostics, and authenticated GET-only page without
+  changing the external temporary record. It is deactivated once more before
+  the existing restart-and-removal check.
+- Kimi independently reviewed that ordinary-stop/deactivate/reactivate path
+  with no findings. See the [ordinary-stop reactivation review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-stop-reactivation-review.md).
 - While that user-enabled setup is ordinarily stopped before its temporary
   restart, the same lifecycle tries to add HASC again. Home Assistant must
   refuse the duplicate, retain exactly one still-enabled saved setup and its

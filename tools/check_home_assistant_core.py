@@ -2823,6 +2823,63 @@ async def async_run_check() -> None:
                 removal_reader_token,
                 "HASC deactivation",
             )
+            await async_enable_safe_entry(
+                ordinary_unload_restarted_hass,
+                reinstalled_entry,
+            )
+            assert_result(
+                dict(reinstalled_entry.data),
+                reinstalled_entry_data,
+                "ordinary-unload reactivation must preserve safe entry data",
+            )
+            assert_result(
+                dict(reinstalled_entry.options),
+                reinstalled_entry_options,
+                "ordinary-unload reactivation must preserve safe entry options",
+            )
+            assert_entry_has_only_summary_sensors(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry.entry_id,
+                expected_entity_ids=None,
+            )
+            await async_assert_safe_diagnostics(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry,
+                "read-only",
+            )
+            assert_local_summary_view(ordinary_unload_restarted_hass, domain)
+            await async_assert_authenticated_local_summary_http_access(
+                ordinary_unload_restarted_hass,
+                "HASC reactivation after ordinary unload",
+            )
+            assert_reserved_collision_entry_is_unchanged(
+                ordinary_unload_restarted_hass,
+                reserved_entry,
+            )
+            await async_disable_safe_entry(
+                ordinary_unload_restarted_hass,
+                reinstalled_entry,
+            )
+            assert_entry_has_disabled_summary_sensors(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry.entry_id,
+                expected_entity_ids=None,
+            )
+            await async_assert_closed_diagnostics(
+                ordinary_unload_restarted_hass,
+                domain,
+                reinstalled_entry,
+                "HASC second deactivation after ordinary unload",
+            )
+            await async_assert_local_summary_is_unavailable(
+                ordinary_unload_restarted_hass,
+                domain,
+                removal_reader_token,
+                "HASC second deactivation after ordinary unload",
+            )
             assert_reserved_collision_entry_is_unchanged(
                 ordinary_unload_restarted_hass,
                 reserved_entry,

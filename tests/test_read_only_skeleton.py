@@ -671,6 +671,62 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index("assert_entry_has_disabled_summary_sensors(", deactivation_start),
         )
 
+    def test_core_smoke_check_reactivates_ordinarily_stopped_hasc(self) -> None:
+        """An ordinarily stopped HASC setup must reactivate before restart."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        for requirement in (
+            "ordinary-unload reactivation must preserve safe entry data",
+            "ordinary-unload reactivation must preserve safe entry options",
+            '"HASC reactivation after ordinary unload",',
+            '"HASC second deactivation after ordinary unload",',
+        ):
+            self.assertIn(requirement, lifecycle_source)
+
+        reinstall_call = "reinstalled_entry = await async_create_safe_entry("
+        unload_call = "await async_unload_safe_entry("
+        deactivation_call = "await async_disable_safe_entry("
+        reactivation_call = "await async_enable_safe_entry("
+        reinstall_start = lifecycle_source.index(reinstall_call)
+        unload_start = lifecycle_source.index(unload_call, reinstall_start)
+        first_deactivation_start = lifecycle_source.index(deactivation_call, reinstall_start)
+        reactivation_start = lifecycle_source.index(
+            reactivation_call,
+            first_deactivation_start,
+        )
+        second_deactivation_start = lifecycle_source.index(
+            deactivation_call,
+            reactivation_start,
+        )
+        active_sensor_check_start = lifecycle_source.index(
+            "assert_entry_has_only_summary_sensors(",
+            reactivation_start,
+        )
+        safe_diagnostics_start = lifecycle_source.index(
+            "await async_assert_safe_diagnostics(",
+            reactivation_start,
+        )
+        local_page_start = lifecycle_source.index(
+            "assert_local_summary_view(ordinary_unload_restarted_hass, domain)",
+            reactivation_start,
+        )
+
+        self.assertLess(reinstall_start, unload_start)
+        self.assertLess(unload_start, first_deactivation_start)
+        self.assertLess(
+            lifecycle_source.index("assert_entry_has_unloaded_summary_sensors(", unload_start),
+            first_deactivation_start,
+        )
+        self.assertLess(first_deactivation_start, reactivation_start)
+        self.assertLess(reactivation_start, active_sensor_check_start)
+        self.assertLess(active_sensor_check_start, safe_diagnostics_start)
+        self.assertLess(safe_diagnostics_start, local_page_start)
+        self.assertLess(local_page_start, second_deactivation_start)
+
     def test_core_smoke_check_rejects_a_second_setup_while_hasc_is_stopped(
         self,
     ) -> None:
