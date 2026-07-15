@@ -2660,17 +2660,53 @@ async def async_run_check() -> None:
                 restored_entry,
                 LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
             )
+            disabled_restart_data = dict(restored_entry.data)
+            await async_update_inactive_safe_options_without_reading_home(
+                restarted_hass,
+                domain,
+                restored_entry,
+                "shadow",
+                expected_disabled_by=ConfigEntryDisabler.USER,
+            )
+            assert_result(
+                dict(restored_entry.data),
+                disabled_restart_data,
+                "user-disabled safe options after restart must not mutate entry data",
+            )
+            assert_deactivated_entry_stays_inactive_after_restart(
+                restarted_hass,
+                domain,
+                restored_entry,
+                LEGACY_SUMMARY_SENSOR_ENTITY_IDS,
+            )
+            await async_assert_closed_diagnostics(
+                restarted_hass,
+                domain,
+                restored_entry,
+                "saving safe options while HASC is user-deactivated after restart",
+            )
+            disabled_restart_options = dict(restored_entry.options)
             await async_enable_safe_entry(restarted_hass, restored_entry)
             assert_result(
                 restored_entry.data["direct_execution_status"],
                 "direct_execution_blocked",
                 "restart must not change the direct execution block",
             )
+            assert_result(
+                dict(restored_entry.data),
+                disabled_restart_data,
+                "user reactivation after restart must preserve safe entry data",
+            )
+            assert_result(
+                dict(restored_entry.options),
+                disabled_restart_options,
+                "user reactivation after restart must preserve saved safe options",
+            )
             await async_assert_safe_diagnostics(
                 restarted_hass,
                 domain,
                 restored_entry,
-                "read-only",
+                "shadow",
             )
             assert_local_summary_view(restarted_hass, domain)
             assert_entry_has_only_summary_sensors(

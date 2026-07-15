@@ -141,6 +141,13 @@ Last updated: 2026-07-16.
   same nine sensors with the saved `read-only` mode. Kimi found no issue; see
   the [user-deactivated safe-options review
   note](LLM_WIKI/Manual/2026-07-16-kimi-user-deactivated-safe-options-review.md).
+- After a full temporary Home Assistant restart, the same user-disabled HASC
+  setup may also save `shadow` without starting itself. It still has no runtime
+  data, page, or count values, and it cannot read a home summary or reload
+  HASC. Only the user's explicit activation restores the same nine sensors in
+  the newly saved `shadow` mode. Kimi found no issue; see the [disabled
+  restart safe-options review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-disabled-restart-safe-options-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the
