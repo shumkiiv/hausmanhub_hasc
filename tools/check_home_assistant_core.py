@@ -6,7 +6,8 @@ exercises safe ``read-only`` and ``shadow`` config entries, and removes all
 temporary files when finished. It never receives a real credential, connects
 to a real or remote network, or calls Home Assistant services or devices. Its
 only HTTP check starts a temporary loopback server to test the authenticated
-local nine-count route.
+local nine-count route. The test permits exactly nine HASC diagnostic sensors
+and no other HASC entity or service.
 """
 
 from __future__ import annotations
@@ -31,6 +32,17 @@ from homeassistant.helpers import entity_registry
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION_SOURCE = REPOSITORY_ROOT / "custom_components" / "hausman_hub"
+SUMMARY_SENSOR_KEYS = (
+    "areas_count",
+    "devices_count",
+    "entities_count",
+    "sensors_count",
+    "available_entities_count",
+    "unavailable_entities_count",
+    "unknown_entities_count",
+    "not_reported_entities_count",
+    "disabled_entities_count",
+)
 
 
 def load_integration_domain() -> str:
@@ -226,7 +238,7 @@ def assert_safe_home_summary(home_summary: Any) -> None:
 
     A blank Home Assistant still has its own built-in registry entries, so this
     check proves the count-only contract rather than assuming every total is
-    zero. It does not create or modify any Home Assistant object.
+    zero. This assertion does not create or modify any Home Assistant object.
     """
 
     if not isinstance(home_summary, dict):
@@ -259,22 +271,39 @@ def assert_safe_home_summary(home_summary: Any) -> None:
         raise RuntimeError("home summary availability counts must equal entity count")
 
 
-def assert_entry_is_inert(hass: HomeAssistant, domain: str, entry_id: str) -> None:
-    """Ensure a safe entry has neither a service nor an attached entity."""
+def assert_entry_has_only_summary_sensors(
+    hass: HomeAssistant,
+    domain: str,
+    entry_id: str,
+) -> None:
+    """Allow only the nine approved diagnostic count sensors and no service."""
 
     assert_result(
         hass.services.async_services().get(domain),
         None,
         "the integration must not register services",
     )
-    assert_result(
-        entity_registry.async_entries_for_config_entry(
-            entity_registry.async_get(hass),
-            entry_id,
-        ),
-        [],
-        "the integration must not create entities",
+    entries = entity_registry.async_entries_for_config_entry(
+        entity_registry.async_get(hass),
+        entry_id,
     )
+    assert_result(
+        {entry.unique_id for entry in entries},
+        {f"{entry_id}_{key}" for key in SUMMARY_SENSOR_KEYS},
+        "the integration must create exactly the approved summary sensors",
+    )
+    if any(not entry.entity_id.startswith("sensor.") for entry in entries):
+        raise RuntimeError("every HASC display entity must be a sensor")
+    for entry in entries:
+        state = hass.states.get(entry.entity_id)
+        if state is None:
+            raise RuntimeError("every HASC summary sensor must have a state")
+        try:
+            value = int(state.state)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("every HASC summary sensor must be a whole number") from exc
+        if value < 0:
+            raise RuntimeError("every HASC summary sensor must be non-negative")
 
 
 def assert_local_summary_view(hass: HomeAssistant, domain: str) -> None:
@@ -448,7 +477,7 @@ async def async_run_check() -> None:
             await async_assert_safe_diagnostics(hass, domain, read_only_entry, "shadow")
             assert_local_summary_view(hass, domain)
             await async_assert_authenticated_local_summary_http_access(hass)
-            assert_entry_is_inert(hass, domain, read_only_entry.entry_id)
+            assert_entry_has_only_summary_sensors(hass, domain, read_only_entry.entry_id)
 
             entry_id = read_only_entry.entry_id
             expected_data = dict(read_only_entry.data)
@@ -489,7 +518,11 @@ async def async_run_check() -> None:
                 "shadow",
             )
             assert_local_summary_view(restarted_hass, domain)
-            assert_entry_is_inert(restarted_hass, domain, restored_entry.entry_id)
+            assert_entry_has_only_summary_sensors(
+                restarted_hass,
+                domain,
+                restored_entry.entry_id,
+            )
             await async_remove_safe_entry(restarted_hass, restored_entry.entry_id)
 
             shadow_entry = await async_create_safe_entry(restarted_hass, domain, "shadow")
@@ -506,7 +539,11 @@ async def async_run_check() -> None:
                 "read-only",
             )
             assert_local_summary_view(restarted_hass, domain)
-            assert_entry_is_inert(restarted_hass, domain, shadow_entry.entry_id)
+            assert_entry_has_only_summary_sensors(
+                restarted_hass,
+                domain,
+                shadow_entry.entry_id,
+            )
             await async_remove_safe_entry(restarted_hass, shadow_entry.entry_id)
         finally:
             await restarted_hass.async_stop()

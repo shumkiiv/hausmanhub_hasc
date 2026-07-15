@@ -7,7 +7,8 @@ HausMan Hub.
 
 This repository contains a public, read-only Home Assistant skeleton under
 `custom_components/hausman_hub/`. It contains no device-control runtime,
-entity platform, service definition, or outgoing connection.
+service definition, or outgoing connection. It creates only nine diagnostic
+number sensors from the approved aggregate summary.
 
 - Visibility: public.
 - License: MIT.
@@ -36,7 +37,10 @@ decision, and owner signoff.
    devices, entities, sensors, and availability, including a separate count
    for disabled entities. It contains no names, identifiers, readings,
    history, addresses, or secrets.
-4. In version 0.2.0, provide that same fixed summary through one authenticated
+4. In version 0.3.0, show that same fixed summary as exactly nine diagnostic
+   number sensors in Home Assistant. They do not create a device, accept an
+   action, or add any new home data.
+5. In version 0.2.0, provide that same fixed summary through one authenticated
    local GET-only view for a dedicated Home Assistant read-only user. It has
    no command method, external access, or token storage.
 

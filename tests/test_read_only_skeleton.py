@@ -22,6 +22,8 @@ from custom_components.hausman_hub.application.configuration import (  # noqa: E
 from custom_components.hausman_hub.application.diagnostics import diagnostics_snapshot  # noqa: E402
 from custom_components.hausman_hub.application.observation import create_home_summary  # noqa: E402
 from custom_components.hausman_hub.application.local_summary import (  # noqa: E402
+    HOME_SUMMARY_COUNT_KEYS,
+    home_summary_payload,
     local_summary_snapshot,
 )
 from custom_components.hausman_hub.application.repairs import (  # noqa: E402
@@ -46,7 +48,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.2.0", manifest["version"])
+        self.assertEqual("0.3.0", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -257,6 +259,26 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                 summary,
             )
 
+    def test_home_summary_display_has_exactly_the_same_nine_numbers(self) -> None:
+        """The visible display cannot add data beyond the approved summary."""
+
+        expected_keys = (
+            "areas_count",
+            "devices_count",
+            "entities_count",
+            "sensors_count",
+            "available_entities_count",
+            "unavailable_entities_count",
+            "unknown_entities_count",
+            "not_reported_entities_count",
+            "disabled_entities_count",
+        )
+        payload = home_summary_payload(self.home_summary())
+
+        self.assertEqual(expected_keys, HOME_SUMMARY_COUNT_KEYS)
+        self.assertEqual(expected_keys, tuple(payload))
+        self.assertEqual({key: 0 for key in expected_keys}, payload)
+
     def test_home_summary_rejects_impossible_totals(self) -> None:
         """Bad aggregate data cannot reach diagnostics silently."""
 
@@ -329,13 +351,14 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                     {field.name for field in fields(guidance)},
                 )
 
-    def test_outer_adapter_has_no_execution_surface_and_one_get_only_view(self) -> None:
+    def test_outer_adapter_has_no_execution_surface_and_only_summary_sensors(self) -> None:
         forbidden_fragments = (
             "hass.services",
             "async_call(",
             "async_set(",
             "async_fire(",
             "async_create_issue",
+            "async_register_entity_service",
             "services.yaml",
             "node-red",
             "aiohttp",
@@ -348,8 +371,14 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         for fragment in forbidden_fragments:
             self.assertNotIn(fragment, source)
-        for absent_module in ("services.yaml", "sensor.py", "switch.py", "climate.py"):
+        self.assertTrue((INTEGRATION / "sensor.py").is_file())
+        for absent_module in ("services.yaml", "switch.py", "climate.py"):
             self.assertFalse((INTEGRATION / absent_module).exists())
+
+        sensor_source = (INTEGRATION / "sensor.py").read_text(encoding="utf-8")
+        self.assertIn("HOME_SUMMARY_COUNT_KEYS", sensor_source)
+        self.assertIn("timedelta(minutes=5)", sensor_source)
+        self.assertIn("EntityCategory.DIAGNOSTIC", sensor_source)
 
         local_view_source = (INTEGRATION / "local_summary.py").read_text(encoding="utf-8")
         self.assertIn("requires_auth = True", local_view_source)
@@ -365,6 +394,21 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             )
             self.assertIn("mode", content["selector"])
             self.assertIn("unsafe_mode", content["config"]["error"])
+
+    def test_sensor_translations_have_only_the_approved_nine_counts(self) -> None:
+        """Every visible label must map to an already-approved aggregate count."""
+
+        expected_keys = set(HOME_SUMMARY_COUNT_KEYS)
+        for language in ("en", "ru"):
+            with self.subTest(language=language):
+                content = json.loads(
+                    (INTEGRATION / "translations" / f"{language}.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                labels = content["entity"]["sensor"]
+                self.assertEqual(expected_keys, set(labels))
+                self.assertTrue(all(set(label) == {"name"} for label in labels.values()))
 
     def test_translations_describe_the_public_non_controlling_shell(self) -> None:
         """Keep installation language honest about the integration's safety."""

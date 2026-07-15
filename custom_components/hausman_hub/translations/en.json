@@ -40,5 +40,18 @@
         "shadow": "Comparison without changes"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "areas_count": {"name": "Areas"},
+      "devices_count": {"name": "Devices"},
+      "entities_count": {"name": "Home Assistant entities"},
+      "sensors_count": {"name": "Sensors"},
+      "available_entities_count": {"name": "Available entities"},
+      "unavailable_entities_count": {"name": "Unavailable entities"},
+      "unknown_entities_count": {"name": "Entities with unknown state"},
+      "not_reported_entities_count": {"name": "Entities without a state"},
+      "disabled_entities_count": {"name": "Disabled entities"}
+    }
   }
 }

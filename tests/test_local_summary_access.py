@@ -59,6 +59,29 @@ class FakeHttp:
         self.views.append(view)
 
 
+class FakeConfigEntries:
+    """Record platform lifecycle requests without loading a platform."""
+
+    def __init__(self) -> None:
+        self.forwarded: list[tuple[object, tuple[object, ...]]] = []
+        self.unloaded: list[tuple[object, tuple[object, ...]]] = []
+
+    async def async_forward_entry_setups(
+        self,
+        entry: object,
+        platforms: tuple[object, ...],
+    ) -> None:
+        self.forwarded.append((entry, platforms))
+
+    async def async_unload_platforms(
+        self,
+        entry: object,
+        platforms: tuple[object, ...],
+    ) -> bool:
+        self.unloaded.append((entry, platforms))
+        return True
+
+
 class FakeStates:
     """Return synthetic states without supporting any mutation."""
 
@@ -80,6 +103,7 @@ class FakeHomeAssistant:
     def __init__(self) -> None:
         self.data: dict[str, dict[str, object]] = {}
         self.http = FakeHttp()
+        self.config_entries = FakeConfigEntries()
         self.area_registry = SimpleNamespace(areas={"synthetic-area": object()})
         self.device_registry = SimpleNamespace(
             devices={"synthetic-device-one": object(), "synthetic-device-two": object()}
@@ -136,6 +160,7 @@ class FakeEntry:
     """Minimal config entry shape used by the safe outer adapter."""
 
     def __init__(self, data: dict[str, object], options: dict[str, object]) -> None:
+        self.entry_id = "synthetic-hasc-entry"
         self.data = data
         self.options = options
 
@@ -163,6 +188,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     const = ModuleType("homeassistant.const")
     const.STATE_UNAVAILABLE = "unavailable"  # type: ignore[attr-defined]
     const.STATE_UNKNOWN = "unknown"  # type: ignore[attr-defined]
+    const.Platform = SimpleNamespace(SENSOR="sensor")  # type: ignore[attr-defined]
     core = ModuleType("homeassistant.core")
     core.HomeAssistant = FakeHomeAssistant  # type: ignore[attr-defined]
     helpers = ModuleType("homeassistant.helpers")
@@ -299,6 +325,10 @@ class LocalSummaryAccessTest(unittest.TestCase):
         next_entry = FakeEntry(dict(self.entry.data), {})
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, next_entry)))
         self.assertEqual(1, len(self.hass.http.views))
+        self.assertEqual(
+            [(self.entry, ("sensor",)), (next_entry, ("sensor",))],
+            self.hass.config_entries.forwarded,
+        )
 
     def test_view_fails_closed_when_entry_is_unsafe_or_unloaded(self) -> None:
         self.entry.data["direct_execution_status"] = "not_blocked"

@@ -20,5 +20,5 @@ async def async_get_config_entry_diagnostics(
     return diagnostics_snapshot(
         entry.data,
         entry.options,
-        collect_home_summary(hass),
+        collect_home_summary(hass, entry.entry_id),
     )

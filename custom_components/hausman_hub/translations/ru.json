@@ -40,5 +40,18 @@
         "shadow": "Проверка без изменений"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "areas_count": {"name": "Помещения"},
+      "devices_count": {"name": "Устройства"},
+      "entities_count": {"name": "Объекты Home Assistant"},
+      "sensors_count": {"name": "Датчики"},
+      "available_entities_count": {"name": "Доступные объекты"},
+      "unavailable_entities_count": {"name": "Недоступные объекты"},
+      "unknown_entities_count": {"name": "Объекты с неизвестным состоянием"},
+      "not_reported_entities_count": {"name": "Объекты без состояния"},
+      "disabled_entities_count": {"name": "Отключённые объекты"}
+    }
   }
 }

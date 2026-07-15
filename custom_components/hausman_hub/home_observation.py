@@ -16,8 +16,11 @@ from .application.observation import create_home_summary
 from .domain.observation import Availability, HomeSummary, RegisteredEntity
 
 
-def collect_home_summary(hass: HomeAssistant) -> HomeSummary:
-    """Return only approved local totals from Home Assistant's registries."""
+def collect_home_summary(
+    hass: HomeAssistant,
+    excluded_config_entry_id: str | None = None,
+) -> HomeSummary:
+    """Return only approved local totals without counting HASC's own display."""
 
     areas = area_registry.async_get(hass)
     devices = device_registry.async_get(hass)
@@ -29,6 +32,10 @@ def collect_home_summary(hass: HomeAssistant) -> HomeSummary:
         entities=(
             _registered_entity(entry, hass)
             for entry in entities.entities.values()
+            if (
+                excluded_config_entry_id is None
+                or getattr(entry, "config_entry_id", None) != excluded_config_entry_id
+            )
         ),
     )
 

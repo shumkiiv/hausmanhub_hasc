@@ -16,6 +16,9 @@ Assistant-facing shell around framework-independent safety rules:
   changes.
 - an original local brand icon for Home Assistant's interface; it is only an
   image and does not add a runtime capability.
+- exactly nine diagnostic number sensors that show the already-approved
+  aggregate summary. They share one local snapshot, do not count themselves,
+  have no action, and expose no source name, identifier, reading, or history.
 - one authenticated, local-network, GET-only view for the already-approved
   nine-count summary. It requires Home Assistant's exact built-in read-only
   group and has no command method or outgoing connection.
@@ -28,8 +31,9 @@ Home Assistant modules are thin adapters at the outer boundary.
 - It does not list, select, store, or expose real areas, devices, or entities.
 - It does not use Home Assistant services, Node-RED, external APIs, or device
   commands.
-- It does not create entities, platforms, `services.yaml`, repairs issues, or
-  automatic fixes.
+- It does not create devices, buttons, control entities, `services.yaml`,
+  repairs issues, or automatic fixes. Its only entities are the nine approved
+  diagnostic count sensors.
 - Its small `hacs.json` supports manual HACS installation from this public
   repository. It does not add the integration to the public HACS catalog or
   change its runtime behavior.
@@ -69,8 +73,8 @@ uv pip install --python /tmp/hasc-core/bin/python homeassistant==2026.6.4
 The script creates a temporary empty Home Assistant configuration, copies the
 local integration into it, and removes the temporary configuration afterwards.
 It checks both approved initial modes, a safe change between those modes, a
-real reload, the fixed redacted diagnostics report, clean removal, and the
-absence of HASC services and entities. It also starts a temporary loopback-only
+real reload, the fixed redacted diagnostics report, clean removal, exactly nine
+HASC diagnostic count sensors, and the absence of HASC services. It also starts a temporary loopback-only
 Home Assistant server to prove that the local nine-count page rejects an
 unsigned request and an administrator, accepts only the temporary read-only
 test account, and rejects POST. An attempt to submit `proxy` through options
@@ -83,8 +87,9 @@ HASC again does not leave an old HASC object, service, or setting behind.
 
 Before that removal, the test saves one safe HASC setup, stops the empty test
 system, replaces its local HASC copy, and starts the empty system again. The
-same safe choice must be present after the restart, HASC must remain without
-services or objects, and direct execution must still be blocked. This checks
+same safe choice must be present after the restart, HASC must retain exactly
+its nine diagnostic count sensors and no service, and direct execution must
+still be blocked. This checks
 the safe persistence path for an HASC update without touching a real home.
 
 For a manual check of an installed copy, see the Russian

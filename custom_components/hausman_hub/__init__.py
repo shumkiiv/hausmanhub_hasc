@@ -1,8 +1,8 @@
-"""Home Assistant boundary for the read-only HausMan Hub skeleton.
+"""Home Assistant boundary for the read-only HausMan Hub integration.
 
-This module deliberately creates no entities, services, device connections, or
-execution routes. It only exposes one authenticated local GET view with the
-approved nine aggregate counts after validating the stored safety posture.
+It creates only nine diagnostic count sensors from the approved aggregate
+summary. It has no services, device connections, or execution routes, and its
+separate local view remains authenticated and GET-only.
 """
 
 from __future__ import annotations
@@ -17,26 +17,32 @@ if TYPE_CHECKING:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Load a safe configuration without acquiring runtime authority."""
+    """Load the safe count display without acquiring runtime authority."""
 
     try:
         effective_configuration(entry.data, entry.options)
     except ConfigurationViolation:
         return False
 
-    # This outer adapter needs Home Assistant's HTTP API. Keeping this import
-    # here lets the framework-independent safety tests run without HA itself.
+    # Imports stay at the outer boundary so framework-independent tests can run
+    # without Home Assistant itself.
+    from homeassistant.const import Platform
+
     from .local_summary import register_local_summary_access
 
+    await hass.config_entries.async_forward_entry_setups(entry, (Platform.SENSOR,))
     register_local_summary_access(hass, entry)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload the safe entry and make its local summary unavailable."""
+    """Unload the count display and make its local summary unavailable."""
 
-    # See the setup import: the application layer remains Home Assistant-free.
+    from homeassistant.const import Platform
+
     from .local_summary import clear_local_summary_access
 
-    clear_local_summary_access(hass, entry)
-    return True
+    unloaded = await hass.config_entries.async_unload_platforms(entry, (Platform.SENSOR,))
+    if unloaded:
+        clear_local_summary_access(hass, entry)
+    return unloaded

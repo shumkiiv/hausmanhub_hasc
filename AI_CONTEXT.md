@@ -30,15 +30,17 @@ Last updated: 2026-07-15.
 - Synthetic Common-contract fixtures, static validators, synthetic shadow
   evidence, and redacted diagnostics/repairs fixtures are present. They use
   Python's standard library and local JSON only.
-- Version 0.2.0 retains one explicitly approved local read-only observation:
+- Version 0.3.0 retains one explicitly approved local read-only observation:
   `home_summary` in diagnostics. It contains exactly nine aggregate counts:
   areas, devices, entities, sensors, and available/unavailable/unknown/not
   reported/disabled entities. Disabled entries are counted separately before
   the adapter reads a state; `not_reported` therefore means an enabled entry
   has no current state. The adapter reduces each permitted local fact
   immediately to a category; it exports no name, identifier, reading, history,
-  address, secret, or raw state. It creates no entities or services and does
-  not call Home Assistant services.
+  address, secret, or raw state. Version 0.3.0 shows the same fixed payload as
+  exactly nine HASC diagnostic number sensors. They share one redacted local
+  snapshot, exclude HASC's own sensors from the house totals, create no HASC
+  device or service, and do not call Home Assistant services.
 - The owner explicitly approved a local count-only access path on 2026-07-14.
   It may expose the same fixed nine counts only after Home Assistant
   authentication, an exact built-in read-only user group, and a local-network
@@ -84,6 +86,11 @@ Last updated: 2026-07-15.
   the Home Assistant UI did not offer the exact `system-read-only` role. It
   does not relax HASC's own strict route guard or grant HASC any device
   authority; see the direct local observation decision above.
+- On 2026-07-15 the owner explicitly approved showing only the existing nine
+  aggregate HASC counts in Home Assistant. This authorizes exactly nine
+  diagnostic number sensors, not devices, controls, new home data, proxy, or
+  execution. The decision is recorded in
+  [the summary-display decision](docs/read-only-home-summary-display-decision.md).
 - Version `0.2.0` has a public GitHub release at
   https://github.com/shumkiiv/hausmanhub_hasc/releases/tag/v0.2.0. The owner
   confirmed the corresponding HACS update and Home Assistant restart on
@@ -185,6 +192,12 @@ Last updated: 2026-07-15.
   corrected; Kimi's final review found no remaining issues. See the
   [staged-release-version review
   note](LLM_WIKI/Manual/2026-07-15-kimi-staged-release-version-review.md).
+- Kimi reviewed the v0.3.0 nine-count display. Its short fallback review raised
+  five questions; checking the complete staged code showed that the first,
+  second, third, and fifth came from the deliberately shortened excerpt, while
+  the fourth is the intended no-change refresh behavior. No capability or data
+  boundary was expanded. See the [nine-count display review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-nine-count-display-review.md).
 
 ## Verification
 
@@ -192,12 +205,12 @@ Run `python3 -m unittest discover -s tests -v`. The suite validates synthetic
 schema data, in-memory form/observation adapters, and strict count-only
 diagnostics boundaries; it does not prove shadow parity or grant authority.
 The isolated Core lifecycle check is documented in `docs/read-only-skeleton.md`;
-on 2026-07-14 it passed with the aggregate summary and guarded authenticated
-loopback route on Core 2026.6.4 and 2026.7.0 using disposable configurations
-only. It also passed its safe-update restart check on both versions: it keeps
-the temporary configuration, replaces only the temporary HASC copy, and then
-requires the approved settings to survive. It proves neither live-home
-behaviour nor execution authority.
+on 2026-07-15 it passed with the aggregate summary, exactly nine diagnostic
+count sensors, and guarded authenticated loopback route on Core 2026.6.4 and
+2026.7.0 using disposable configurations only. It also passed its safe-update
+restart check on both versions: it keeps the temporary configuration, replaces
+only the temporary HASC copy, and then requires the approved settings to
+survive. It proves neither live-home behaviour nor execution authority.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on
@@ -228,11 +241,12 @@ test-only changes do not need a new HACS version.
 ## Next decision gate
 
 The read-only skeleton is limited to the two approved modes, local synthetic
-verification, the narrowly approved aggregate diagnostics summary, and the
-guarded local count-only path. The stricter HASC route still requires the exact
-Home Assistant read-only account; the separately approved Codex observation
-path does not bypass it. Its credential stays outside the repository and chat.
-Public HACS catalog listing, proxy, and direct execution remain out of scope.
+verification, the narrowly approved aggregate diagnostics summary, exactly nine
+diagnostic count sensors, and the guarded local count-only path. The stricter
+HASC route still requires the exact Home Assistant read-only account; the
+separately approved Codex observation path does not bypass it. Its credential
+stays outside the repository and chat. Public HACS catalog listing, proxy, and
+direct execution remain out of scope.
 
 The public custom-HACS decision and its narrow implementation boundary are
 recorded in the [HACS packaging decision record](docs/hacs-packaging-decision.md).
