@@ -42,6 +42,15 @@ def _mode_schema(default: str) -> vol.Schema:
     return vol.Schema({vol.Required(MODE_FIELD, default=default): MODE_SELECTOR})
 
 
+def _safe_mode_default(value: object) -> str:
+    """Return a safe form default without accepting a saved unsafe value."""
+
+    try:
+        return create_options(value)[MODE_FIELD]
+    except ConfigurationViolation:
+        return READ_ONLY_MODE
+
+
 class HausmanHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Create the single safe HausMan Hub configuration entry."""
 
@@ -92,12 +101,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             else:
                 return self.async_create_entry(title="", data=options)
 
-        current_mode = self.config_entry.options.get(
+        saved_mode = self.config_entry.options.get(
             MODE_FIELD,
             self.config_entry.data.get(MODE_FIELD, READ_ONLY_MODE),
         )
         return self.async_show_form(
             step_id="init",
-            data_schema=_mode_schema(current_mode),
+            data_schema=_mode_schema(_safe_mode_default(saved_mode)),
             errors=errors,
         )

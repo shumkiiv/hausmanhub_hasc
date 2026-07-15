@@ -291,6 +291,58 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("form", proxy_result["type"])
         self.assertEqual({"mode": "unsafe_mode"}, proxy_result["errors"])
 
+    async def test_options_form_hides_an_unsafe_saved_default(self) -> None:
+        """A broken saved mode cannot be displayed as a selectable safe mode."""
+
+        blocked = {"direct_execution_status": "direct_execution_blocked"}
+        for label, data, options in (
+            (
+                "unsafe option",
+                {"mode": "read-only", **blocked},
+                {"mode": "proxy"},
+            ),
+            (
+                "unknown initial mode",
+                {"mode": "outside_contract", **blocked},
+                {},
+            ),
+            (
+                "missing initial mode",
+                blocked,
+                {},
+            ),
+        ):
+            with self.subTest(label=label):
+                options_flow = self.config_flow.HausmanHubOptionsFlow()
+                options_flow.config_entry = FakeConfigEntry(dict(data), dict(options))
+                original_data = dict(options_flow.config_entry.data)
+                original_options = dict(options_flow.config_entry.options)
+
+                result = await options_flow.async_step_init()
+
+                self.assertEqual("form", result["type"])
+                self.assert_mode_field(result["schema"], "read-only")
+                self.assertEqual(original_data, options_flow.config_entry.data)
+                self.assertEqual(original_options, options_flow.config_entry.options)
+
+    async def test_options_form_keeps_a_safe_shadow_default(self) -> None:
+        """A valid saved shadow choice must remain the selected form default."""
+
+        options_flow = self.config_flow.HausmanHubOptionsFlow()
+        options_flow.config_entry = FakeConfigEntry(
+            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
+            {"mode": "shadow"},
+        )
+        original_data = dict(options_flow.config_entry.data)
+        original_options = dict(options_flow.config_entry.options)
+
+        result = await options_flow.async_step_init()
+
+        self.assertEqual("form", result["type"])
+        self.assert_mode_field(result["schema"], "shadow")
+        self.assertEqual(original_data, options_flow.config_entry.data)
+        self.assertEqual(original_options, options_flow.config_entry.options)
+
 
 if __name__ == "__main__":
     unittest.main()

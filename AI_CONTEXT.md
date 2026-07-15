@@ -54,6 +54,10 @@ Last updated: 2026-07-15.
   leaves old aggregate values in memory; reactivation restores only the same
   nine counts. It does not alter a device, service, external state, or
   home-control boundary.
+- Version 0.3.6 keeps the options screen safe even when old saved settings are
+  broken: it shows the neutral `read-only` default instead of an unapproved
+  saved mode, without repairing, saving, or otherwise changing that setting.
+  It does not add a device, service, home-data path, or home-control boundary.
 - The local HASC adapter check also covers a failed unload. In that case it
   keeps the current safe display intact rather than partly clearing its values
   or local page while Home Assistant still has HASC loaded.
@@ -416,6 +420,11 @@ Last updated: 2026-07-15.
   saved shape and adds no runtime, device, service, network, or home-data
   access. See the [extra config-form-input review
   note](LLM_WIKI/Manual/2026-07-15-kimi-extra-config-form-input-review.md).
+- Kimi reviewed the version 0.3.6 safe options-form default. Its first pass
+  requested an explicit test for the still-approved `shadow` default; after
+  that test was added, the final review found no issues. See the [safe
+  options-default review
+  note](LLM_WIKI/Manual/2026-07-15-kimi-safe-options-default-review.md).
 - Kimi reviewed recovery after a corrected temporary saved setting with no
   findings. It confirmed the additional persistence restart, exact same
   nine-count sensor names, fixed diagnostics, GET-only local page, collision
