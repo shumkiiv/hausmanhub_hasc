@@ -1601,10 +1601,12 @@ async def async_assert_unsafe_saved_update_closes_hasc(
     domain: str,
     entry: ConfigEntry,
     expected_entity_ids: frozenset[str],
-    reader_token: str,
+    reader_token: str | None,
     scenario_name: str,
+    *,
+    expect_retained_local_summary_route: bool = True,
 ) -> None:
-    """Prove an unsafe saved setting closes the running HASC immediately."""
+    """Prove an unsafe saved setting leaves every HASC display closed."""
 
     if entry.state is config_entries.ConfigEntryState.LOADED:
         raise RuntimeError(f"{scenario_name} must close HASC automatically")
@@ -1617,12 +1619,22 @@ async def async_assert_unsafe_saved_update_closes_hasc(
         if hass.states.get(entity_id) is not None:
             raise RuntimeError(f"{scenario_name} must clear count states automatically")
     await async_assert_closed_diagnostics(hass, domain, entry, scenario_name)
-    await async_assert_local_summary_is_unavailable(
-        hass,
-        domain,
-        reader_token,
-        scenario_name,
-    )
+    if expect_retained_local_summary_route:
+        if reader_token is None:
+            raise RuntimeError(
+                f"{scenario_name} must keep a reader token for its closed route"
+            )
+        await async_assert_local_summary_is_unavailable(
+            hass,
+            domain,
+            reader_token,
+            scenario_name,
+        )
+    else:
+        if hass.data.get(domain) is not None:
+            raise RuntimeError(f"{scenario_name} must not restore HASC runtime data")
+        if find_local_summary_routes(hass):
+            raise RuntimeError(f"{scenario_name} must not restore the local summary route")
 
 
 async def async_assert_stale_local_summary_pointer_is_unavailable_without_reading(
@@ -2426,6 +2438,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     unsafe_data: dict[str, str] | None = None,
     unsafe_options: dict[str, str] | None = None,
     scenario_name: str,
+    restart_before_activation: bool = False,
 ) -> RemovedHascEntry:
     """Prove manual activation cannot bypass one unsafe saved HASC setting."""
 
@@ -2433,6 +2446,8 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         raise RuntimeError("unsafe activation must change exactly one saved mapping")
 
     unsafe_hass = await async_start_empty_home_assistant(config_directory)
+    activation_hass: HomeAssistant | None = None
+    unsafe_hass_stopped = False
     removed_entry: RemovedHascEntry | None = None
     try:
         assert_hasc_stays_removed_after_restart(
@@ -2505,7 +2520,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         assert_result(
             unsafe_entry.disabled_by,
             ConfigEntryDisabler.USER,
-            "saving unsafe options must keep HASC user-disabled",
+            "saving unsafe settings must keep HASC user-disabled",
         )
         assert_result(
             unsafe_entry.state,
@@ -2531,46 +2546,105 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
             f"{scenario_name} before user activation",
         )
 
+        activation_entry = unsafe_entry
+        activation_reader_token: str | None = unsafe_reader_token
+        expect_retained_local_summary_route = True
+        if restart_before_activation:
+            await unsafe_hass.async_stop()
+            unsafe_hass_stopped = True
+            activation_hass = await async_start_empty_home_assistant(config_directory)
+            activation_entry = activation_hass.config_entries.async_get_entry(
+                unsafe_entry.entry_id
+            )
+            if activation_entry is None:
+                raise RuntimeError("the restarted unsafe HASC entry must remain repairable")
+            assert_result(
+                dict(activation_entry.data),
+                expected_data,
+                "restart must preserve unsafe activation data for manual repair",
+            )
+            assert_result(
+                dict(activation_entry.options),
+                expected_options,
+                "restart must preserve unsafe activation options for manual repair",
+            )
+            assert_deactivated_entry_stays_inactive_after_restart(
+                activation_hass,
+                domain,
+                activation_entry,
+                unsafe_entry_entity_ids,
+            )
+            await async_assert_closed_diagnostics(
+                activation_hass,
+                domain,
+                activation_entry,
+                f"{scenario_name} after restart before user activation",
+            )
+            assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
+            activation_reader_token = None
+            expect_retained_local_summary_route = False
+        else:
+            activation_hass = unsafe_hass
+
+        if activation_hass is None:
+            raise RuntimeError(
+                "unsafe activation lifecycle must keep a Home Assistant instance"
+            )
         await async_enable_unsafe_entry_without_reading_home(
-            unsafe_hass,
+            activation_hass,
             domain,
-            unsafe_entry,
+            activation_entry,
             f"user activation with {scenario_name}",
         )
         assert_result(
-            dict(unsafe_entry.data),
+            dict(activation_entry.data),
             expected_data,
             "unsafe activation must leave damaged data for manual repair",
         )
         assert_result(
-            dict(unsafe_entry.options),
+            dict(activation_entry.options),
             expected_options,
             "unsafe activation must leave manual repair possible",
         )
         await async_assert_unsafe_saved_update_closes_hasc(
-            unsafe_hass,
+            activation_hass,
             domain,
-            unsafe_entry,
+            activation_entry,
             unsafe_entry_entity_ids,
-            unsafe_reader_token,
+            activation_reader_token,
             f"user activation with {scenario_name}",
+            expect_retained_local_summary_route=expect_retained_local_summary_route,
         )
-        removed_entry = await async_remove_safe_entry(unsafe_hass, unsafe_entry.entry_id)
+        removed_entry = await async_remove_safe_entry(
+            activation_hass,
+            activation_entry.entry_id,
+        )
         await async_assert_closed_diagnostics(
-            unsafe_hass,
+            activation_hass,
             domain,
-            unsafe_entry,
+            activation_entry,
             f"removing {scenario_name} activation fixture",
         )
-        await async_assert_local_summary_is_unavailable(
-            unsafe_hass,
-            domain,
-            unsafe_reader_token,
-            f"removing {scenario_name} activation fixture",
-        )
-        assert_reserved_collision_entry_is_unchanged(unsafe_hass, reserved_entry)
+        if expect_retained_local_summary_route:
+            if activation_reader_token is None:
+                raise RuntimeError("removed unsafe activation must keep a reader token")
+            await async_assert_local_summary_is_unavailable(
+                activation_hass,
+                domain,
+                activation_reader_token,
+                f"removing {scenario_name} activation fixture",
+            )
+        else:
+            if activation_hass.data.get(domain) is not None:
+                raise RuntimeError("removed unsafe activation must not restore HASC runtime data")
+            if find_local_summary_routes(activation_hass):
+                raise RuntimeError("removed unsafe activation must not restore local summary route")
+        assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
     finally:
-        await unsafe_hass.async_stop()
+        if activation_hass is not None and activation_hass is not unsafe_hass:
+            await activation_hass.async_stop()
+        if not unsafe_hass_stopped:
+            await unsafe_hass.async_stop()
 
     if removed_entry is None:
         raise RuntimeError(f"the {scenario_name} activation fixture must remove its HASC entry")
@@ -3437,6 +3511,17 @@ async def async_run_check() -> None:
                 reserved_entry,
                 unsafe_data=UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA,
                 scenario_name="unsafe direct-execution block",
+            )
+        )
+        removed_entries.append(
+            await async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
+                config_directory,
+                domain,
+                tuple(removed_entries),
+                reserved_entry,
+                unsafe_data=UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA,
+                scenario_name="unsafe direct-execution block after restart",
+                restart_before_activation=True,
             )
         )
         removed_entries.extend(
