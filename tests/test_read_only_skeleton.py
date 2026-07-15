@@ -1106,6 +1106,36 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source.index("recovered_data_hass = await async_start_empty_home_assistant"),
         )
 
+    def test_core_smoke_check_rejects_unsafe_manual_activation(self) -> None:
+        """A disabled HASC must not start from either kind of unsafe saved setting."""
+
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+        lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
+
+        self.assertIn(
+            "async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle",
+            core_check_source,
+        )
+        self.assertIn("async_enable_unsafe_entry_without_reading_home", core_check_source)
+        self.assertIn("async_block_home_summary_reads", core_check_source)
+        self.assertIn("must reject unsafe activation", core_check_source)
+        self.assertIn("must attempt exactly one HASC reload", core_check_source)
+        self.assertIn("must leave unsafe HASC closed with a setup error", core_check_source)
+        self.assertIn("must not register services", core_check_source)
+        self.assertIn("unsafe_data: dict[str, str] | None = None", core_check_source)
+        self.assertIn("unsafe_options: dict[str, str] | None = None", core_check_source)
+        self.assertEqual(
+            2,
+            lifecycle_source.count(
+                "async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle("
+            ),
+        )
+        self.assertIn("unsafe_options=UNSAFE_PROXY_OPTIONS", lifecycle_source)
+        self.assertIn("unsafe_data=UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA", lifecycle_source)
+        self.assertIn('scenario_name="unsafe direct-execution block"', lifecycle_source)
+
     def test_core_smoke_check_recovers_corrected_saved_configuration(self) -> None:
         """A repaired temporary entry must recover only the approved surface."""
 

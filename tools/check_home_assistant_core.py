@@ -477,11 +477,6 @@ async def async_enable_unsafe_entry_without_reading_home(
         f"{scenario_name} must leave unsafe HASC closed with a setup error",
     )
     assert_result(
-        entry.data["direct_execution_status"],
-        "direct_execution_blocked",
-        f"{scenario_name} must keep direct execution blocked",
-    )
-    assert_result(
         hass.services.async_services().get(domain),
         None,
         f"{scenario_name} must not register services",
@@ -2422,13 +2417,20 @@ async def async_assert_invalid_saved_options_lifecycle(
     return removed_entry
 
 
-async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
+async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     config_directory: Path,
     domain: str,
     previous_removed_entries: tuple[RemovedHascEntry, ...],
     reserved_entry: ReservedCollisionEntry,
+    *,
+    unsafe_data: dict[str, str] | None = None,
+    unsafe_options: dict[str, str] | None = None,
+    scenario_name: str,
 ) -> RemovedHascEntry:
-    """Prove manual activation cannot bypass unsafe saved-mode protection."""
+    """Prove manual activation cannot bypass one unsafe saved HASC setting."""
+
+    if (unsafe_data is None) is (unsafe_options is None):
+        raise RuntimeError("unsafe activation must change exactly one saved mapping")
 
     unsafe_hass = await async_start_empty_home_assistant(config_directory)
     removed_entry: RemovedHascEntry | None = None
@@ -2454,7 +2456,7 @@ async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
         )
         unsafe_reader_token = await async_create_test_read_only_access_token(
             unsafe_hass,
-            "HASC unsafe-activation test user",
+            f"HASC {scenario_name} activation test user",
         )
         await async_disable_safe_entry(unsafe_hass, unsafe_entry)
         assert_entry_has_disabled_summary_sensors(
@@ -2467,32 +2469,38 @@ async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
             unsafe_hass,
             domain,
             unsafe_entry,
-            "user deactivation before unsafe activation",
+            f"{scenario_name} before user activation",
         )
         await async_assert_local_summary_is_unavailable(
             unsafe_hass,
             domain,
             unsafe_reader_token,
-            "user deactivation before unsafe activation",
+            f"{scenario_name} before user activation",
         )
 
         safe_data = dict(unsafe_entry.data)
+        safe_options = dict(unsafe_entry.options)
+        expected_data = dict(unsafe_data) if unsafe_data is not None else dict(safe_data)
+        expected_options = (
+            dict(unsafe_options) if unsafe_options is not None else dict(safe_options)
+        )
         await async_save_unsafe_hasc_setting_without_reading_home(
             unsafe_hass,
             domain,
             unsafe_entry,
-            "unsafe saved mode before user activation",
-            options=UNSAFE_PROXY_OPTIONS,
+            f"{scenario_name} before user activation",
+            data=unsafe_data,
+            options=unsafe_options,
         )
         assert_result(
             dict(unsafe_entry.data),
-            safe_data,
-            "unsafe options must not mutate the direct-execution safety data",
+            expected_data,
+            "unsafe saved data must remain available for manual repair",
         )
         assert_result(
             dict(unsafe_entry.options),
-            UNSAFE_PROXY_OPTIONS,
-            "the unsafe activation fixture must retain its damaged options",
+            expected_options,
+            "unsafe saved options must remain available for manual repair",
         )
         assert_result(
             unsafe_entry.disabled_by,
@@ -2502,7 +2510,7 @@ async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
         assert_result(
             unsafe_entry.state,
             config_entries.ConfigEntryState.NOT_LOADED,
-            "saving unsafe options must keep disabled HASC not loaded",
+            "saving unsafe settings must keep disabled HASC not loaded",
         )
         assert_entry_has_disabled_summary_sensors(
             unsafe_hass,
@@ -2514,29 +2522,29 @@ async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
             unsafe_hass,
             domain,
             unsafe_entry,
-            "unsafe saved mode before user activation",
+            f"{scenario_name} before user activation",
         )
         await async_assert_local_summary_is_unavailable(
             unsafe_hass,
             domain,
             unsafe_reader_token,
-            "unsafe saved mode before user activation",
+            f"{scenario_name} before user activation",
         )
 
         await async_enable_unsafe_entry_without_reading_home(
             unsafe_hass,
             domain,
             unsafe_entry,
-            "user activation with unsafe saved mode",
+            f"user activation with {scenario_name}",
         )
         assert_result(
             dict(unsafe_entry.data),
-            safe_data,
-            "unsafe activation must preserve the direct-execution safety data",
+            expected_data,
+            "unsafe activation must leave damaged data for manual repair",
         )
         assert_result(
             dict(unsafe_entry.options),
-            UNSAFE_PROXY_OPTIONS,
+            expected_options,
             "unsafe activation must leave manual repair possible",
         )
         await async_assert_unsafe_saved_update_closes_hasc(
@@ -2545,27 +2553,27 @@ async def async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
             unsafe_entry,
             unsafe_entry_entity_ids,
             unsafe_reader_token,
-            "user activation with unsafe saved mode",
+            f"user activation with {scenario_name}",
         )
         removed_entry = await async_remove_safe_entry(unsafe_hass, unsafe_entry.entry_id)
         await async_assert_closed_diagnostics(
             unsafe_hass,
             domain,
             unsafe_entry,
-            "removing unsafe user-activation fixture",
+            f"removing {scenario_name} activation fixture",
         )
         await async_assert_local_summary_is_unavailable(
             unsafe_hass,
             domain,
             unsafe_reader_token,
-            "removing unsafe user-activation fixture",
+            f"removing {scenario_name} activation fixture",
         )
         assert_reserved_collision_entry_is_unchanged(unsafe_hass, reserved_entry)
     finally:
         await unsafe_hass.async_stop()
 
     if removed_entry is None:
-        raise RuntimeError("the unsafe user-activation fixture must remove its HASC entry")
+        raise RuntimeError(f"the {scenario_name} activation fixture must remove its HASC entry")
 
     removal_hass = await async_start_empty_home_assistant(config_directory)
     try:
@@ -3412,11 +3420,23 @@ async def async_run_check() -> None:
             )
         )
         removed_entries.append(
-            await async_assert_user_deactivated_unsafe_options_cannot_enable_lifecycle(
+            await async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 config_directory,
                 domain,
                 tuple(removed_entries),
                 reserved_entry,
+                unsafe_options=UNSAFE_PROXY_OPTIONS,
+                scenario_name="unsafe saved mode",
+            )
+        )
+        removed_entries.append(
+            await async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
+                config_directory,
+                domain,
+                tuple(removed_entries),
+                reserved_entry,
+                unsafe_data=UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA,
+                scenario_name="unsafe direct-execution block",
             )
         )
         removed_entries.extend(

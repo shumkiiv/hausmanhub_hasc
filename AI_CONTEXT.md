@@ -157,6 +157,13 @@ Last updated: 2026-07-16.
   it stays absent after an empty restart. Kimi found no issue; see the [unsafe
   user-activation review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-user-activation-review.md).
+- The same disposable activation check now separately uses damaged main data
+  whose direct-execution marker says `allowed`. The user activation is still
+  rejected before any home read; HASC stays in a setup-error state with no
+  counts, diagnostics, local page, service, device, or execution surface. The
+  deliberately bad data remains only for manual repair. Kimi found no issue;
+  see the [unsafe direct-execution activation review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-activation-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the
