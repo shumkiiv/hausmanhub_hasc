@@ -29,11 +29,9 @@ from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_READ_ONLY
 from homeassistant import loader
 from homeassistant.bootstrap import async_from_config_dict
 from homeassistant.config_entries import ConfigEntry, ConfigEntryDisabler
-from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import InvalidData
 from homeassistant.helpers import device_registry, entity_registry
-from homeassistant.helpers.entity_platform import async_get_platforms
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -400,7 +398,7 @@ async def async_update_safe_options(
     entry: ConfigEntry,
     target_mode: str,
 ) -> None:
-    """Reject unsafe options, persist a safe mode, and verify a safe reload."""
+    """Reject unsafe options and verify the saved mode applies immediately."""
 
     rejected_options_form = await hass.config_entries.options.async_init(entry.entry_id)
     assert_result(
@@ -432,16 +430,29 @@ async def async_update_safe_options(
 
     options_form = await hass.config_entries.options.async_init(entry.entry_id)
     assert_result(options_form["type"], "form", "options flow must show a form")
-    safe_options = await hass.config_entries.options.async_configure(
-        options_form["flow_id"],
-        {"mode": target_mode},
-    )
+    reload_calls: list[str] = []
+    original_async_reload = hass.config_entries.async_reload
+
+    async def async_recording_reload(entry_id: str) -> bool:
+        """Record the entry selected by HASC's own saved-setting listener."""
+
+        reload_calls.append(entry_id)
+        return await original_async_reload(entry_id)
+
+    hass.config_entries.async_reload = async_recording_reload
+    try:
+        safe_options = await hass.config_entries.options.async_configure(
+            options_form["flow_id"],
+            {"mode": target_mode},
+        )
+        await hass.async_block_till_done()
+    finally:
+        hass.config_entries.async_reload = original_async_reload
     assert_result(
         safe_options["type"],
         "create_entry",
         f"{target_mode} must be accepted in options",
     )
-    await hass.async_block_till_done()
     assert_result(
         entry.options.get("mode"),
         target_mode,
@@ -453,17 +464,14 @@ async def async_update_safe_options(
         "options must not change the direct execution block",
     )
     assert_result(
-        entry.state,
-        config_entries.ConfigEntryState.LOADED,
-        "updating safe options must keep the entry loaded",
+        reload_calls,
+        [entry.entry_id],
+        "saving safe options must reload only HASC",
     )
-    reloaded = await hass.config_entries.async_reload(entry.entry_id)
-    assert_result(reloaded, True, "safe entry must reload successfully")
-    await hass.async_block_till_done()
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "safe entry must stay loaded after a safe reload",
+        "saving safe options must leave HASC loaded",
     )
 
 
@@ -507,56 +515,6 @@ async def async_assert_broken_options_form_defaults_to_read_only(
         saved_options,
         f"opening {scenario_name} options must not repair saved options",
     )
-
-
-async def async_assert_unsafe_summary_refresh_is_unavailable_without_reading(
-    hass: HomeAssistant,
-    domain: str,
-    expected_entity_ids: frozenset[str],
-    scenario_name: str,
-) -> None:
-    """Require a running count display to close before a damaged update reads home."""
-
-    coordinators_by_id: dict[int, object] = {}
-    for entity_platform in async_get_platforms(hass, domain):
-        for entity_id, entity in entity_platform.entities.items():
-            if entity_id in expected_entity_ids:
-                coordinator = getattr(entity, "coordinator", None)
-                if coordinator is None:
-                    raise RuntimeError(f"{scenario_name} summary sensor needs a coordinator")
-                coordinators_by_id[id(coordinator)] = coordinator
-    if len(coordinators_by_id) != 1:
-        raise RuntimeError(f"{scenario_name} must retain one summary coordinator")
-    coordinator = next(iter(coordinators_by_id.values()))
-
-    integration = await loader.async_get_integration(hass, domain)
-    sensor_platform = await integration.async_get_platform("sensor")
-    original_collect_home_summary = sensor_platform.collect_home_summary
-
-    def fail_if_home_is_read(*_: object, **__: object) -> object:
-        raise RuntimeError("an unsafe HASC summary refresh must not read the home")
-
-    sensor_platform.collect_home_summary = fail_if_home_is_read
-    try:
-        await coordinator.async_refresh()
-        await hass.async_block_till_done()
-    finally:
-        sensor_platform.collect_home_summary = original_collect_home_summary
-
-    assert_result(
-        getattr(coordinator, "last_update_success", None),
-        False,
-        f"{scenario_name} summary refresh must fail closed",
-    )
-    for entity_id in expected_entity_ids:
-        state = hass.states.get(entity_id)
-        if state is None:
-            raise RuntimeError(f"{scenario_name} summary sensor must become unavailable")
-        assert_result(
-            state.state,
-            STATE_UNAVAILABLE,
-            f"{scenario_name} summary sensor must become unavailable",
-        )
 
 
 async def async_assert_safe_diagnostics(
@@ -1444,6 +1402,75 @@ async def async_assert_local_summary_is_unavailable(
         await client.close()
 
 
+async def async_save_unsafe_hasc_setting_without_reading_home(
+    hass: HomeAssistant,
+    domain: str,
+    entry: ConfigEntry,
+    scenario_name: str,
+    *,
+    data: dict[str, str] | None = None,
+    options: dict[str, str] | None = None,
+) -> None:
+    """Save one unsafe mapping while every HASC home reader fails immediately."""
+
+    if (data is None) is (options is None):
+        raise RuntimeError("the unsafe HASC update must change exactly one saved mapping")
+
+    integration = await loader.async_get_integration(hass, domain)
+    adapters = (
+        await integration.async_get_platform("sensor"),
+        await integration.async_get_platform("diagnostics"),
+        await integration.async_get_platform("local_summary"),
+    )
+    original_collectors = tuple(
+        (adapter, adapter.collect_home_summary) for adapter in adapters
+    )
+
+    def fail_if_home_is_read(*_: object, **__: object) -> object:
+        raise RuntimeError(f"{scenario_name} automatic closure must not read the home")
+
+    for adapter, _ in original_collectors:
+        adapter.collect_home_summary = fail_if_home_is_read
+    try:
+        if data is not None:
+            hass.config_entries.async_update_entry(entry, data=data)
+        else:
+            hass.config_entries.async_update_entry(entry, options=options)
+        await hass.async_block_till_done()
+    finally:
+        for adapter, original_collect_home_summary in original_collectors:
+            adapter.collect_home_summary = original_collect_home_summary
+
+
+async def async_assert_unsafe_saved_update_closes_hasc(
+    hass: HomeAssistant,
+    domain: str,
+    entry: ConfigEntry,
+    expected_entity_ids: frozenset[str],
+    reader_token: str,
+    scenario_name: str,
+) -> None:
+    """Prove an unsafe saved setting closes the running HASC immediately."""
+
+    if entry.state is config_entries.ConfigEntryState.LOADED:
+        raise RuntimeError(f"{scenario_name} must close HASC automatically")
+    if entity_registry.async_entries_for_config_entry(
+        entity_registry.async_get(hass),
+        entry.entry_id,
+    ):
+        raise RuntimeError(f"{scenario_name} must clear entity registry records automatically")
+    for entity_id in expected_entity_ids:
+        if hass.states.get(entity_id) is not None:
+            raise RuntimeError(f"{scenario_name} must clear count states automatically")
+    await async_assert_closed_diagnostics(hass, domain, entry, scenario_name)
+    await async_assert_local_summary_is_unavailable(
+        hass,
+        domain,
+        reader_token,
+        scenario_name,
+    )
+
+
 async def async_assert_stale_local_summary_pointer_is_unavailable_without_reading(
     hass: HomeAssistant,
     domain: str,
@@ -1499,59 +1526,6 @@ async def async_assert_stale_local_summary_pointer_is_unavailable_without_readin
     finally:
         if runtime.get(LOCAL_SUMMARY_ACTIVE_ENTRY) is entry:
             runtime.pop(LOCAL_SUMMARY_ACTIVE_ENTRY, None)
-        local_summary_platform.collect_home_summary = original_collect_home_summary
-        await client.close()
-
-
-async def async_assert_unsafe_local_summary_is_unavailable_without_reading(
-    hass: HomeAssistant,
-    domain: str,
-    entry: ConfigEntry,
-    reader_token: str,
-    unavailable_after: str,
-) -> None:
-    """Require a loaded but unsafe entry to close before reading the home."""
-
-    runtime = hass.data.get(domain)
-    if not isinstance(runtime, dict):
-        raise RuntimeError("the retained local summary route must keep its runtime data")
-    if runtime.get(LOCAL_SUMMARY_ACTIVE_ENTRY) is not entry:
-        raise RuntimeError(f"{unavailable_after} must retain the unsafe local summary entry")
-    assert_result(
-        entry.state,
-        config_entries.ConfigEntryState.LOADED,
-        f"{unavailable_after} must keep the unsafe HASC entry loaded before reload",
-    )
-    if len(find_local_summary_routes(hass)) != 1:
-        raise RuntimeError("the retained local summary route must remain unique")
-
-    integration = await loader.async_get_integration(hass, domain)
-    local_summary_platform = await integration.async_get_platform("local_summary")
-    original_collect_home_summary = local_summary_platform.collect_home_summary
-
-    def fail_if_home_is_read(*_: object, **__: object) -> object:
-        raise RuntimeError("an unsafe local summary must not read the home")
-
-    local_summary_platform.collect_home_summary = fail_if_home_is_read
-    server = TestServer(hass.http.app, host="127.0.0.1")
-    client = TestClient(server)
-    try:
-        await client.start_server()
-        unavailable = await client.get(
-            "/api/hausman_hub/local-summary",
-            headers={"Authorization": f"Bearer {reader_token}"},
-        )
-        assert_result(
-            unavailable.status,
-            HTTPStatus.SERVICE_UNAVAILABLE,
-            f"local summary must become unavailable after {unavailable_after}",
-        )
-        payload = await unavailable.json()
-        if not isinstance(payload, dict):
-            raise RuntimeError("unavailable local summary response must be a dictionary")
-        if set(payload) & set(SUMMARY_SENSOR_KEYS):
-            raise RuntimeError("unavailable local summary must not return count values")
-    finally:
         local_summary_platform.collect_home_summary = original_collect_home_summary
         await client.close()
 
@@ -1913,66 +1887,30 @@ async def async_assert_invalid_saved_data_lifecycle(
             invalid_data_hass,
             f"HASC temporary {scenario_name} test user",
         )
-        invalid_data_hass.config_entries.async_update_entry(
+        await async_save_unsafe_hasc_setting_without_reading_home(
+            invalid_data_hass,
+            domain,
             invalid_entry,
+            f"{scenario_name} saved main settings",
             data=saved_unsafe_data,
         )
-        await invalid_data_hass.async_block_till_done()
         assert_result(
             dict(invalid_entry.data),
             saved_unsafe_data,
             "the temporary unsafe HASC data must persist",
-        )
-        assert_result(
-            invalid_entry.state,
-            config_entries.ConfigEntryState.LOADED,
-            "saving unsafe HASC data must not unload before an explicit reload",
         )
         await async_assert_broken_options_form_defaults_to_read_only(
             invalid_data_hass,
             invalid_entry,
             f"{scenario_name} saved main settings",
         )
-        await async_assert_unsafe_summary_refresh_is_unavailable_without_reading(
+        await async_assert_unsafe_saved_update_closes_hasc(
             invalid_data_hass,
             domain,
+            invalid_entry,
             invalid_entry_entity_ids,
-            f"{scenario_name} saved main settings",
-        )
-        await async_assert_closed_diagnostics(
-            invalid_data_hass,
-            domain,
-            invalid_entry,
-            f"{scenario_name} saved main settings",
-        )
-        await async_assert_unsafe_local_summary_is_unavailable_without_reading(
-            invalid_data_hass,
-            domain,
-            invalid_entry,
             invalid_reader_token,
             f"{scenario_name} saved main settings",
-        )
-        reloaded_invalid_entry = await invalid_data_hass.config_entries.async_reload(
-            invalid_entry.entry_id
-        )
-        assert_result(
-            reloaded_invalid_entry,
-            False,
-            "an unsafe saved HASC data entry must reject reload",
-        )
-        await invalid_data_hass.async_block_till_done()
-        if invalid_entry.state is config_entries.ConfigEntryState.LOADED:
-            raise RuntimeError("unsafe saved HASC data must unload on reload")
-        if entity_registry.async_entries_for_config_entry(
-            entity_registry.async_get(invalid_data_hass),
-            invalid_entry.entry_id,
-        ):
-            raise RuntimeError("unsafe saved HASC data must clear entity registry records on reload")
-        await async_assert_local_summary_is_unavailable(
-            invalid_data_hass,
-            domain,
-            invalid_reader_token,
-            f"{scenario_name} reload",
         )
     finally:
         await invalid_data_hass.async_stop()
@@ -2166,68 +2104,30 @@ async def async_assert_invalid_saved_options_lifecycle(
             invalid_options_hass,
             f"HASC temporary {scenario_name} test user",
         )
-        invalid_options_hass.config_entries.async_update_entry(
+        await async_save_unsafe_hasc_setting_without_reading_home(
+            invalid_options_hass,
+            domain,
             invalid_options_entry,
+            f"{scenario_name} saved options",
             options=saved_unsafe_options,
         )
-        await invalid_options_hass.async_block_till_done()
         assert_result(
             dict(invalid_options_entry.options),
             saved_unsafe_options,
             "the temporary unsafe HASC options must persist",
-        )
-        assert_result(
-            invalid_options_entry.state,
-            config_entries.ConfigEntryState.LOADED,
-            "saving unsafe HASC options must not unload before an explicit reload",
         )
         await async_assert_broken_options_form_defaults_to_read_only(
             invalid_options_hass,
             invalid_options_entry,
             f"{scenario_name} saved options",
         )
-        await async_assert_unsafe_summary_refresh_is_unavailable_without_reading(
+        await async_assert_unsafe_saved_update_closes_hasc(
             invalid_options_hass,
             domain,
+            invalid_options_entry,
             invalid_options_entity_ids,
-            f"{scenario_name} saved options",
-        )
-        await async_assert_closed_diagnostics(
-            invalid_options_hass,
-            domain,
-            invalid_options_entry,
-            f"{scenario_name} saved options",
-        )
-        await async_assert_unsafe_local_summary_is_unavailable_without_reading(
-            invalid_options_hass,
-            domain,
-            invalid_options_entry,
             invalid_options_reader_token,
             f"{scenario_name} saved options",
-        )
-        reloaded_invalid_options_entry = await invalid_options_hass.config_entries.async_reload(
-            invalid_options_entry.entry_id
-        )
-        assert_result(
-            reloaded_invalid_options_entry,
-            False,
-            "an unsafe saved HASC options entry must reject reload",
-        )
-        await invalid_options_hass.async_block_till_done()
-        if invalid_options_entry.state is config_entries.ConfigEntryState.LOADED:
-            raise RuntimeError("unsafe saved HASC options must unload on reload")
-        if entity_registry.async_entries_for_config_entry(
-            entity_registry.async_get(invalid_options_hass),
-            invalid_options_entry.entry_id,
-        ):
-            raise RuntimeError(
-                "unsafe saved HASC options must clear entity registry records on reload"
-            )
-        await async_assert_local_summary_is_unavailable(
-            invalid_options_hass,
-            domain,
-            invalid_options_reader_token,
-            f"{scenario_name} reload",
         )
     finally:
         await invalid_options_hass.async_stop()

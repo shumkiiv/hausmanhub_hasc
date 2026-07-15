@@ -68,6 +68,7 @@ class FakeConfigEntries:
         self.loaded_entries: list[object] = []
         self.forwarded: list[tuple[object, tuple[object, ...]]] = []
         self.manager_unloads: list[str] = []
+        self.reloaded: list[str] = []
         self.unloaded: list[tuple[object, tuple[object, ...]]] = []
         self.unload_succeeds = unload_succeeds
 
@@ -103,6 +104,12 @@ class FakeConfigEntries:
         self.loaded_entries = [
             entry for entry in self.loaded_entries if getattr(entry, "entry_id", None) != entry_id
         ]
+        return True
+
+    async def async_reload(self, entry_id: str) -> bool:
+        """Record a reload request without starting a real Home Assistant."""
+
+        self.reloaded.append(entry_id)
         return True
 
     async def async_unload_platforms(
@@ -226,6 +233,30 @@ class FakeEntry:
         self.domain = "hausman_hub"
         self.data = data
         self.options = options
+        self.update_listeners: list[object] = []
+        self.unload_callbacks: list[object] = []
+
+    def add_update_listener(self, listener: object) -> object:
+        """Register one synthetic saved-setting listener."""
+
+        self.update_listeners.append(listener)
+
+        def remove_listener() -> None:
+            self.update_listeners.remove(listener)
+
+        return remove_listener
+
+    def async_on_unload(self, callback: object) -> None:
+        """Keep the cleanup callback until the synthetic unload succeeds."""
+
+        self.unload_callbacks.append(callback)
+
+    def process_unload_callbacks(self) -> None:
+        """Run the callbacks that Home Assistant normally runs after unload."""
+
+        while self.unload_callbacks:
+            callback = self.unload_callbacks.pop()
+            callback()
 
 
 def reader_user(*group_ids: str, admin: bool = False, system_generated: bool = False) -> object:
@@ -416,6 +447,16 @@ class LocalSummaryAccessTest(unittest.TestCase):
             self.hass.config_entries.forwarded,
         )
 
+    def test_saved_setting_change_reloads_only_this_hasc_entry(self) -> None:
+        """A saved setting must ask Home Assistant to reload only HASC."""
+
+        self.assertEqual(1, len(self.entry.update_listeners))
+        listener = self.entry.update_listeners[0]
+
+        asyncio.run(listener(self.hass, self.entry))
+
+        self.assertEqual([self.entry.entry_id], self.hass.config_entries.reloaded)
+
     def test_view_fails_closed_when_entry_is_unsafe_or_unloaded(self) -> None:
         self.entry.data["direct_execution_status"] = "not_blocked"
         unsafe_response = asyncio.run(
@@ -519,6 +560,11 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertIn("hasc-owned", self.hass.entity_registry.entities)
         self.assertEqual([], self.hass.entity_registry.removed)
         self.assertIn("sensor.synthetic_private_temperature", self.hass.states.values)
+        self.assertEqual(1, len(self.entry.update_listeners))
+
+        self.entry.process_unload_callbacks()
+
+        self.assertEqual([], self.entry.update_listeners)
 
     def test_failed_unload_keeps_the_current_hasc_state_and_page(self) -> None:
         """A failed unload must not leave a half-cleared HASC display behind."""
@@ -551,6 +597,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertIn(hasc_state, failed_hass.states.values)
         self.assertIn("hasc-owned", failed_hass.entity_registry.entities)
         self.assertEqual([], failed_hass.entity_registry.removed)
+        self.assertEqual(1, len(failed_entry.update_listeners))
         response = asyncio.run(
             failed_hass.http.views[0].get(
                 FakeRequest("127.0.0.1", reader_user("system-read-only"))

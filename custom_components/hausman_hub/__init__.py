@@ -42,7 +42,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, (Platform.SENSOR,))
     register_local_summary_access(hass, entry)
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Apply a saved HASC setting by reloading only this HASC entry."""
+
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def _close_running_duplicate_hasc_entries(

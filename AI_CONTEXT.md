@@ -80,17 +80,10 @@ Last updated: 2026-07-16.
   deactivation before and after restart, removal through a stale object, and
   both malformed duplicate pairs. It patches the temporary diagnostics reader
   to fail if a closed report attempts to observe the home.
-- The isolated Core check also closes diagnostics immediately after its own
-  saved main settings or saved mode choice become invalid, before an explicit
-  reload. At that point the entry is still loaded but unsafe, so all five main
-  variants and both mode-choice variants must return only unavailable without
-  reading the local home summary.
-- Version 0.3.9 gives the same before-reload protection to the authenticated
-  local summary page. Its application boundary validates saved data and options
-  before it asks for the nine counts. A loaded but unsafe entry therefore
-  returns only unavailable without reading the local home summary; the
-  disposable Core check covers the same five main-settings and two mode-choice
-  variants with a reader that fails if called.
+- Versions 0.3.8 and 0.3.9 keep diagnostics and the local summary page closed
+  if they ever encounter a saved setting that is unsafe. Those defensive
+  boundaries remain even though version 0.3.13 now closes the whole HASC
+  display immediately after such a saved change.
 - Version 0.3.10 also requires the authenticated local page to find exactly
   one saved HASC entry that Home Assistant still reports as loaded. A stale
   in-memory page pointer after an ordinary stop therefore returns only
@@ -105,13 +98,27 @@ Last updated: 2026-07-16.
   the disposable Core check covers every damaged main-setting and option
   variant before it closes the entry for manual repair.
 - Version 0.3.12 validates the complete saved configuration before every
-  scheduled nine-count refresh. If a running entry becomes damaged, the
-  coordinator raises a fixed local failure before it calls the home-summary
-  reader, and all nine display sensors become unavailable. The disposable
-  Core check damages every existing main-setting and option variant while the
-  display is running, replaces the reader with a failing function, forces the
-  live coordinator refresh, and requires unavailable sensors, closed
-  diagnostics, and a closed local page.
+  scheduled nine-count refresh. Its coordinator boundary remains a second
+  safety net if an unsafe setting somehow reaches a running display.
+- Version 0.3.13 uses Home Assistant's standard saved-setting listener after
+  the nine sensors and local page are safely registered. A permitted mode
+  change reloads only the same HASC entry and takes effect immediately. An
+  unsafe saved main setting or mode choice automatically unloads that HASC
+  display, clears its nine count states and its HASC-only registry records, and
+  rejects setup before any home-summary reader can run. The disposable Core
+  check covers all five unsafe main-setting variants and both unsafe
+  mode-choice variants, verifies the closed diagnostics and local page, and
+  records exactly one reload of the same HASC entry for a normal safe mode
+  change. Before each unsafe save, it replaces the sensor, diagnostics, and
+  local-page home readers with a failure, so any read during the automatic
+  closing interval fails the Core check. A saved entry that failed setup
+  remains available for manual repair; because no running HASC remains to
+  listen, its owner then explicitly reloads HASC after correcting it.
+- Kimi independently reviewed the automatic saved-setting reload and closure.
+  Its first review requested an explicit no-read check during the closing
+  interval; the follow-up review found no remaining issues. See the
+  [automatic settings reload review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-automatic-settings-reload-review.md).
 - Kimi independently reviewed the live count-refresh closure with no
   findings. See the [live count-refresh review
   note](LLM_WIKI/Manual/2026-07-15-kimi-live-summary-refresh-review.md).

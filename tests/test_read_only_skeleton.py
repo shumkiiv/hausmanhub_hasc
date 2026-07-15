@@ -51,13 +51,35 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.3.12", manifest["version"])
+        self.assertEqual("0.3.13", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
         change_history = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
         self.assertIn(f"## {manifest['version']} —", change_history)
+
+    def test_saved_settings_reload_only_this_hasc_entry(self) -> None:
+        """A saved HASC setting must apply without restarting the whole home."""
+
+        integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
+        core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "entry.async_on_unload(entry.add_update_listener(_async_reload_entry))",
+            integration_source,
+        )
+        self.assertIn(
+            "await hass.config_entries.async_reload(entry.entry_id)",
+            integration_source,
+        )
+        self.assertLess(
+            integration_source.index("register_local_summary_access(hass, entry)"),
+            integration_source.index("entry.async_on_unload(entry.add_update_listener"),
+        )
+        self.assertIn("saving safe options must reload only HASC", core_check_source)
 
     def test_distribution_documents_mark_the_private_choice_as_history(self) -> None:
         """Keep current manual-HACS instructions separate from the old choice."""
@@ -985,14 +1007,15 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "an invalid saved HASC entry must not restore entity registry records",
             core_check_source,
         )
+        self.assertIn("async_assert_unsafe_saved_update_closes_hasc", core_check_source)
         self.assertIn(
-            "unsafe saved HASC data must clear entity registry records on reload",
+            "async_save_unsafe_hasc_setting_without_reading_home",
             core_check_source,
         )
-        self.assertIn(
-            "unsafe saved HASC options must clear entity registry records on reload",
-            core_check_source,
-        )
+        self.assertIn("must close HASC automatically", core_check_source)
+        self.assertIn("must clear entity registry records automatically", core_check_source)
+        self.assertIn("must clear count states automatically", core_check_source)
+        self.assertIn("automatic closure must not read the home", core_check_source)
         self.assertIn("async_assert_invalid_saved_data_lifecycle", core_check_source)
         self.assertIn("UNSAFE_PROXY_DATA", core_check_source)
         self.assertIn("UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA", core_check_source)
@@ -1012,27 +1035,11 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn('safe_options_mode="shadow",', lifecycle_source)
         self.assertIn('"extra-field data",', lifecycle_source)
         self.assertIn(
-            "an unsafe saved HASC data entry must reject reload",
-            core_check_source,
-        )
-        self.assertIn(
             'f"{scenario_name} saved main settings",',
             core_check_source,
         )
         self.assertIn(
             'f"{scenario_name} saved options",',
-            core_check_source,
-        )
-        self.assertIn(
-            "async_assert_unsafe_local_summary_is_unavailable_without_reading",
-            core_check_source,
-        )
-        self.assertIn(
-            "saving unsafe HASC data must not unload before an explicit reload",
-            core_check_source,
-        )
-        self.assertIn(
-            "saving unsafe HASC options must not unload before an explicit reload",
             core_check_source,
         )
         self.assertIn(
@@ -1056,21 +1063,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
-            "async_assert_unsafe_summary_refresh_is_unavailable_without_reading",
+            "await async_assert_closed_diagnostics(hass, domain, entry, scenario_name)",
             core_check_source,
         )
-        self.assertIn(
-            "an unsafe HASC summary refresh must not read the home",
-            core_check_source,
-        )
-        self.assertIn(
-            "summary refresh must fail closed",
-            core_check_source,
-        )
-        self.assertIn(
-            "summary sensor must become unavailable",
-            core_check_source,
-        )
+        self.assertIn("await async_assert_local_summary_is_unavailable(", core_check_source)
         self.assertIn("corrected HASC data removal", core_check_source)
         self.assertIn("(*previous_removed_entries, removed_entry)", core_check_source)
         self.assertLess(
@@ -1157,10 +1153,6 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn('"extra-field options",', lifecycle_source)
         self.assertIn("invalid_options_safe_options", core_check_source)
         self.assertIn("invalid_options_entity_ids", core_check_source)
-        self.assertIn(
-            "an unsafe saved HASC options entry must reject reload",
-            core_check_source,
-        )
         self.assertIn(
             "manually corrected HASC options must reload successfully",
             core_check_source,
