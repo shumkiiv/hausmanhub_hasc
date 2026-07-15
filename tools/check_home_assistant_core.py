@@ -2543,6 +2543,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     repair_after_rejected_activation: bool = False,
     reclose_after_recovery: bool = False,
     repair_after_repeat_closure: bool = False,
+    restart_after_repeat_repair: bool = False,
 ) -> RemovedHascEntry:
     """Prove manual activation cannot bypass one unsafe saved HASC setting."""
 
@@ -2552,6 +2553,8 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         raise RuntimeError("repeat closure requires a completed safe recovery")
     if repair_after_repeat_closure and not reclose_after_recovery:
         raise RuntimeError("repeat repair requires a completed repeat closure")
+    if restart_after_repeat_repair and not repair_after_repeat_closure:
+        raise RuntimeError("repeat repair restart requires a completed repeat repair")
 
     unsafe_hass = await async_start_empty_home_assistant(config_directory)
     activation_hass: HomeAssistant | None = None
@@ -2785,6 +2788,25 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
             )
             expect_retained_local_summary_route = True
             assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
+        if restart_after_repeat_repair:
+            await activation_hass.async_stop()
+            if activation_hass is unsafe_hass:
+                unsafe_hass_stopped = True
+            activation_hass = await async_start_empty_home_assistant(config_directory)
+            activation_entry = await async_assert_corrected_entry_stays_safe_after_restart(
+                activation_hass,
+                domain,
+                activation_entry.entry_id,
+                safe_data,
+                safe_options,
+                unsafe_entry_entity_ids,
+                reserved_entry,
+            )
+            activation_reader_token = await async_create_test_read_only_access_token(
+                activation_hass,
+                f"HASC {scenario_name} repeat-repair restart removal test user",
+            )
+            expect_retained_local_summary_route = True
         removed_entry = await async_remove_safe_entry(
             activation_hass,
             activation_entry.entry_id,
@@ -3706,6 +3728,7 @@ async def async_run_check() -> None:
                 repair_after_rejected_activation=True,
                 reclose_after_recovery=True,
                 repair_after_repeat_closure=True,
+                restart_after_repeat_repair=True,
             )
         )
         removed_entries.extend(

@@ -191,6 +191,12 @@ Last updated: 2026-07-16.
   restores only the same nine counts and safe display. Kimi found no issue;
   see the [unsafe direct-execution repeat-repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-repair-review.md).
+- A full empty restart after that second repair preserves only the exact safe
+  HASC entry and its same nine counts, fixed diagnostics, and guarded page.
+  The direct-execution block remains saved and no control surface appears.
+  Kimi found no issue; see the [unsafe direct-execution repeat-repair restart
+  review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-repair-restart-review.md).
 - Kimi independently reviewed the automatic saved-setting reload and closure.
   Its first review requested an explicit no-read check during the closing
   interval; the follow-up review found no remaining issues. See the

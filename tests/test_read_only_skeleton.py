@@ -1137,6 +1137,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
+            "restart_after_repeat_repair: bool = False",
+            core_check_source,
+        )
+        self.assertIn(
             "expect_retained_local_summary_route: bool = True",
             core_check_source,
         )
@@ -1167,6 +1171,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
+            "repeat repair restart requires a completed repeat repair",
+            core_check_source,
+        )
+        self.assertIn(
             "repeated unsafe data must remain available for manual repair",
             core_check_source,
         )
@@ -1191,6 +1199,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("repair_after_rejected_activation=True", lifecycle_source)
         self.assertIn("reclose_after_recovery=True", lifecycle_source)
         self.assertIn("repair_after_repeat_closure=True", lifecycle_source)
+        self.assertIn("restart_after_repeat_repair=True", lifecycle_source)
 
     def test_core_smoke_check_recovers_corrected_saved_configuration(self) -> None:
         """A repaired temporary entry must recover only the approved surface."""
