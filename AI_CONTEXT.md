@@ -176,6 +176,12 @@ Last updated: 2026-07-16.
   deliberately bad data remains only for manual repair. Kimi found no issue;
   see the [unsafe direct-execution activation review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-activation-review.md).
+- A user-disabled HASC entry whose main data lacks the required execution
+  block follows the same safe manual-repair path. It cannot start or read the
+  home during correction; one explicit reload restores the exact safe data,
+  same nine counts, and direct-execution block. Kimi found no issue; see the
+  [unsafe missing-execution-block repair review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-missing-execution-block-repair-review.md).
 - That unsafe direct-execution activation check also has a separate full
   temporary restart between saving the bad data and the user's activation
   attempt. The saved setup remains user-disabled and unloaded with no runtime
