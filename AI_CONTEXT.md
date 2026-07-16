@@ -182,6 +182,11 @@ Last updated: 2026-07-16.
   same nine counts, and direct-execution block. Kimi found no issue; see the
   [unsafe missing-execution-block repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-missing-execution-block-repair-review.md).
+- A user-disabled HASC entry whose main data lacks the required safe mode also
+  remains closed. Safe options cannot fill the missing main value; only a
+  manual exact repair followed by one explicit reload restores the same nine
+  counts. Kimi found no issue; see the [unsafe missing-mode repair review
+  note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-missing-mode-repair-review.md).
 - That unsafe direct-execution activation check also has a separate full
   temporary restart between saving the bad data and the user's activation
   attempt. The saved setup remains user-disabled and unloaded with no runtime

@@ -1187,7 +1187,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertEqual(
-            7,
+            8,
             lifecycle_source.count(
                 "async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle("
             ),
@@ -1200,6 +1200,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         self.assertIn(
             'scenario_name="unsafe missing execution-block repair"',
+            lifecycle_source,
+        )
+        self.assertIn(
+            'scenario_name="unsafe missing mode repair"',
             lifecycle_source,
         )
         self.assertIn("unsafe_data=UNSAFE_ALLOWED_DIRECT_EXECUTION_DATA", lifecycle_source)
