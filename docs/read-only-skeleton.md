@@ -11,6 +11,13 @@ separate opt-in `input_boolean` canary described in the [control-canary
 contract](canary-input-boolean-control.md). References below to exactly nine
 entities and no control describe the default disarmed state.
 
+Version 0.5.0 adds a separate typed climate facade. Its registry, Android API,
+shadow/canary stages, and strict relationship with the existing climate-core
+are documented in [the climate architecture](climate-control-architecture.md).
+That decision supersedes older statements below that HASC never makes an
+outgoing connection. With climate bridge `disabled`, the original observation
+behavior remains unchanged.
+
 ## What it does
 
 The `custom_components/hausman_hub/` package provides only a small Home
@@ -61,15 +68,16 @@ Home Assistant modules are thin adapters at the outer boundary.
 - It does not list or expose real areas or devices. The only selectable entity
   is the one local `input_boolean` canary target, stored in Home Assistant
   options and omitted from diagnostics.
-- It does not use Node-RED, external APIs, or physical-device commands. Its
-  only approved service calls are the canary helper's standard on/off actions.
+- It does not call Node-RED or Home Assistant climate services directly. The
+  only physical-domain boundary is the fixed typed Climate API adapter; the
+  existing climate-core retains policy, safety, cooldown and execution.
 - It does not create devices, buttons, `services.yaml`, repairs issues, or
   automatic fixes. Its default entities are the nine approved diagnostic count
   sensors; an armed canary adds exactly one HASC switch without a device.
 - Its small `hacs.json` supports manual HACS installation from this public
   repository. It does not add the integration to the public HACS catalog or
   change its runtime behavior.
-- `proxy` is absent and general physical-device execution remains
+- General `proxy` is absent and direct caller-selected execution remains
   `direct_execution_blocked`.
 
 ## Local verification

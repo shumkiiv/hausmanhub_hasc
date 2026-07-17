@@ -43,6 +43,6 @@ target, canary, stop, rollback, authority, and owner decision.
   lifecycle, validation, diagnostics, tests, and documentation diff and
   reported `KIMI_REVIEW_RESULT: NO FINDINGS`.
 
-The local 0.4.0 change is verified and review-complete. It remains uncommitted,
-unpushed, unreleased, undeployed, and unpublished until the owner explicitly
-requests one of those actions.
+The verified 0.4.0 change was later committed as `2e8cda3` and pushed to
+`origin/main` after the owner explicitly requested the push. It remains
+untagged, unreleased, undeployed, and outside a live home.

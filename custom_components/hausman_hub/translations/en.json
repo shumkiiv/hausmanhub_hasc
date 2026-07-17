@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "HausMan Hub HASC settings",
-        "description": "This integration does not change the home or control devices.",
+        "description": "Initial setup grants no device control. Climate rollout is configured separately and remains disabled by default.",
         "data": {
           "mode": "Operating mode"
         },
@@ -20,20 +20,26 @@
     "step": {
       "init": {
         "title": "HausMan Hub HASC settings",
-        "description": "The control canary is off by default. If you arm it, HASC can switch only one selected input boolean. An automation attached to that helper may still cause other actions.",
+        "description": "Both control paths are off by default. The legacy helper canary controls one input boolean. The climate bridge reads the existing Climate API in shadow and can post typed commands only for one explicitly selected canary room.",
         "data": {
           "mode": "Operating mode",
           "local_summary_enabled": "Optional local page",
           "summary_update_interval": "Nine-count refresh interval",
           "canary_control_enabled": "Arm control canary",
-          "canary_control_target": "Canary input boolean"
+          "canary_control_target": "Canary input boolean",
+          "climate_bridge_mode": "Climate bridge rollout",
+          "climate_bridge_target": "Private Climate API origin",
+          "climate_canary_room_id": "Climate canary room ID"
         },
         "data_description": {
           "mode": "Choose read-only observation or a comparison without changes.",
           "local_summary_enabled": "Shows or closes only the optional local page with the same nine aggregate counts. It does not control the home.",
           "summary_update_interval": "Choose 5, 15, or 30 minutes for the same nine local counts. HASC never reads them more often than the existing five-minute interval.",
           "canary_control_enabled": "Creates one HASC switch only for the selected input boolean. Turn this off for immediate rollback.",
-          "canary_control_target": "Select exactly one input_boolean helper. Lights, climate, locks, covers, scripts, scenes, and other domains are rejected."
+          "canary_control_target": "Select exactly one input_boolean helper. Lights, climate, locks, covers, scripts, scenes, and other domains are rejected.",
+          "climate_bridge_mode": "Disabled is full rollback. Shadow reads and validates without posting. Canary may post only typed commands for one eligible room.",
+          "climate_bridge_target": "Use only an HTTP(S) origin with a literal loopback or RFC1918/ULA address, for example http://192.168.1.10:1880. Paths, credentials, DNS names, query strings, and public addresses are rejected.",
+          "climate_canary_room_id": "Required only in canary mode. Use the stable room ID advertised by the Climate API."
         }
       }
     },
@@ -42,7 +48,10 @@
       "unsafe_local_summary_setting": "The optional local page can only be turned on or off.",
       "unsafe_summary_update_interval": "Choose only 5, 15, or 30 minutes for the nine-count refresh.",
       "unsafe_canary_control_setting": "The control canary can only be armed or disarmed.",
-      "unsafe_canary_control_target": "An armed control canary requires exactly one input_boolean helper."
+      "unsafe_canary_control_target": "An armed control canary requires exactly one input_boolean helper.",
+      "unsafe_climate_bridge_mode": "Choose disabled, shadow, or canary for the climate bridge.",
+      "unsafe_climate_bridge_target": "Use one private literal HTTP(S) origin without a path or credentials.",
+      "unsafe_climate_canary_room": "Canary mode requires one stable lowercase room ID."
     }
   },
   "selector": {
@@ -57,6 +66,13 @@
         "5m": "Every 5 minutes",
         "15m": "Every 15 minutes",
         "30m": "Every 30 minutes"
+      }
+    },
+    "climate_bridge_mode": {
+      "options": {
+        "disabled": "Disabled",
+        "shadow": "Shadow (read only)",
+        "canary": "One-room canary"
       }
     }
   },

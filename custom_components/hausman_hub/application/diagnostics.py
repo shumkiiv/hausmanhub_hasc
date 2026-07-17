@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from ..domain.observation import HomeSummary
@@ -10,6 +11,28 @@ from ..domain.configuration import DIRECT_EXECUTION_BLOCKED, SafeConfiguration
 from ..domain.control import CANARY_CONTROL_SCOPE
 from .configuration import effective_configuration
 from .local_summary import home_summary_payload
+
+
+CLIMATE_RUNTIME_STATUSES = frozenset(
+    {"disabled", "unavailable", "not_refreshed", "fresh", "stale"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ClimateDiagnosticsSummary:
+    """Validated coarse climate values that are safe to export."""
+
+    runtime_status: str
+    registry_rooms: int
+    registry_devices: int
+
+    def __post_init__(self) -> None:
+        if self.runtime_status not in CLIMATE_RUNTIME_STATUSES:
+            raise ValueError("climate diagnostics status is unsupported")
+        if type(self.registry_rooms) is not int or not 0 <= self.registry_rooms <= 128:
+            raise ValueError("climate diagnostics room count is invalid")
+        if type(self.registry_devices) is not int or not 0 <= self.registry_devices <= 512:
+            raise ValueError("climate diagnostics device count is invalid")
 
 
 def diagnostics_snapshot(
@@ -34,6 +57,7 @@ def diagnostics_snapshot(
 def diagnostics_snapshot_for_configuration(
     configuration: SafeConfiguration,
     home_summary: HomeSummary,
+    climate_runtime_summary: ClimateDiagnosticsSummary | None = None,
 ) -> dict[str, object]:
     """Return the approved snapshot for an already-validated active setup."""
 
@@ -47,9 +71,41 @@ def diagnostics_snapshot_for_configuration(
             "single_config_entry": True,
         },
         "safety_model": {
-            "device_authority": "not_granted",
+            "device_authority": (
+                "single_climate_canary"
+                if configuration.climate_bridge_mode.value == "canary"
+                else "not_granted"
+            ),
             "direct_execution_status": DIRECT_EXECUTION_BLOCKED,
-            "proxy_status": "not_approved",
+            "proxy_status": (
+                "typed_climate_adapter_only"
+                if configuration.climate_bridge_mode.value != "disabled"
+                else "not_approved"
+            ),
+        },
+        "climate_bridge": {
+            "mode": configuration.climate_bridge_mode.value,
+            "target_configured": configuration.climate_bridge_target is not None,
+            "canary_scope": (
+                "single_room"
+                if configuration.climate_bridge_mode.value == "canary"
+                else "none"
+            ),
+            "runtime_status": (
+                climate_runtime_summary.runtime_status
+                if climate_runtime_summary is not None
+                else "unavailable"
+            ),
+            "registry_rooms": (
+                climate_runtime_summary.registry_rooms
+                if climate_runtime_summary is not None
+                else 0
+            ),
+            "registry_devices": (
+                climate_runtime_summary.registry_devices
+                if climate_runtime_summary is not None
+                else 0
+            ),
         },
         "shadow_parity": {
             "parity_status": "unresolved",

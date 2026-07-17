@@ -1,0 +1,287 @@
+"""Authenticated local HTTP facade for tablet and climate administration."""
+
+from __future__ import annotations
+
+from http import HTTPStatus
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address
+from typing import TYPE_CHECKING, Any, Final
+
+from homeassistant.components.http import HomeAssistantView
+
+from .application.climate_commands import ClimateCommandViolation
+from .application.climate_registry import ClimateRegistryViolation
+from .application.climate_runtime import ClimateRuntime, ClimateRuntimeUnavailable
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
+
+DOMAIN = "hausman_hub"
+DATA_CLIMATE_RUNTIME = "climate_runtime"
+DATA_CLIMATE_VIEWS = "climate_views"
+HOME_PATH = "/api/hausman_hub/v1/home"
+ACTION_PATH = "/api/hausman_hub/v1/actions"
+ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
+ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
+NO_STORE_HEADERS = {"Cache-Control": "no-store"}
+MAX_ACTION_BODY_BYTES = 16 * 1024
+TABLET_GROUP_ID = "system-users"
+HOME_IPV4_NETWORKS: Final[tuple[IPv4Network, ...]] = (
+    IPv4Network("10.0.0.0/8"),
+    IPv4Network("172.16.0.0/12"),
+    IPv4Network("192.168.0.0/16"),
+)
+HOME_IPV6_NETWORK: Final[IPv6Network] = IPv6Network("fc00::/7")
+
+
+def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
+    """Register fixed routes once and point them at the loaded HASC runtime."""
+
+    data = hass.data.setdefault(DOMAIN, {})
+    data[DATA_CLIMATE_RUNTIME] = runtime
+    if DATA_CLIMATE_VIEWS not in data:
+        views = (
+            ClimateHomeView(hass),
+            ClimateActionView(hass),
+            ClimateAdminImportView(hass),
+            ClimateAdminRegistryView(hass),
+        )
+        for view in views:
+            hass.http.register_view(view)
+        data[DATA_CLIMATE_VIEWS] = views
+
+
+def clear_climate_api(hass: HomeAssistant, entry_id: str) -> None:
+    """Revoke every climate route while retaining one non-duplicated view set."""
+
+    data = hass.data.get(DOMAIN)
+    if data is None:
+        return
+    runtime = data.get(DATA_CLIMATE_RUNTIME)
+    if runtime is not None and runtime.entry_id == entry_id:
+        data.pop(DATA_CLIMATE_RUNTIME, None)
+
+
+class _ClimateView(HomeAssistantView):
+    requires_auth = True
+    cors_allowed = False
+    extra_urls: tuple[str, ...] = ()
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._hass = hass
+
+    def _runtime(self) -> ClimateRuntime | None:
+        data = self._hass.data.get(DOMAIN)
+        if data is None:
+            return None
+        runtime = data.get(DATA_CLIMATE_RUNTIME)
+        if not isinstance(runtime, ClimateRuntime):
+            return None
+        entries = self._hass.config_entries.async_entries(DOMAIN)
+        if len(entries) != 1 or entries[0].entry_id != runtime.entry_id:
+            return None
+        loaded = self._hass.config_entries.async_loaded_entries(DOMAIN)
+        if not any(entry.entry_id == runtime.entry_id for entry in loaded):
+            return None
+        return runtime
+
+    def _unavailable(self) -> Any:
+        return self.json_message(
+            "The HASC climate API is unavailable.",
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            headers=NO_STORE_HEADERS,
+        )
+
+
+class ClimateHomeView(_ClimateView):
+    """Serve the private-id-free state contract to one local tablet user."""
+
+    url = HOME_PATH
+    name = "api:hausman_hub:climate_home"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, HOME_PATH):
+            return _not_found(self)
+        if not _is_local_tablet_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await runtime.async_public_snapshot()
+        except Exception:
+            return self._unavailable()
+        return self.json(payload, headers=NO_STORE_HEADERS)
+
+
+class ClimateActionView(_ClimateView):
+    """Accept only typed actions from one ordinary local tablet account."""
+
+    url = ACTION_PATH
+    name = "api:hausman_hub:climate_actions"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ACTION_PATH):
+            return _not_found(self)
+        if not _is_local_tablet_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+            result = await runtime.async_action(payload)
+        except (ClimateCommandViolation, ValueError):
+            return self.json_message(
+                "The climate action is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(result.as_payload(), headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminImportView(_ClimateView):
+    """Expose private import candidates only to a local administrator."""
+
+    url = ADMIN_IMPORT_PATH
+    name = "api:hausman_hub:climate_admin_import"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_IMPORT_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await runtime.async_admin_import_snapshot()
+        except Exception:
+            return self._unavailable()
+        return self.json(payload, headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminRegistryView(_ClimateView):
+    """Read or atomically replace the private registry as a local admin."""
+
+    url = ADMIN_REGISTRY_PATH
+    name = "api:hausman_hub:climate_admin_registry"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_REGISTRY_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await runtime.async_registry_payload()
+        except Exception:
+            return self._unavailable()
+        return self.json(payload, headers=NO_STORE_HEADERS)
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_REGISTRY_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+            result = await runtime.async_replace_registry(payload)
+        except (ClimateRegistryViolation, ValueError):
+            return self.json_message(
+                "The climate registry is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except Exception:
+            return self._unavailable()
+        return self.json(result, headers=NO_STORE_HEADERS)
+
+
+async def _request_json(request: Any) -> object:
+    length = getattr(request, "content_length", None)
+    if type(length) is not int or not 0 < length <= MAX_ACTION_BODY_BYTES:
+        raise ValueError("request body size is invalid")
+    if getattr(request, "content_type", None) != "application/json":
+        raise ValueError("request body must be JSON")
+    return await request.json()
+
+
+def _is_exact_request(request: Any, path: str) -> bool:
+    return (
+        getattr(request, "path", None) == path
+        and getattr(request, "query_string", None) == ""
+    )
+
+
+def _is_local_tablet_request(request: Any) -> bool:
+    user = _request_user(request)
+    if not _is_local_address(getattr(request, "remote", None)):
+        return False
+    if user is None or getattr(user, "is_admin", True) or getattr(user, "system_generated", True):
+        return False
+    groups = getattr(user, "groups", None)
+    if not isinstance(groups, (frozenset, list, set, tuple)):
+        return False
+    return {getattr(group, "id", None) for group in groups} == {TABLET_GROUP_ID}
+
+
+def _is_local_admin_request(request: Any) -> bool:
+    user = _request_user(request)
+    return (
+        _is_local_address(getattr(request, "remote", None))
+        and user is not None
+        and getattr(user, "is_admin", False) is True
+        and getattr(user, "system_generated", True) is False
+    )
+
+
+def _request_user(request: Any) -> object | None:
+    try:
+        return request["hass_user"]
+    except (KeyError, TypeError):
+        return None
+
+
+def _is_local_address(remote: object) -> bool:
+    if not isinstance(remote, str):
+        return False
+    try:
+        address = ip_address(remote)
+    except ValueError:
+        return False
+    if isinstance(address, IPv4Address):
+        return address.is_loopback or any(
+            address in network for network in HOME_IPV4_NETWORKS
+        )
+    mapped = address.ipv4_mapped
+    if mapped is not None:
+        return mapped.is_loopback or any(
+            mapped in network for network in HOME_IPV4_NETWORKS
+        )
+    return address.is_loopback or address in HOME_IPV6_NETWORK
+
+
+def _not_found(view: HomeAssistantView) -> Any:
+    return view.json_message(
+        "The HASC climate API route was not found.",
+        HTTPStatus.NOT_FOUND,
+        headers=NO_STORE_HEADERS,
+    )
+
+
+def _forbidden(view: HomeAssistantView) -> Any:
+    return view.json_message(
+        "Local HASC access is required.",
+        HTTPStatus.FORBIDDEN,
+        headers=NO_STORE_HEADERS,
+    )

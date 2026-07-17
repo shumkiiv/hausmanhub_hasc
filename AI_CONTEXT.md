@@ -7,17 +7,44 @@ Last updated: 2026-07-17.
 - Repository: `shumkiiv/hausmanhub_hasc` (public, MIT, `main`).
 - Local checkout: `/home/ivsh/projects/hausmanhub_hasc`.
 - Home Assistant baseline: Core 2026.6.4 or newer.
-- Uncommitted local version 0.4.0 begins the first explicitly requested HASC
-  control path with one off-by-default `input_boolean` canary. When armed in
-  options it creates one HASC switch, revalidates the exact single entry and
-  target before each on/off service call, and rejects every other entity
-  domain. Disarming removes the saved target and HASC switch while leaving the
-  helper unchanged. Diagnostics expose only the enabled flag and fixed scope,
-  never the runtime identifier. 153 local tests and disposable Core 2026.6.4
-  and 2026.7.0 checks passed. The final staged implementation received the
-  required read-only Kimi review with no findings. No live home, commit, push,
-  release, or deployment was used. The boundary and current verification are
-  recorded in the [0.4.0 canary note](LLM_WIKI/Manual/2026-07-17-hasc-v0-4-0-input-boolean-canary-control.md).
+- Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after
+  its 153 tests, disposable Core 2026.6.4/2026.7.0 checks, and final Kimi
+  review passed. This source push did not create a tag, release, HACS
+  publication, deployment, or live-home change. The boundary is recorded in
+  the [0.4.0 canary note](LLM_WIKI/Manual/2026-07-17-hasc-v0-4-0-input-boolean-canary-control.md).
+- Uncommitted version 0.5.0 implements the first complete climate facade in
+  HASC. It adds a versioned logical Device Registry for rooms, ACs, TRVs,
+  humidifiers, floor heating, sensors, private endpoint roles, capabilities,
+  control owner, and observed/canary/managed scope. Import from the current
+  `hausman-climate` v1 state is read-only and never auto-registers a device.
+- The Android-facing HASC contract exposes only stable HASC IDs and provides
+  local authenticated state/actions routes. Separate local-admin routes expose
+  private import candidates and atomically replace the registry. Android never
+  receives raw HA entity IDs, Climate API source IDs, Node-RED details, vendor
+  transport, or backend command payloads.
+- The climate bridge has `disabled`, `shadow`, and one-room `canary` stages.
+  It accepts only a literal private HTTP(S) origin and two fixed Climate API
+  v1 paths. Shadow translates but never posts. Canary requires a fresh state,
+  exact room/binding, current climate-core authority readiness, configured
+  capability, climate-core ownership, and canary/managed device scope before
+  POST. The current climate-core remains responsible for auto/manual policy,
+  cooldown, safety, authority, physical feedback, and actual execution.
+- Typed HASC intents now cover room target/mode/minimum/strategy/off and
+  device power/temperature/humidity/HVAC/fan contracts for AC, TRV,
+  humidifier, and floor-heating kinds. No generic proxy, caller-provided
+  service, private source/entity ID, backend type, arbitrary URL, or payload is
+  accepted. The architecture and rollout are in
+  [the climate guide](docs/climate-control-architecture.md) and the durable
+  [0.5.0 decision](LLM_WIKI/Manual/2026-07-17-hasc-v0-5-0-climate-facade.md).
+- The staged 0.5.0 package passed 191 local tests, the HACS/version/repository
+  safety checks, and disposable Home Assistant Core 2026.6.4 and 2026.7.0
+  lifecycles on Python 3.14.3. The Core check also exercised all four climate
+  routes through real loopback HTTP authentication in the disabled rollback
+  state. Kimi model `kimi-for-coding/k2p7` completed the final read-only staged
+  review in session `ses_09070e1c2ffeeTgDvZ3A3kiLUu` with no substantial
+  findings. Source commit/push is the remaining authorized delivery step.
+  None of this authorizes or performs live-home deployment, and the Android
+  repository was not modified in this HASC-only workstream.
 - A public `custom_components/hausman_hub/` observation foundation with the
   local 0.4.0 helper-canary addition is present. It may be added manually as an
   HACS custom repository; it is not in the public HACS catalog.
@@ -983,14 +1010,15 @@ test-only changes do not need a new HACS version.
 ## Next decision gate
 
 HASC now has the two observation modes, nine aggregate sensors, guarded local
-count-only path, and one opt-in virtual `input_boolean` control canary. The
-stricter HASC route still requires the exact Home Assistant read-only account;
-the separately approved Codex observation path does not bypass it. Its
-credential stays outside the repository and chat. The next control gate is a
-separate owner choice of one physical domain and target plus shadow evidence,
-emergency stop, rollback, authority boundary, and live-test permission. Public
-HACS catalog listing, proxy, general device execution, and live deployment
-remain out of scope.
+count-only path, the opt-in virtual `input_boolean` canary, and the local 0.5.0
+climate facade. The climate domain and one-room rollout are explicitly chosen;
+the remaining gate is operational rather than architectural: complete staged
+verification and Kimi review, push the source, install it only when separately
+authorized, configure the real registry in `disabled`, pass shadow against the
+current Climate API, and request explicit permission for one live room canary.
+Android migration follows only after that backend canary is observed. Public
+HACS catalog listing, generic proxy, other physical domains, general device
+execution, and unsupervised live deployment remain out of scope.
 
 The current public manual-HACS decision and its narrow implementation boundary
 are recorded in the [HACS packaging decision

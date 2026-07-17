@@ -1,9 +1,10 @@
-"""Home Assistant form adapter for HASC observation and control-canary options.
+"""Home Assistant form adapter for observation and typed rollout options.
 
 The initial selector still chooses only an approved observation mode. Later
-settings may explicitly arm one canary switch for one ``input_boolean`` helper.
-No other entity domain, device, token, route, proxy, or general execution field
-is accepted.
+settings may explicitly arm one canary switch for one ``input_boolean`` helper
+or configure the separate private Climate API bridge as disabled, shadow, or a
+one-room canary. No generic service, token, route, proxy, or execution field is
+accepted.
 """
 
 from __future__ import annotations
@@ -29,6 +30,10 @@ from .application.configuration import (
     CANARY_CONTROL_ENABLED_DEFAULT,
     CANARY_CONTROL_ENABLED_FIELD,
     CANARY_CONTROL_TARGET_FIELD,
+    CLIMATE_BRIDGE_MODE_DEFAULT,
+    CLIMATE_BRIDGE_MODE_FIELD,
+    CLIMATE_BRIDGE_TARGET_FIELD,
+    CLIMATE_CANARY_ROOM_ID_FIELD,
     ConfigurationViolation,
     LOCAL_SUMMARY_ENABLED_DEFAULT,
     LOCAL_SUMMARY_ENABLED_FIELD,
@@ -45,7 +50,17 @@ from .domain.configuration import (
     READ_ONLY_MODE,
     SUMMARY_UPDATE_INTERVAL_DEFAULT,
 )
-from .domain.control import INPUT_BOOLEAN_DOMAIN
+from .domain.climate import ClimateModelViolation, ClimateRoom
+from .domain.control import (
+    INPUT_BOOLEAN_DOMAIN,
+    UnsafeCanaryTargetError,
+    canary_control_target,
+)
+from .domain.climate_bridge import (
+    ClimateBridgeMode,
+    UnsafeClimateBridgeTarget,
+    climate_bridge_target,
+)
 
 
 MODE_SELECTOR = SelectSelector(
@@ -65,6 +80,15 @@ SUMMARY_UPDATE_INTERVAL_SELECTOR = SelectSelector(
 )
 CANARY_CONTROL_TARGET_SELECTOR = EntitySelector(
     EntitySelectorConfig(domain=INPUT_BOOLEAN_DOMAIN, multiple=False)
+)
+CLIMATE_BRIDGE_MODE_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[
+            SelectOptionDict(value=mode.value, label=mode.value)
+            for mode in ClimateBridgeMode
+        ],
+        translation_key="climate_bridge_mode",
+    )
 )
 
 
@@ -91,6 +115,9 @@ def _options_schema(
     summary_update_interval_default: str,
     canary_control_enabled_default: bool,
     canary_control_target_default: str | None,
+    climate_bridge_mode_default: str,
+    climate_bridge_target_default: str | None,
+    climate_canary_room_id_default: str | None,
 ) -> vol.Schema:
     """Show observation choices and the one narrow control-canary target."""
 
@@ -108,6 +135,10 @@ def _options_schema(
             CANARY_CONTROL_ENABLED_FIELD,
             default=canary_control_enabled_default,
         ): StrictBooleanSelector(),
+        vol.Required(
+            CLIMATE_BRIDGE_MODE_FIELD,
+            default=climate_bridge_mode_default,
+        ): CLIMATE_BRIDGE_MODE_SELECTOR,
     }
     target_field = (
         vol.Optional(
@@ -118,6 +149,24 @@ def _options_schema(
         else vol.Optional(CANARY_CONTROL_TARGET_FIELD)
     )
     fields[target_field] = CANARY_CONTROL_TARGET_SELECTOR
+    bridge_target_field = (
+        vol.Optional(
+            CLIMATE_BRIDGE_TARGET_FIELD,
+            default=climate_bridge_target_default,
+        )
+        if climate_bridge_target_default is not None
+        else vol.Optional(CLIMATE_BRIDGE_TARGET_FIELD)
+    )
+    fields[bridge_target_field] = str
+    canary_room_field = (
+        vol.Optional(
+            CLIMATE_CANARY_ROOM_ID_FIELD,
+            default=climate_canary_room_id_default,
+        )
+        if climate_canary_room_id_default is not None
+        else vol.Optional(CLIMATE_CANARY_ROOM_ID_FIELD)
+    )
+    fields[canary_room_field] = str
     return vol.Schema(fields)
 
 
@@ -177,6 +226,23 @@ def _safe_canary_control_target_default(
     return None if target is None else target.entity_id
 
 
+def _safe_climate_bridge_defaults(
+    entry_data: Mapping[str, Any], options: Mapping[str, Any]
+) -> tuple[str, str | None, str | None]:
+    """Return only completely validated bridge defaults to the options form."""
+
+    try:
+        configuration = effective_configuration(entry_data, options)
+    except ConfigurationViolation:
+        return CLIMATE_BRIDGE_MODE_DEFAULT, None, None
+    target = configuration.climate_bridge_target
+    return (
+        configuration.climate_bridge_mode.value,
+        None if target is None else target.origin,
+        configuration.climate_canary_room_id,
+    )
+
+
 def _option_error_field(user_input: Mapping[str, Any]) -> str:
     """Point a rejected form value at the field that can safely explain it."""
 
@@ -198,6 +264,27 @@ def _option_error_field(user_input: Mapping[str, Any]) -> str:
         and type(user_input[CANARY_CONTROL_ENABLED_FIELD]) is not bool
     ):
         return CANARY_CONTROL_ENABLED_FIELD
+    if user_input.get(CANARY_CONTROL_ENABLED_FIELD) is True:
+        try:
+            canary_control_target(user_input.get(CANARY_CONTROL_TARGET_FIELD))
+        except UnsafeCanaryTargetError:
+            return CANARY_CONTROL_TARGET_FIELD
+    bridge_mode = user_input.get(CLIMATE_BRIDGE_MODE_FIELD, CLIMATE_BRIDGE_MODE_DEFAULT)
+    if bridge_mode not in {mode.value for mode in ClimateBridgeMode}:
+        return CLIMATE_BRIDGE_MODE_FIELD
+    if bridge_mode != ClimateBridgeMode.DISABLED.value:
+        try:
+            climate_bridge_target(user_input.get(CLIMATE_BRIDGE_TARGET_FIELD))
+        except UnsafeClimateBridgeTarget:
+            return CLIMATE_BRIDGE_TARGET_FIELD
+    if bridge_mode == ClimateBridgeMode.CANARY.value:
+        try:
+            ClimateRoom(
+                user_input.get(CLIMATE_CANARY_ROOM_ID_FIELD),  # type: ignore[arg-type]
+                "Temporary",
+            )
+        except ClimateModelViolation:
+            return CLIMATE_CANARY_ROOM_ID_FIELD
     return CANARY_CONTROL_TARGET_FIELD
 
 
@@ -259,6 +346,14 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             self.config_entry.data,
             self.config_entry.options,
         )
+        (
+            climate_bridge_mode_default,
+            climate_bridge_target_default,
+            climate_canary_room_id_default,
+        ) = _safe_climate_bridge_defaults(
+            self.config_entry.data,
+            self.config_entry.options,
+        )
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
@@ -280,6 +375,18 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                         CANARY_CONTROL_TARGET_FIELD,
                         canary_control_target_default,
                     ),
+                    user_input.get(
+                        CLIMATE_BRIDGE_MODE_FIELD,
+                        climate_bridge_mode_default,
+                    ),
+                    user_input.get(
+                        CLIMATE_BRIDGE_TARGET_FIELD,
+                        climate_bridge_target_default,
+                    ),
+                    user_input.get(
+                        CLIMATE_CANARY_ROOM_ID_FIELD,
+                        climate_canary_room_id_default,
+                    ),
                 )
             except ConfigurationViolation:
                 error_field = _option_error_field(user_input)
@@ -291,6 +398,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                     errors[error_field] = "unsafe_summary_update_interval"
                 elif error_field == CANARY_CONTROL_ENABLED_FIELD:
                     errors[error_field] = "unsafe_canary_control_setting"
+                elif error_field == CLIMATE_BRIDGE_MODE_FIELD:
+                    errors[error_field] = "unsafe_climate_bridge_mode"
+                elif error_field == CLIMATE_BRIDGE_TARGET_FIELD:
+                    errors[error_field] = "unsafe_climate_bridge_target"
+                elif error_field == CLIMATE_CANARY_ROOM_ID_FIELD:
+                    errors[error_field] = "unsafe_climate_canary_room"
                 else:
                     errors[error_field] = "unsafe_canary_control_target"
             else:
@@ -304,6 +417,9 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 summary_update_interval_default,
                 canary_control_enabled_default,
                 canary_control_target_default,
+                climate_bridge_mode_default,
+                climate_bridge_target_default,
+                climate_canary_room_id_default,
             ),
             errors=errors,
         )

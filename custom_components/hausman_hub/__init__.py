@@ -1,10 +1,10 @@
 """Home Assistant boundary for the HausMan Hub HASC integration.
 
 It always creates the nine diagnostic count sensors. An explicitly armed
-canary may additionally create one switch that can call only the selected
-``input_boolean`` helper's standard on/off services. HASC registers no service,
-connects to no device, and its separate local view remains authenticated and
-GET-only.
+legacy canary may additionally control one ``input_boolean`` helper. The
+separate climate facade persists logical bindings and can use only two fixed
+Climate API paths in shadow or one-room canary mode. HASC registers no service
+and never calls a Home Assistant climate entity directly.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Load the count display and an optional narrow canary switch."""
+    """Load observation, local climate facade, and optional narrow canaries."""
 
     configured_entry_ids = tuple(
         configured_entry.entry_id
@@ -40,6 +40,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # without Home Assistant itself.
     from homeassistant.const import Platform
 
+    from .application.climate_runtime import ClimateRuntime
+    from .climate_api import register_climate_api
+    from .climate_storage import HomeAssistantClimateRegistryStore
     from .local_summary import register_local_summary_access
 
     await hass.config_entries.async_forward_entry_setups(
@@ -48,6 +51,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if configuration.local_summary_enabled:
         register_local_summary_access(hass, entry)
+    climate_client = None
+    if configuration.climate_bridge_target is not None:
+        from .climate_bridge import ClimateApiClient
+
+        climate_client = ClimateApiClient(hass, configuration.climate_bridge_target)
+    climate_runtime = ClimateRuntime(
+        entry_id=entry.entry_id,
+        configuration=configuration,
+        registry_store=HomeAssistantClimateRegistryStore(hass, entry.entry_id),
+        bridge_client=climate_client,
+    )
+    await climate_runtime.async_start()
+    register_climate_api(hass, climate_runtime)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
@@ -60,7 +76,10 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     cannot read a summary during the short reload interval.
     """
 
+    from .climate_api import clear_climate_api
     from .local_summary import clear_local_summary_access
+
+    clear_climate_api(hass, entry.entry_id)
 
     try:
         configuration = effective_configuration(entry.data, entry.options)
@@ -85,11 +104,13 @@ async def _close_running_duplicate_hasc_entries(
     saved entries remain untouched for the owner to repair manually.
     """
 
+    from .climate_api import clear_climate_api
     from .local_summary import clear_local_summary_access
 
     loaded_entries = tuple(hass.config_entries.async_loaded_entries(domain))
     for loaded_entry in loaded_entries:
         clear_local_summary_access(hass, loaded_entry)
+        clear_climate_api(hass, loaded_entry.entry_id)
     for loaded_entry in loaded_entries:
         await hass.config_entries.async_unload(loaded_entry.entry_id)
 
@@ -151,6 +172,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     from homeassistant.const import Platform
 
+    from .climate_api import clear_climate_api
     from .local_summary import clear_local_summary_access
 
     unloaded = await hass.config_entries.async_unload_platforms(
@@ -160,4 +182,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         _clear_hasc_state_values(hass, entry)
         clear_local_summary_access(hass, entry)
+        clear_climate_api(hass, entry.entry_id)
     return unloaded

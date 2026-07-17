@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 from custom_components.hausman_hub.application.configuration import (  # noqa: E402
     CANARY_CONTROL_ENABLED_DEFAULT,
     CANARY_CONTROL_ENABLED_FIELD,
+    CLIMATE_BRIDGE_MODE_FIELD,
     ConfigurationViolation,
     DIRECT_EXECUTION_STATUS_FIELD,
     LOCAL_SUMMARY_ENABLED_DEFAULT,
@@ -25,6 +26,7 @@ from custom_components.hausman_hub.application.configuration import (  # noqa: E
     effective_configuration,
 )
 from custom_components.hausman_hub.application.diagnostics import (  # noqa: E402
+    ClimateDiagnosticsSummary,
     diagnostics_snapshot,
     unavailable_diagnostics_snapshot,
 )
@@ -58,7 +60,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.4.0", manifest["version"])
+        self.assertEqual("0.5.0", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -500,6 +502,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                         LOCAL_SUMMARY_ENABLED_FIELD: True,
                         SUMMARY_UPDATE_INTERVAL_FIELD: interval,
                         CANARY_CONTROL_ENABLED_FIELD: False,
+                        CLIMATE_BRIDGE_MODE_FIELD: "disabled",
                     },
                     options,
                 )
@@ -658,6 +661,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             {
                 "entry_summary",
                 "safety_model",
+                "climate_bridge",
                 "shadow_parity",
                 "repairs_summary",
                 "home_summary",
@@ -680,6 +684,17 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             {"device_authority", "direct_execution_status", "proxy_status"},
             set(snapshot["safety_model"]),
         )
+        self.assertEqual(
+            {
+                "mode",
+                "target_configured",
+                "canary_scope",
+                "runtime_status",
+                "registry_rooms",
+                "registry_devices",
+            },
+            set(snapshot["climate_bridge"]),
+        )
         self.assertEqual({"parity_status", "evidence_status"}, set(snapshot["shadow_parity"]))
         self.assertEqual(
             {"automatic_repairs", "manual_guidance_only"},
@@ -700,6 +715,16 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             set(snapshot["home_summary"]),
         )
         self.assertEqual({"status", "strategy"}, set(snapshot["redaction_report"]))
+
+    def test_climate_diagnostics_accept_only_coarse_bounded_values(self) -> None:
+        """Private identifiers cannot enter diagnostics through runtime metadata."""
+
+        with self.assertRaises(ValueError):
+            ClimateDiagnosticsSummary("http://private-target", 1, 1)
+        with self.assertRaises(ValueError):
+            ClimateDiagnosticsSummary("fresh", 129, 1)
+        with self.assertRaises(ValueError):
+            ClimateDiagnosticsSummary("fresh", 1, 513)
 
     def test_unavailable_diagnostics_never_include_home_data(self) -> None:
         """An inactive HASC setup must return only one static status."""
@@ -2178,7 +2203,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                     {field.name for field in fields(guidance)},
                 )
 
-    def test_outer_adapter_limits_execution_to_the_canary_switch(self) -> None:
+    def test_outer_adapters_keep_execution_to_two_typed_boundaries(self) -> None:
         forbidden_fragments = (
             "hass.services",
             "async_call(",
@@ -2187,8 +2212,6 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "async_create_issue",
             "async_register_entity_service",
             "services.yaml",
-            "node-red",
-            "aiohttp",
             "requests",
             "websocket",
         )
@@ -2201,8 +2224,9 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             self.assertNotIn(fragment, source)
         self.assertTrue((INTEGRATION / "sensor.py").is_file())
         self.assertTrue((INTEGRATION / "switch.py").is_file())
-        for absent_module in ("services.yaml", "light.py", "climate.py"):
+        for absent_module in ("services.yaml", "light.py"):
             self.assertFalse((INTEGRATION / absent_module).exists())
+        self.assertTrue((INTEGRATION / "domain" / "climate.py").is_file())
 
         switch_source = (INTEGRATION / "switch.py").read_text(encoding="utf-8")
         self.assertEqual(1, switch_source.count("hass.services.async_call("))
@@ -2220,6 +2244,14 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "websocket",
         ):
             self.assertNotIn(forbidden_surface, switch_source.lower())
+
+        bridge_source = (INTEGRATION / "climate_bridge.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"/endpoint/climate/api/v1/state"', bridge_source)
+        self.assertIn('"/endpoint/climate/api/v1/command"', bridge_source)
+        self.assertIn("allow_redirects=False", bridge_source)
+        self.assertNotIn("hass.services", bridge_source)
 
         sensor_source = (INTEGRATION / "sensor.py").read_text(encoding="utf-8")
         self.assertIn("HOME_SUMMARY_COUNT_KEYS", sensor_source)
@@ -2340,16 +2372,19 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                         *content["selector"]["summary_update_interval"]["options"].values(),
                     )
                 ).lower()
-                self.assertNotIn("private", rendered_text)
-                self.assertNotIn("shadow", rendered_text)
                 self.assertEqual(
                     expected_labels[language],
                     content["selector"]["mode"]["options"],
                 )
 
-        self.assertIn("does not change the home", english["config"]["step"]["user"]["description"])
+        self.assertIn("grants no device control", english["config"]["step"]["user"]["description"])
         self.assertIn("input boolean", english["options"]["step"]["init"]["description"])
-        self.assertIn("не меняет", russian["config"]["step"]["user"]["description"])
+        self.assertIn("shadow", english["options"]["step"]["init"]["description"].lower())
+        self.assertEqual(
+            {"disabled", "shadow", "canary"},
+            set(english["selector"]["climate_bridge_mode"]["options"]),
+        )
+        self.assertIn("не даёт управления", russian["config"]["step"]["user"]["description"])
         self.assertIn("input_boolean", russian["options"]["step"]["init"]["description"])
 
     @staticmethod

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Настройки HausMan Hub HASC",
-        "description": "Интеграция ничего в доме не меняет и не управляет устройствами.",
+        "description": "Первичная установка не даёт управления устройствами. Климатический rollout настраивается отдельно и по умолчанию выключен.",
         "data": {
           "mode": "Режим работы"
         },
@@ -20,20 +20,26 @@
     "step": {
       "init": {
         "title": "Настройки HausMan Hub HASC",
-        "description": "Управляющий canary по умолчанию выключен. После явного включения HASC сможет переключать только один выбранный помощник input_boolean. Привязанная к нему автоматизация всё равно может запустить другие действия.",
+        "description": "Оба управляющих контура по умолчанию выключены. Прежний canary переключает один input_boolean. Климатический мост читает текущий Climate API в shadow и может отправлять типизированные команды только для одной явно выбранной canary-комнаты.",
         "data": {
           "mode": "Режим работы",
           "local_summary_enabled": "Дополнительная локальная страница",
           "summary_update_interval": "Частота обновления девяти чисел",
           "canary_control_enabled": "Включить управляющий canary",
-          "canary_control_target": "Помощник input_boolean для canary"
+          "canary_control_target": "Помощник input_boolean для canary",
+          "climate_bridge_mode": "Этап запуска климатического моста",
+          "climate_bridge_target": "Приватный адрес Climate API",
+          "climate_canary_room_id": "ID климатической canary-комнаты"
         },
         "data_description": {
           "mode": "Выберите только чтение или проверку без изменений.",
           "local_summary_enabled": "Показывает или закрывает только дополнительную локальную страницу с теми же девятью общими числами. Это не управляет домом.",
           "summary_update_interval": "Выберите 5, 15 или 30 минут для тех же девяти местных чисел. HASC никогда не читает их чаще прежних пяти минут.",
           "canary_control_enabled": "Создаёт один переключатель HASC только для выбранного input_boolean. Выключение — немедленный откат.",
-          "canary_control_target": "Выберите ровно один помощник input_boolean. Свет, климат, замки, шторы, скрипты, сцены и другие домены отклоняются."
+          "canary_control_target": "Выберите ровно один помощник input_boolean. Свет, климат, замки, шторы, скрипты, сцены и другие домены отклоняются.",
+          "climate_bridge_mode": "Disabled — полный откат. Shadow только читает и проверяет. Canary разрешает только типизированные команды для одной готовой комнаты.",
+          "climate_bridge_target": "Допустим только HTTP(S)-адрес с явным loopback/RFC1918/ULA IP, например http://192.168.1.10:1880. Пути, логины, DNS-имена, параметры и публичные адреса запрещены.",
+          "climate_canary_room_id": "Обязательно только для canary. Используйте стабильный ID комнаты из Climate API."
         }
       }
     },
@@ -42,7 +48,10 @@
       "unsafe_local_summary_setting": "Дополнительную локальную страницу можно только включить или выключить.",
       "unsafe_summary_update_interval": "Для обновления девяти чисел можно выбрать только 5, 15 или 30 минут.",
       "unsafe_canary_control_setting": "Управляющий canary можно только включить или выключить.",
-      "unsafe_canary_control_target": "Для включённого canary нужен ровно один помощник input_boolean."
+      "unsafe_canary_control_target": "Для включённого canary нужен ровно один помощник input_boolean.",
+      "unsafe_climate_bridge_mode": "Выберите disabled, shadow или canary для климатического моста.",
+      "unsafe_climate_bridge_target": "Укажите один приватный HTTP(S)-адрес с явным IP, без пути и логина.",
+      "unsafe_climate_canary_room": "Для canary нужен один стабильный ID комнаты в нижнем регистре."
     }
   },
   "selector": {
@@ -57,6 +66,13 @@
         "5m": "Каждые 5 минут",
         "15m": "Каждые 15 минут",
         "30m": "Каждые 30 минут"
+      }
+    },
+    "climate_bridge_mode": {
+      "options": {
+        "disabled": "Выключен",
+        "shadow": "Shadow (только чтение)",
+        "canary": "Canary одной комнаты"
       }
     }
   },

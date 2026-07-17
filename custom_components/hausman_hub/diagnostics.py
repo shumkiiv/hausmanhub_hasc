@@ -6,10 +6,13 @@ from typing import TYPE_CHECKING
 
 from .application.configuration import ConfigurationViolation, effective_configuration
 from .application.diagnostics import (
+    ClimateDiagnosticsSummary,
     diagnostics_snapshot_for_configuration,
     unavailable_diagnostics_snapshot,
 )
 from .home_observation import collect_home_summary
+from .application.climate_runtime import ClimateRuntime
+from .climate_api import DATA_CLIMATE_RUNTIME, DOMAIN
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -30,9 +33,21 @@ async def async_get_config_entry_diagnostics(
     except ConfigurationViolation:
         return unavailable_diagnostics_snapshot()
 
+    runtime_data = hass.data.get(DOMAIN, {}).get(DATA_CLIMATE_RUNTIME)
+    climate_summary = (
+        ClimateDiagnosticsSummary(
+            runtime_status=runtime_data.status,
+            registry_rooms=runtime_data.room_count,
+            registry_devices=runtime_data.device_count,
+        )
+        if isinstance(runtime_data, ClimateRuntime)
+        and runtime_data.entry_id == active_entry.entry_id
+        else None
+    )
     return diagnostics_snapshot_for_configuration(
         configuration,
         collect_home_summary(hass, active_entry.entry_id),
+        climate_summary,
     )
 
 

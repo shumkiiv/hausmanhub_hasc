@@ -55,6 +55,7 @@ class CanaryControlContractTest(unittest.TestCase):
             {
                 "canary_control_enabled": True,
                 "canary_control_target": "input_boolean.hasc_canary",
+                "climate_bridge_mode": "disabled",
                 "local_summary_enabled": True,
                 "mode": "read-only",
                 "summary_update_interval": "5m",

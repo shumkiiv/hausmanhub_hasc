@@ -1,0 +1,110 @@
+{
+  "contract": {
+    "name": "hausman-climate",
+    "version": 1,
+    "source": "synthetic"
+  },
+  "generatedAt": 1784280000000,
+  "runtimeHealth": {
+    "status": "fresh"
+  },
+  "authorityReadiness": {
+    "runtime": {
+      "status": "fresh",
+      "eligible": true
+    },
+    "rooms": [
+      {
+        "roomId": "living",
+        "canaryCurrent": true,
+        "authorityCurrent": true,
+        "feedbackEligible": true,
+        "runtimeEligible": true,
+        "eligible": true,
+        "reasons": []
+      },
+      {
+        "roomId": "kids",
+        "canaryCurrent": false,
+        "authorityCurrent": false,
+        "feedbackEligible": false,
+        "runtimeEligible": true,
+        "eligible": false,
+        "reasons": ["physical_feedback_not_confirmed"]
+      }
+    ]
+  },
+  "rooms": [
+    {
+      "id": "living",
+      "name": "Living room",
+      "mode": "auto",
+      "targets": {
+        "temperature": 25,
+        "humidity": 45
+      },
+      "sourceData": {
+        "temperature": 25.8,
+        "humidity": 44
+      }
+    },
+    {
+      "id": "kids",
+      "name": "Kids",
+      "manualControl": {
+        "active": false
+      },
+      "targets": {
+        "temperature": 24.5,
+        "humidity": 50
+      },
+      "sourceData": {
+        "temperature": 25.2,
+        "humidity": 48
+      }
+    }
+  ],
+  "devices": [
+    {
+      "id": "synthetic-ac-source-living",
+      "name": "Living AC",
+      "roomId": "living",
+      "domain": "climate",
+      "category": "climate",
+      "state": "cool",
+      "unavailable": false
+    },
+    {
+      "id": "synthetic-humidifier-source-kids",
+      "name": "Kids humidifier",
+      "roomId": "kids",
+      "domain": "humidifier",
+      "category": "climate",
+      "state": "off",
+      "unavailable": false
+    }
+  ],
+  "capabilities": [
+    {
+      "deviceId": "synthetic-ac-source-living",
+      "commandTypes": [
+        "climate.set_hvac_mode",
+        "climate.turn_off",
+        "climate.set_temperature",
+        "climate.set_fan_mode"
+      ]
+    },
+    {
+      "deviceId": "synthetic-humidifier-source-kids",
+      "commandTypes": [
+        "humidifier.turn_on",
+        "humidifier.turn_off",
+        "humidifier.set_humidity"
+      ]
+    }
+  ],
+  "events": [],
+  "audit": [],
+  "mismatches": [],
+  "diagnostics": []
+}

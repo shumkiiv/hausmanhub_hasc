@@ -6,9 +6,10 @@ Safety-first Home Assistant custom integration for HausMan Hub.
 
 This repository contains a public Home Assistant integration under
 `custom_components/hausman_hub/`. It always creates nine diagnostic number
-sensors from the approved aggregate summary. Version 0.4.0 adds one opt-in
-control-canary switch for one explicitly selected `input_boolean`. It contains
-no physical-device protocol, HASC service definition, or outgoing connection.
+sensors from the approved aggregate summary. Version 0.5.0 adds a private
+logical climate-device registry, a local Android facade, read-only import of
+the existing Climate API, shadow validation, and a one-room typed climate
+canary. The existing climate-core remains the policy and execution owner.
 
 - Visibility: public.
 - License: MIT.
@@ -21,16 +22,17 @@ no physical-device protocol, HASC service definition, or outgoing connection.
 
 This repository does not own Climate policy, Automation policy, the Common
 smart-home contract, or Smart Home Center decisions. It must not deploy
-Node-RED, hold physical-device authority, or contain secrets, live entity
-identifiers, flow snapshots, physical command payloads, or deployment scripts.
-The only approved Home Assistant service boundary is an explicitly armed
-single-`input_boolean` canary using its standard on/off services. The selected
-runtime identifier stays in Home Assistant options and is never committed or
-exported in diagnostics.
+Node-RED, contain secrets, live entity identifiers, flow snapshots, physical
+command payloads, or deployment scripts. Climate commands may leave HASC only
+through two fixed Climate API v1 paths after typed validation. The client can
+never provide a service, entity ID, private source ID, arbitrary URL, or
+backend command payload.
 
-Proxy and general device execution still require separate owner approval,
-shadow evidence, a device-specific canary/rollback/authority decision, and
-owner signoff. The helper-only canary grants no physical-device authority.
+General proxy execution remains blocked. The climate path is separately off by
+default, runs read-only in `shadow`, and may execute only for one explicitly
+selected authority-ready canary room. Returning it to `disabled` removes its
+target and room settings. The legacy single-`input_boolean` canary remains
+separate.
 
 ## Current safe scope
 
@@ -61,6 +63,11 @@ owner signoff. The helper-only canary grants no physical-device authority.
    and HASC switch. Diagnostics show only the fixed canary scope and enabled
    flag, never the selected identifier. See the [canary control
    contract](docs/canary-input-boolean-control.md).
+10. In version 0.5.0, let a local administrator bind climate devices into a
+    private logical registry, serve a private-id-free Android snapshot, and
+    validate typed climate intents in shadow. A one-room canary can post only
+    after fresh state, authority, capability, room, owner, and scope checks.
+    See the [climate architecture](docs/climate-control-architecture.md).
 
 See [repository basics](docs/repository-basics.md) and
 [AI context](AI_CONTEXT.md) before changing the repository.
@@ -120,12 +127,12 @@ custom HACS repository.
    **Integration** type.
 3. Find **HausMan Hub HASC** in HACS and install it.
 4. Restart Home Assistant, then add **HausMan Hub HASC** from its integration
-   settings. Choose only `read-only` or `shadow`.
+   settings. Choose only `read-only` or `shadow` for the base observation mode.
 
-Installation does not grant physical-device control. The optional canary is
-off by default and may call only one selected `input_boolean`. Do not attach
-that helper to an automation during the first check. `proxy` and general
-device execution remain blocked.
+Installation does not grant physical-device control. Both canaries are off by
+default. Keep the climate bridge `disabled` until its private registry is
+prepared, then use `shadow` before selecting one canary room. The exact rollout
+is documented in the [climate guide](docs/climate-control-architecture.md).
 
 For the short, safe Home Assistant check after installation, see the Russian
 [safe-check guide](docs/home-assistant-safe-check.md).

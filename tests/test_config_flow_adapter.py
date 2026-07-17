@@ -245,16 +245,22 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         expected_summary_update_interval_default: str,
         expected_canary_control_enabled_default: bool = False,
         expected_canary_control_target_default: str | None = None,
+        expected_climate_bridge_mode_default: str = "disabled",
+        expected_climate_bridge_target_default: str | None = None,
+        expected_climate_canary_room_default: str | None = None,
     ) -> FakeSelectSelector:
-        """Verify the fixed observation fields and narrow canary selector."""
+        """Verify fixed observation, helper-canary, and climate rollout fields."""
 
-        self.assertEqual(5, len(schema.fields))
+        self.assertEqual(8, len(schema.fields))
         fields = list(schema.fields.items())
         mode_field, mode_selector = fields[0]
         page_field, page_selector = fields[1]
         interval_field, interval_selector = fields[2]
         canary_field, canary_selector = fields[3]
-        target_field, target_selector = fields[4]
+        bridge_mode_field, bridge_mode_selector = fields[4]
+        target_field, target_selector = fields[5]
+        bridge_target_field, bridge_target_selector = fields[6]
+        bridge_room_field, bridge_room_selector = fields[7]
         self.assertIsInstance(mode_field, FakeRequired)
         self.assertEqual("mode", mode_field.key)
         self.assertEqual(expected_mode_default, mode_field.default)
@@ -284,12 +290,28 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(expected_canary_control_enabled_default, canary_field.default)
         self.assertIsInstance(canary_selector, FakeBooleanSelector)
         self.assertEqual("boolean", canary_selector.selector_type)
+        self.assertIsInstance(bridge_mode_field, FakeRequired)
+        self.assertEqual("climate_bridge_mode", bridge_mode_field.key)
+        self.assertEqual(expected_climate_bridge_mode_default, bridge_mode_field.default)
+        self.assertIsInstance(bridge_mode_selector, FakeSelectSelector)
+        self.assertEqual(
+            ["disabled", "shadow", "canary"],
+            [option["value"] for option in bridge_mode_selector.config.options],
+        )
         self.assertIsInstance(target_field, FakeOptional)
         self.assertEqual("canary_control_target", target_field.key)
         self.assertEqual(expected_canary_control_target_default, target_field.default)
         self.assertIsInstance(target_selector, FakeEntitySelector)
         self.assertEqual("input_boolean", target_selector.config.domain)
         self.assertFalse(target_selector.config.multiple)
+        self.assertIsInstance(bridge_target_field, FakeOptional)
+        self.assertEqual("climate_bridge_target", bridge_target_field.key)
+        self.assertEqual(expected_climate_bridge_target_default, bridge_target_field.default)
+        self.assertIs(bridge_target_selector, str)
+        self.assertIsInstance(bridge_room_field, FakeOptional)
+        self.assertEqual("climate_canary_room_id", bridge_room_field.key)
+        self.assertEqual(expected_climate_canary_room_default, bridge_room_field.default)
+        self.assertIs(bridge_room_selector, str)
         return mode_selector
 
     async def test_user_form_exposes_only_the_two_approved_modes(self) -> None:
@@ -355,6 +377,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "local_summary_enabled": True,
                 "summary_update_interval": "5m",
                 "canary_control_enabled": False,
+                "climate_bridge_mode": "disabled",
             },
             options_result["data"],
         )
@@ -387,6 +410,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "local_summary_enabled": True,
                 "summary_update_interval": "5m",
                 "canary_control_enabled": False,
+                "climate_bridge_mode": "disabled",
             },
             shadow_result["data"],
         )
@@ -489,6 +513,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "local_summary_enabled": False,
                 "summary_update_interval": "5m",
                 "canary_control_enabled": False,
+                "climate_bridge_mode": "disabled",
             },
             result["data"],
         )
@@ -509,6 +534,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "local_summary_enabled": False,
                 "summary_update_interval": "30m",
                 "canary_control_enabled": False,
+                "climate_bridge_mode": "disabled",
             }
         )
 
@@ -520,6 +546,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "local_summary_enabled": False,
                 "summary_update_interval": "30m",
                 "canary_control_enabled": False,
+                "climate_bridge_mode": "disabled",
             },
             result["data"],
         )
@@ -540,6 +567,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "summary_update_interval": "5m",
                 "canary_control_enabled": True,
                 "canary_control_target": "input_boolean.hasc_canary",
+                "climate_bridge_mode": "disabled",
             }
         )
 
@@ -551,6 +579,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "summary_update_interval": "5m",
                 "canary_control_enabled": True,
                 "canary_control_target": "input_boolean.hasc_canary",
+                "climate_bridge_mode": "disabled",
             },
             armed["data"],
         )
@@ -575,6 +604,46 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("create_entry", disarmed["type"])
         self.assertFalse(disarmed["data"]["canary_control_enabled"])
         self.assertNotIn("canary_control_target", disarmed["data"])
+
+    async def test_options_configure_shadow_and_one_room_canary(self) -> None:
+        """The form persists only a private literal origin and stable room id."""
+
+        options_flow = self.config_flow.HausmanHubOptionsFlow()
+        options_flow.config_entry = FakeConfigEntry(
+            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
+            {},
+        )
+        shadow = await options_flow.async_step_init(
+            {
+                "mode": "shadow",
+                "climate_bridge_mode": "shadow",
+                "climate_bridge_target": "http://127.0.0.1:1880",
+            }
+        )
+        self.assertEqual("create_entry", shadow["type"])
+        self.assertEqual("shadow", shadow["data"]["climate_bridge_mode"])
+        self.assertNotIn("climate_canary_room_id", shadow["data"])
+
+        options_flow.config_entry.options = dict(shadow["data"])
+        form = await options_flow.async_step_init()
+        self.assert_options_fields(
+            form["schema"],
+            "shadow",
+            True,
+            "5m",
+            expected_climate_bridge_mode_default="shadow",
+            expected_climate_bridge_target_default="http://127.0.0.1:1880",
+        )
+
+        canary = await options_flow.async_step_init(
+            {
+                **shadow["data"],
+                "climate_bridge_mode": "canary",
+                "climate_canary_room_id": "living",
+            }
+        )
+        self.assertEqual("create_entry", canary["type"])
+        self.assertEqual("living", canary["data"]["climate_canary_room_id"])
 
     async def test_options_reject_unsafe_canary_values(self) -> None:
         """No missing target, other entity domain, or truth-like arm value passes."""

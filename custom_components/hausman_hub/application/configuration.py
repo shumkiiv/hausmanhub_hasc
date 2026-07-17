@@ -19,6 +19,12 @@ from ..domain.configuration import (
     UnsafeModeError,
     configuration_for_mode,
 )
+from ..domain.climate import ClimateModelViolation, ClimateRoom
+from ..domain.climate_bridge import (
+    ClimateBridgeMode,
+    UnsafeClimateBridgeTarget,
+    climate_bridge_target,
+)
 from ..domain.control import UnsafeCanaryTargetError, canary_control_target
 
 
@@ -30,6 +36,10 @@ SUMMARY_UPDATE_INTERVAL_FIELD = "summary_update_interval"
 CANARY_CONTROL_ENABLED_FIELD = "canary_control_enabled"
 CANARY_CONTROL_ENABLED_DEFAULT = False
 CANARY_CONTROL_TARGET_FIELD = "canary_control_target"
+CLIMATE_BRIDGE_MODE_FIELD = "climate_bridge_mode"
+CLIMATE_BRIDGE_MODE_DEFAULT = ClimateBridgeMode.DISABLED.value
+CLIMATE_BRIDGE_TARGET_FIELD = "climate_bridge_target"
+CLIMATE_CANARY_ROOM_ID_FIELD = "climate_canary_room_id"
 
 
 class ConfigurationViolation(ValueError):
@@ -52,6 +62,9 @@ def create_options(
     summary_update_interval_value: object = SUMMARY_UPDATE_INTERVAL_DEFAULT,
     canary_control_enabled_value: object = CANARY_CONTROL_ENABLED_DEFAULT,
     canary_control_target_value: object = None,
+    climate_bridge_mode_value: object = CLIMATE_BRIDGE_MODE_DEFAULT,
+    climate_bridge_target_value: object = None,
+    climate_canary_room_id_value: object = None,
 ) -> dict[str, str | bool]:
     """Return only validated observation and canary-control choices."""
 
@@ -59,23 +72,38 @@ def create_options(
         # Turning the canary off is the rollback path. Never retain a previous
         # target merely because the frontend still submitted its visible value.
         canary_control_target_value = None
+    if climate_bridge_mode_value == ClimateBridgeMode.DISABLED.value:
+        # Disabled is the complete bridge rollback: private target and canary
+        # selection must not survive in saved options.
+        climate_bridge_target_value = None
+        climate_canary_room_id_value = None
+    elif climate_bridge_mode_value == ClimateBridgeMode.SHADOW.value:
+        climate_canary_room_id_value = None
     configuration = _configuration_for(
         mode_value,
         local_summary_enabled_value,
         summary_update_interval_value,
         canary_control_enabled_value,
         canary_control_target_value,
+        climate_bridge_mode_value,
+        climate_bridge_target_value,
+        climate_canary_room_id_value,
     )
     options: dict[str, str | bool] = {
         MODE_FIELD: configuration.mode,
         LOCAL_SUMMARY_ENABLED_FIELD: configuration.local_summary_enabled,
         SUMMARY_UPDATE_INTERVAL_FIELD: configuration.summary_update_interval,
         CANARY_CONTROL_ENABLED_FIELD: configuration.canary_control_enabled,
+        CLIMATE_BRIDGE_MODE_FIELD: configuration.climate_bridge_mode.value,
     }
     if configuration.canary_control_target is not None:
         options[CANARY_CONTROL_TARGET_FIELD] = (
             configuration.canary_control_target.entity_id
         )
+    if configuration.climate_bridge_target is not None:
+        options[CLIMATE_BRIDGE_TARGET_FIELD] = configuration.climate_bridge_target.origin
+    if configuration.climate_canary_room_id is not None:
+        options[CLIMATE_CANARY_ROOM_ID_FIELD] = configuration.climate_canary_room_id
     return options
 
 
@@ -97,6 +125,9 @@ def effective_configuration(
             SUMMARY_UPDATE_INTERVAL_FIELD,
             CANARY_CONTROL_ENABLED_FIELD,
             CANARY_CONTROL_TARGET_FIELD,
+            CLIMATE_BRIDGE_MODE_FIELD,
+            CLIMATE_BRIDGE_TARGET_FIELD,
+            CLIMATE_CANARY_ROOM_ID_FIELD,
         },
         "options",
     )
@@ -118,12 +149,21 @@ def effective_configuration(
         CANARY_CONTROL_ENABLED_DEFAULT,
     )
     canary_control_target_value = options.get(CANARY_CONTROL_TARGET_FIELD)
+    climate_bridge_mode_value = options.get(
+        CLIMATE_BRIDGE_MODE_FIELD,
+        CLIMATE_BRIDGE_MODE_DEFAULT,
+    )
+    climate_bridge_target_value = options.get(CLIMATE_BRIDGE_TARGET_FIELD)
+    climate_canary_room_id_value = options.get(CLIMATE_CANARY_ROOM_ID_FIELD)
     return _configuration_for(
         mode_value,
         local_summary_enabled_value,
         summary_update_interval_value,
         canary_control_enabled_value,
         canary_control_target_value,
+        climate_bridge_mode_value,
+        climate_bridge_target_value,
+        climate_canary_room_id_value,
     )
 
 
@@ -133,6 +173,9 @@ def _configuration_for(
     summary_update_interval_value: object = SUMMARY_UPDATE_INTERVAL_DEFAULT,
     canary_control_enabled_value: object = CANARY_CONTROL_ENABLED_DEFAULT,
     canary_control_target_value: object = None,
+    climate_bridge_mode_value: object = CLIMATE_BRIDGE_MODE_DEFAULT,
+    climate_bridge_target_value: object = None,
+    climate_canary_room_id_value: object = None,
 ) -> SafeConfiguration:
     """Build the configuration after checking every optional choice."""
 
@@ -161,6 +204,35 @@ def _configuration_for(
         )
 
     try:
+        bridge_mode = ClimateBridgeMode(climate_bridge_mode_value)
+    except (TypeError, ValueError) as error:
+        raise ConfigurationViolation("climate bridge mode must be approved") from error
+    bridge_target = None
+    canary_room_id = None
+    if bridge_mode is ClimateBridgeMode.DISABLED:
+        if climate_bridge_target_value is not None or climate_canary_room_id_value is not None:
+            raise ConfigurationViolation(
+                "disabled climate bridge must not retain a target or canary room"
+            )
+    else:
+        try:
+            bridge_target = climate_bridge_target(climate_bridge_target_value)
+        except UnsafeClimateBridgeTarget as error:
+            raise ConfigurationViolation(str(error)) from error
+        if bridge_mode is ClimateBridgeMode.CANARY:
+            try:
+                canary_room_id = ClimateRoom(
+                    climate_canary_room_id_value,  # type: ignore[arg-type]
+                    "Temporary",
+                ).room_id
+            except ClimateModelViolation as error:
+                raise ConfigurationViolation(
+                    "climate canary room must be a stable lowercase id"
+                ) from error
+        elif climate_canary_room_id_value is not None:
+            raise ConfigurationViolation("shadow climate bridge must not retain a canary room")
+
+    try:
         mode_configuration = configuration_for_mode(mode_value)
     except UnsafeModeError as error:
         raise ConfigurationViolation(str(error)) from error
@@ -171,6 +243,9 @@ def _configuration_for(
         summary_update_interval=summary_update_interval_value,
         canary_control_enabled=canary_control_enabled_value,
         canary_control_target=target,
+        climate_bridge_mode=bridge_mode,
+        climate_bridge_target=bridge_target,
+        climate_canary_room_id=canary_room_id,
     )
 
 

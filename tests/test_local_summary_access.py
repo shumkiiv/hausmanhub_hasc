@@ -28,6 +28,7 @@ FAKE_MODULE_NAMES = (
     "homeassistant.helpers.device_registry",
     "homeassistant.helpers.entity_registry",
     "homeassistant.helpers.start",
+    "homeassistant.helpers.storage",
 )
 
 
@@ -245,6 +246,19 @@ class FakeRequestWithoutUser(dict[str, object]):
         self.query_string = ""
 
 
+class FakeJsonRequest(FakeRequest):
+    """Add the bounded JSON request surface used by climate POST routes."""
+
+    def __init__(self, remote: object, user: object, path: str, payload: object) -> None:
+        super().__init__(remote, user, path=path)
+        self._payload = payload
+        self.content_type = "application/json"
+        self.content_length = len(json.dumps(payload).encode("utf-8"))
+
+    async def json(self) -> object:
+        return self._payload
+
+
 class FakeEntry:
     """Minimal config entry shape used by the safe outer adapter."""
 
@@ -338,6 +352,26 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         startup_callback(hass)
 
     start.async_at_started = async_at_started  # type: ignore[attr-defined]
+    storage = ModuleType("homeassistant.helpers.storage")
+
+    class FakeStore:
+        """Keep the newly added disabled climate registry empty in memory."""
+
+        def __class_getitem__(cls, _: object) -> type:
+            return cls
+
+        def __init__(self, hass: object, version: int, key: str) -> None:
+            self.hass = hass
+            self.version = version
+            self.key = key
+
+        async def async_load(self) -> None:
+            return None
+
+        async def async_save(self, _: object) -> None:
+            return None
+
+    storage.Store = FakeStore  # type: ignore[attr-defined]
 
     homeassistant.auth = auth  # type: ignore[attr-defined]
     homeassistant.components = components  # type: ignore[attr-defined]
@@ -350,6 +384,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     helpers.device_registry = device_registry  # type: ignore[attr-defined]
     helpers.entity_registry = entity_registry  # type: ignore[attr-defined]
     helpers.start = start  # type: ignore[attr-defined]
+    helpers.storage = storage  # type: ignore[attr-defined]
 
     return {
         "homeassistant": homeassistant,
@@ -364,6 +399,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.helpers.device_registry": device_registry,
         "homeassistant.helpers.entity_registry": entity_registry,
         "homeassistant.helpers.start": start,
+        "homeassistant.helpers.storage": storage,
     }
 
 
@@ -432,6 +468,142 @@ class LocalSummaryAccessTest(unittest.TestCase):
         serialized = json.dumps(response.payload)
         for forbidden_value in ("synthetic_private", "21.5", "token", "command"):
             self.assertNotIn(forbidden_value, serialized)
+
+    def test_disabled_climate_routes_separate_tablet_and_admin_roles(self) -> None:
+        """A normal tablet cannot administer, and an admin cannot impersonate it."""
+
+        views = {view.url: view for view in self.hass.http.views}
+        tablet = reader_user("system-users")
+        admin = reader_user("system-admin", admin=True)
+        read_only = reader_user("system-read-only")
+
+        home = views["/api/hausman_hub/v1/home"]
+        self.assertEqual(
+            503,
+            asyncio.run(
+                home.get(
+                    FakeRequest(
+                        "127.0.0.1",
+                        tablet,
+                        path="/api/hausman_hub/v1/home",
+                    )
+                )
+            ).status,
+        )
+        for user in (admin, read_only):
+            with self.subTest(user=user):
+                response = asyncio.run(
+                    home.get(
+                        FakeRequest(
+                            "127.0.0.1",
+                            user,
+                            path="/api/hausman_hub/v1/home",
+                        )
+                    )
+                )
+                self.assertEqual(403, response.status)
+
+        registry = views["/api/hausman_hub/v1/admin/climate-registry"]
+        admin_response = asyncio.run(
+            registry.get(
+                FakeRequest(
+                    "127.0.0.1",
+                    admin,
+                    path="/api/hausman_hub/v1/admin/climate-registry",
+                )
+            )
+        )
+        self.assertEqual(200, admin_response.status)
+        self.assertEqual({"version": 1, "rooms": [], "devices": []}, admin_response.payload)
+        tablet_response = asyncio.run(
+            registry.get(
+                FakeRequest(
+                    "127.0.0.1",
+                    tablet,
+                    path="/api/hausman_hub/v1/admin/climate-registry",
+                )
+            )
+        )
+        self.assertEqual(403, tablet_response.status)
+
+    def test_shadow_climate_route_returns_public_state_and_never_posts(self) -> None:
+        """Exercise the Android facade with an actual runtime and in-memory bridge."""
+
+        from custom_components.hausman_hub.application.climate_import import (
+            import_climate_state,
+        )
+        from custom_components.hausman_hub.application.climate_registry import (
+            registry_from_payload,
+        )
+        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
+        from tests.test_climate_import import registry_payload, source_payload
+
+        class Store:
+            async def async_load(self):
+                return registry_from_payload(registry_payload())
+
+            async def async_save(self, registry):
+                return None
+
+        class Bridge:
+            def __init__(self) -> None:
+                self.executed = []
+
+            async def async_fetch_state(self):
+                return import_climate_state(source_payload())
+
+            async def async_execute(self, plan):
+                self.executed.append(plan)
+                return {"ok": True}
+
+        bridge = Bridge()
+        runtime = ClimateRuntime(
+            entry_id=self.entry.entry_id,
+            configuration=SafeConfiguration(
+                mode="shadow",
+                climate_bridge_mode=ClimateBridgeMode.SHADOW,
+            ),
+            registry_store=Store(),
+            bridge_client=bridge,
+        )
+        asyncio.run(runtime.async_start())
+        self.hass.data["hausman_hub"]["climate_runtime"] = runtime
+        views = {view.url: view for view in self.hass.http.views}
+        tablet = reader_user("system-users")
+
+        home_response = asyncio.run(
+            views["/api/hausman_hub/v1/home"].get(
+                FakeRequest(
+                    "192.168.1.20",
+                    tablet,
+                    path="/api/hausman_hub/v1/home",
+                )
+            )
+        )
+        self.assertEqual(200, home_response.status)
+        serialized = json.dumps(home_response.payload)
+        self.assertNotIn("synthetic-ac-source-living", serialized)
+        self.assertNotIn("entity_id", serialized)
+
+        action_response = asyncio.run(
+            views["/api/hausman_hub/v1/actions"].post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    tablet,
+                    "/api/hausman_hub/v1/actions",
+                    {
+                        "action": "set_room_target",
+                        "room_id": "living",
+                        "target_temperature": 24.5,
+                    },
+                )
+            )
+        )
+        self.assertEqual(200, action_response.status)
+        self.assertEqual("shadow", action_response.payload["status"])
+        self.assertEqual([], bridge.executed)
 
     def test_view_rejects_admin_mixed_group_system_and_public_requests(self) -> None:
         rejected_requests = (
@@ -586,7 +758,14 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(1, len(self.hass.http.views))
+        self.assertEqual(5, len(self.hass.http.views))
+        self.assertEqual(
+            1,
+            sum(
+                view.url == "/api/hausman_hub/local-summary"
+                for view in self.hass.http.views
+            ),
+        )
         self.assertEqual(
             [
                 (self.entry, ("sensor", "switch")),
@@ -868,8 +1047,17 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual([], closed_hass.http.views)
-        self.assertEqual({}, closed_hass.data)
+        self.assertEqual(4, len(closed_hass.http.views))
+        self.assertEqual(
+            {
+                "/api/hausman_hub/v1/home",
+                "/api/hausman_hub/v1/actions",
+                "/api/hausman_hub/v1/admin/climate-import",
+                "/api/hausman_hub/v1/admin/climate-registry",
+            },
+            {view.url for view in closed_hass.http.views},
+        )
+        self.assertNotIn("local_summary_active_entry", closed_hass.data["hausman_hub"])
         self.assertEqual(1, len(closed_entry.update_listeners))
 
     def test_setup_rejects_invalid_saved_configuration_before_loading(self) -> None:

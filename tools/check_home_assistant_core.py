@@ -1,13 +1,13 @@
-"""Run HASC observation and input-boolean canary against isolated HA Core.
+"""Run HASC observation and disabled climate facade against isolated HA Core.
 
 This is an explicit compatibility smoke check, not a live-home test. It copies
 the integration into a new temporary Home Assistant configuration directory,
-exercises safe ``read-only`` and ``shadow`` config entries plus one disposable
-``input_boolean`` canary, and removes all temporary files when finished. It
-never receives a real credential, connects to a real or remote network, or
-calls a physical device. Its only HASC command test calls the temporary
-helper's standard local on/off services. The HTTP check starts a temporary
-loopback server to test the authenticated local nine-count route.
+exercises safe ``read-only`` and ``shadow`` entries, the climate bridge's full
+disabled rollback, plus one disposable ``input_boolean`` canary, and removes
+all temporary files when finished. It never receives a real credential,
+connects to a real or remote network, or calls a physical device. Its only
+executed HASC command calls the temporary helper's standard local on/off
+services. HTTP checks use a temporary loopback server.
 """
 
 from __future__ import annotations
@@ -85,6 +85,10 @@ SUMMARY_UPDATE_INTERVAL_DEFAULT = "5m"
 CANARY_CONTROL_ENABLED_FIELD = "canary_control_enabled"
 CANARY_CONTROL_TARGET_FIELD = "canary_control_target"
 CANARY_CONTROL_SCOPE = "single_input_boolean"
+CLIMATE_BRIDGE_MODE_FIELD = "climate_bridge_mode"
+CLIMATE_BRIDGE_MODE_DEFAULT = "disabled"
+CLIMATE_BRIDGE_TARGET_FIELD = "climate_bridge_target"
+CLIMATE_CANARY_ROOM_ID_FIELD = "climate_canary_room_id"
 CANARY_TARGET_ENTITY_ID = "input_boolean.hasc_disposable_canary"
 CANARY_SWITCH_ENTITY_ID = "switch.hausman_hub_hasc_canary_control"
 CANARY_SWITCH_UNIQUE_ID_SUFFIX = "canary_control"
@@ -94,6 +98,16 @@ SUMMARY_UPDATE_INTERVAL_MINUTES = {
     "30m": 30,
 }
 LOCAL_SUMMARY_PATH = "/api/hausman_hub/local-summary"
+CLIMATE_HOME_PATH = "/api/hausman_hub/v1/home"
+CLIMATE_ACTION_PATH = "/api/hausman_hub/v1/actions"
+CLIMATE_ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
+CLIMATE_ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
+CLIMATE_API_PATHS = (
+    CLIMATE_HOME_PATH,
+    CLIMATE_ACTION_PATH,
+    CLIMATE_ADMIN_IMPORT_PATH,
+    CLIMATE_ADMIN_REGISTRY_PATH,
+)
 ALTERNATE_LOCAL_SUMMARY_TARGET_STATUSES = {
     f"{LOCAL_SUMMARY_PATH}/": HTTPStatus.NOT_FOUND,
     f"{LOCAL_SUMMARY_PATH}?unexpected=1": HTTPStatus.NOT_FOUND,
@@ -961,6 +975,33 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
         False,
         "canary target selector must accept only one helper",
     )
+    climate_mode_fields = [
+        field
+        for field in serialized_schema
+        if isinstance(field, dict)
+        and field.get("name") == CLIMATE_BRIDGE_MODE_FIELD
+    ]
+    if len(climate_mode_fields) != 1:
+        raise RuntimeError("options form must serialize one climate bridge mode field")
+    climate_mode_selector = climate_mode_fields[0].get("selector")
+    if not isinstance(climate_mode_selector, dict):
+        raise RuntimeError("climate bridge mode must serialize as a selector")
+    climate_select = climate_mode_selector.get("select")
+    if not isinstance(climate_select, dict):
+        raise RuntimeError("climate bridge mode must use a native select selector")
+    assert_result(
+        [option.get("value") for option in climate_select.get("options", [])],
+        ["disabled", "shadow", "canary"],
+        "climate bridge selector must expose only its rollout stages",
+    )
+    for field_name in (CLIMATE_BRIDGE_TARGET_FIELD, CLIMATE_CANARY_ROOM_ID_FIELD):
+        fields = [
+            field
+            for field in serialized_schema
+            if isinstance(field, dict) and field.get("name") == field_name
+        ]
+        if len(fields) != 1:
+            raise RuntimeError(f"options form must serialize one {field_name} field")
 
 
 async def async_assert_canary_control_lifecycle(
@@ -1100,6 +1141,7 @@ async def async_assert_canary_control_lifecycle(
             LOCAL_SUMMARY_ENABLED_FIELD: current_local_page_enabled,
             SUMMARY_UPDATE_INTERVAL_FIELD: current_summary_interval,
             CANARY_CONTROL_ENABLED_FIELD: False,
+            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
             # Deliberately submit the visible old target. The application
             # boundary must discard it as part of the rollback.
             CANARY_CONTROL_TARGET_FIELD: CANARY_TARGET_ENTITY_ID,
@@ -1227,6 +1269,7 @@ async def async_update_optional_local_page(
             LOCAL_SUMMARY_ENABLED_FIELD: enabled,
             SUMMARY_UPDATE_INTERVAL_FIELD: current_summary_update_interval,
             CANARY_CONTROL_ENABLED_FIELD: False,
+            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
         },
         "optional local page must retain only the approved saved options",
     )
@@ -1354,6 +1397,7 @@ async def async_update_summary_interval(
             LOCAL_SUMMARY_ENABLED_FIELD: current_local_page_enabled,
             SUMMARY_UPDATE_INTERVAL_FIELD: target_interval,
             CANARY_CONTROL_ENABLED_FIELD: False,
+            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
         },
         "summary interval must retain only the approved saved options",
     )
@@ -1453,6 +1497,7 @@ async def async_update_inactive_safe_options_without_reading_home(
             LOCAL_SUMMARY_ENABLED_FIELD: target_local_page_enabled,
             SUMMARY_UPDATE_INTERVAL_FIELD: target_summary_update_interval,
             CANARY_CONTROL_ENABLED_FIELD: False,
+            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
         },
         "inactive safe options must keep the exact safe option shape",
     )
@@ -1495,7 +1540,7 @@ async def async_assert_broken_options_form_defaults_to_read_only(
     )
     schema = options_form.get("data_schema")
     schema_fields = getattr(schema, "schema", None)
-    if not isinstance(schema_fields, dict) or len(schema_fields) != 5:
+    if not isinstance(schema_fields, dict) or len(schema_fields) != 8:
         raise RuntimeError(
             f"{scenario_name} options form must expose only the approved settings"
         )
@@ -1505,17 +1550,26 @@ async def async_assert_broken_options_form_defaults_to_read_only(
         local_page_field,
         summary_interval_field,
         canary_enabled_field,
+        climate_bridge_mode_field,
+        _,
+        _,
         _,
     ) = schema_fields
     mode_default_factory = getattr(mode_field, "default", None)
     local_page_default_factory = getattr(local_page_field, "default", None)
     summary_interval_default_factory = getattr(summary_interval_field, "default", None)
     canary_enabled_default_factory = getattr(canary_enabled_field, "default", None)
+    climate_bridge_mode_default_factory = getattr(
+        climate_bridge_mode_field,
+        "default",
+        None,
+    )
     if (
         not callable(mode_default_factory)
         or not callable(local_page_default_factory)
         or not callable(summary_interval_default_factory)
         or not callable(canary_enabled_default_factory)
+        or not callable(climate_bridge_mode_default_factory)
     ):
         raise RuntimeError(f"{scenario_name} options form must provide safe defaults")
     assert_result(
@@ -1537,6 +1591,11 @@ async def async_assert_broken_options_form_defaults_to_read_only(
         canary_enabled_default_factory(),
         False,
         f"{scenario_name} options form must default to a disarmed canary",
+    )
+    assert_result(
+        climate_bridge_mode_default_factory(),
+        CLIMATE_BRIDGE_MODE_DEFAULT,
+        f"{scenario_name} climate bridge must default to disabled",
     )
     hass.config_entries.options.async_abort(options_form["flow_id"])
     await hass.async_block_till_done()
@@ -1600,6 +1659,14 @@ async def async_assert_safe_diagnostics(
                 "device_authority": "not_granted",
                 "direct_execution_status": "direct_execution_blocked",
                 "proxy_status": "not_approved",
+            },
+            "climate_bridge": {
+                "mode": CLIMATE_BRIDGE_MODE_DEFAULT,
+                "target_configured": False,
+                "canary_scope": "none",
+                "runtime_status": "disabled",
+                "registry_rooms": 0,
+                "registry_devices": 0,
             },
             "shadow_parity": {
                 "parity_status": "unresolved",
@@ -2009,6 +2076,64 @@ def find_local_summary_routes(hass: HomeAssistant) -> tuple[Any, ...]:
     )
 
 
+def find_climate_routes(hass: HomeAssistant) -> dict[str, tuple[Any, ...]]:
+    """Return every fixed HASC climate route grouped by its canonical path."""
+
+    resources = tuple(hass.http.app.router.resources())
+    return {
+        path: tuple(
+            candidate
+            for candidate in resources
+            if getattr(candidate, "canonical", None) == path
+        )
+        for path in CLIMATE_API_PATHS
+    }
+
+
+def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: str) -> None:
+    """Require the loaded disabled facade and its non-duplicated fixed routes."""
+
+    runtime_data = hass.data.get(domain)
+    if not isinstance(runtime_data, dict):
+        raise RuntimeError("disabled climate facade runtime data must be present")
+    if "local_summary_active_entry" in runtime_data or "local_summary_view" in runtime_data:
+        raise RuntimeError("disabled optional local page must not keep local summary data")
+
+    climate_runtime = runtime_data.get("climate_runtime")
+    if climate_runtime is None:
+        raise RuntimeError("disabled climate facade runtime must be present")
+    assert_result(
+        getattr(climate_runtime, "entry_id", None),
+        entry_id,
+        "disabled climate facade must belong to the loaded HASC entry",
+    )
+    bridge_mode = getattr(getattr(climate_runtime, "configuration", None), "climate_bridge_mode", None)
+    assert_result(
+        getattr(bridge_mode, "value", None),
+        CLIMATE_BRIDGE_MODE_DEFAULT,
+        "disabled climate facade must retain the complete rollback mode",
+    )
+    views = runtime_data.get("climate_views")
+    if not isinstance(views, tuple) or len(views) != len(CLIMATE_API_PATHS):
+        raise RuntimeError("disabled climate facade must retain exactly four fixed views")
+
+    expected_methods = {
+        CLIMATE_HOME_PATH: {"GET", "OPTIONS"},
+        CLIMATE_ACTION_PATH: {"POST", "OPTIONS"},
+        CLIMATE_ADMIN_IMPORT_PATH: {"GET", "OPTIONS"},
+        CLIMATE_ADMIN_REGISTRY_PATH: {"GET", "POST", "OPTIONS"},
+    }
+    for path, routes in find_climate_routes(hass).items():
+        if len(routes) != 1:
+            raise RuntimeError(f"climate facade must register one route for {path}")
+        methods = {route.method for route in routes[0]}
+        assert_result(
+            methods,
+            expected_methods[path],
+            f"climate facade route {path} must keep its exact methods",
+        )
+
+
 def assert_local_summary_view(hass: HomeAssistant, domain: str) -> None:
     """Require one authenticated GET-only route for the approved nine counts."""
 
@@ -2059,8 +2184,15 @@ def assert_local_summary_is_not_registered(
 ) -> None:
     """Require a closed saved choice to leave no page runtime or route."""
 
-    if hass.data.get(domain) is not None:
-        raise RuntimeError(f"{scenario_name} must not keep local summary runtime data")
+    runtime_data = hass.data.get(domain)
+    if runtime_data is not None:
+        if not isinstance(runtime_data, dict):
+            raise RuntimeError(f"{scenario_name} must keep dictionary runtime data")
+        unexpected_keys = set(runtime_data) - {"climate_runtime", "climate_views"}
+        if unexpected_keys:
+            raise RuntimeError(
+                f"{scenario_name} must not keep local summary runtime data"
+            )
     if find_local_summary_routes(hass):
         raise RuntimeError(f"{scenario_name} must not register a local summary route")
 
@@ -2517,6 +2649,107 @@ async def async_create_test_read_only_access_token(
 
     reader = await async_create_test_read_only_user(hass, user_name)
     return await async_create_test_access_token(hass, reader)
+
+
+async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None:
+    """Exercise actual Core auth and fail-closed disabled climate endpoints."""
+
+    owner = await hass.auth.async_create_user(
+        "HASC disabled climate test owner",
+        group_ids=[GROUP_ID_ADMIN],
+        local_only=True,
+    )
+    tablet = await hass.auth.async_create_user(
+        "HASC disabled climate tablet",
+        group_ids=[GROUP_ID_USER],
+        local_only=True,
+    )
+    owner_token = await async_create_test_access_token(hass, owner)
+    tablet_token = await async_create_test_access_token(hass, tablet)
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    tablet_headers = {"Authorization": f"Bearer {tablet_token}"}
+
+    server = TestServer(hass.http.app, host="127.0.0.1")
+    client = TestClient(server)
+    try:
+        await client.start_server()
+        unauthenticated = await client.get(CLIMATE_HOME_PATH)
+        assert_result(
+            unauthenticated.status,
+            HTTPStatus.UNAUTHORIZED,
+            "climate home must require Home Assistant authentication",
+        )
+
+        rejected_owner = await client.get(CLIMATE_HOME_PATH, headers=owner_headers)
+        assert_result(
+            rejected_owner.status,
+            HTTPStatus.FORBIDDEN,
+            "climate home must reject an administrator as a tablet",
+        )
+
+        disabled_home = await client.get(CLIMATE_HOME_PATH, headers=tablet_headers)
+        assert_result(
+            disabled_home.status,
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "disabled climate home must fail closed for the exact tablet role",
+        )
+        assert_local_summary_response_is_not_stored(
+            disabled_home,
+            "disabled climate home response",
+        )
+
+        disabled_action = await client.post(
+            CLIMATE_ACTION_PATH,
+            headers=tablet_headers,
+            json={"action": "turn_room_off", "room_id": "room-one"},
+        )
+        assert_result(
+            disabled_action.status,
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "disabled climate actions must fail closed without posting a command",
+        )
+        assert_local_summary_response_is_not_stored(
+            disabled_action,
+            "disabled climate action response",
+        )
+
+        rejected_tablet_admin = await client.get(
+            CLIMATE_ADMIN_REGISTRY_PATH,
+            headers=tablet_headers,
+        )
+        assert_result(
+            rejected_tablet_admin.status,
+            HTTPStatus.FORBIDDEN,
+            "climate registry must reject the ordinary tablet role",
+        )
+
+        registry = await client.get(CLIMATE_ADMIN_REGISTRY_PATH, headers=owner_headers)
+        assert_result(
+            registry.status,
+            HTTPStatus.OK,
+            "local administrator must be able to inspect the disabled registry",
+        )
+        assert_result(
+            await registry.json(),
+            {"version": 1, "rooms": [], "devices": []},
+            "new disabled climate registry must be empty and versioned",
+        )
+        assert_local_summary_response_is_not_stored(
+            registry,
+            "disabled climate registry response",
+        )
+
+        disabled_import = await client.get(
+            CLIMATE_ADMIN_IMPORT_PATH,
+            headers=owner_headers,
+        )
+        assert_result(
+            disabled_import.status,
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "disabled climate import must not contact any bridge",
+        )
+    finally:
+        await client.close()
 
 
 async def async_assert_approved_local_summary_origins_are_accepted(
@@ -4291,8 +4524,8 @@ async def async_run_check() -> None:
                 "15m",
             )
             await async_assert_safe_diagnostics(hass, domain, read_only_entry, "read-only")
-            if hass.data.get(domain) is not None:
-                raise RuntimeError("disabled optional local page must not restore HASC page data")
+            assert_disabled_climate_facade(hass, domain, read_only_entry.entry_id)
+            await async_assert_disabled_climate_http_access(hass)
             if find_local_summary_routes(hass):
                 raise RuntimeError("disabled optional local page must not restore its route")
 

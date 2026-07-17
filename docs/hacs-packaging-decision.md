@@ -20,6 +20,10 @@ the public HACS catalog.
   one selected `input_boolean`. It registers no HASC service, creates no
   device, and has no Node-RED, external, or physical-device execution path.
 - Proxy and general device execution remain unapproved and blocked.
+- Version 0.5.0 separately adds a disabled-by-default typed Climate API facade.
+  It is not a generic external connection: shadow is read-only and canary is
+  restricted to one authority-ready room and fixed command contracts. See the
+  [climate architecture](climate-control-architecture.md).
 
 ## Previous options
 
@@ -58,8 +62,8 @@ not add it to the public HACS catalog.
 - It does not expand the approved observation modes, add proxy, or lift
   general `direct_execution_blocked`. The helper-only canary is governed by
   its separate [control contract](canary-input-boolean-control.md).
-- Repository verification remains local and read-only, with no live Home
-  Assistant, Node-RED, device, or external API calls.
+- Repository verification remains synthetic and isolated, with no live Home
+  Assistant, Node-RED, device, or real Climate API calls.
 - The metadata change received Kimi review before commit and push.
 
 ## Implementation boundary after approval
@@ -73,6 +77,7 @@ or Smart Home Center policy. Later approved runtime versions, including the
 ## Explicitly still out of scope
 
 - Public HACS catalog listing or support promise.
-- Proxy approval, rollback procedure, or live source connection.
-- Shadow-parity acceptance, physical-device canary, authority transfer, or
-  general device execution.
+- Generic proxy approval or other live source connections.
+- Live climate shadow acceptance, permission to execute the one-room physical
+  canary, authority transfer beyond the existing climate-core, or general
+  device execution.
