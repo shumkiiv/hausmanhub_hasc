@@ -66,6 +66,16 @@ Last updated: 2026-07-17.
   synthetic registry, reads the Android home contract, retries a shadow
   action, queries its receipt, and asserts a measured zero command POST count
   before restoring `disabled` and removing only the temporary registry.
+- HASC 0.5.1 was published from `494ae94` as the non-prerelease GitHub Release
+  `v0.5.1` after 204 local tests, disposable Core 2026.6.4/2026.7.0 checks,
+  successful GitHub Actions, and a final Kimi review with no findings. HACS
+  installed it on the live Core 2026.6.4 home and the owner completed the
+  required restart. Post-restart evidence showed installed/latest `v0.5.1`,
+  the new operation contract v1 loaded, an unknown receipt fully redacted, and
+  the admin readiness route closed to the non-admin verification account. The
+  live climate bridge remained `disabled`, with no target or canary room; the
+  fail-closed action check returned unavailable before execution. No physical
+  climate canary or device command was run.
 - Further HASC-only development is prioritized in the
   [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
   operator-friendly registry setup and a formal Android contract first,

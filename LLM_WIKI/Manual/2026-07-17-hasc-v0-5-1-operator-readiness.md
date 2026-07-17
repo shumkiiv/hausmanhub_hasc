@@ -53,3 +53,17 @@ then restores `disabled` and removes only its temporary registry fixture.
 
 No real credential, home identifier, live target, Android repository, Node-RED
 flow, climate-core source, or physical device is part of this implementation.
+
+## Live deployment closure
+
+Release `v0.5.1` points to `494ae94` and passed the repository GitHub Actions
+workflow. HACS installed it on the live Home Assistant Core 2026.6.4 instance;
+after the owner completed the required restart, the update entity reported
+installed/latest `v0.5.1` with no remaining restart notice.
+
+The post-restart check proved that the new operation route returns contract v1
+and a fully redacted `unknown` receipt, while the new admin readiness route is
+present but forbidden to the non-admin verification account. Saved climate
+options remained `disabled`, with neither a bridge target nor a canary room,
+and an action probe failed closed as unavailable before execution. No physical
+climate command or canary was attempted.
