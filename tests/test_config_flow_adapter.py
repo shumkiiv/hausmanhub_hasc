@@ -873,6 +873,81 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             [device.device_id for device in store.saved[0].devices],
         )
 
+    async def test_options_show_redacted_shadow_evidence_without_saving(self) -> None:
+        """The guided setup exposes candidate readiness as a read-only screen."""
+
+        from custom_components.hausman_hub.application.climate_import import (
+            import_climate_state,
+        )
+        from custom_components.hausman_hub.application.climate_registry import (
+            registry_from_payload,
+        )
+        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
+        from tests.test_climate_import import registry_payload, source_payload
+
+        class Store:
+            def __init__(self) -> None:
+                self.saved = []
+
+            async def async_load(self):
+                return registry_from_payload(registry_payload())
+
+            async def async_save(self, registry):
+                self.saved.append(registry)
+
+        class Bridge:
+            def __init__(self) -> None:
+                self.executed = []
+
+            async def async_fetch_state(self):
+                return import_climate_state(source_payload())
+
+            async def async_execute(self, plan):
+                self.executed.append(plan)
+
+        store = Store()
+        bridge = Bridge()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=SafeConfiguration(
+                mode="shadow",
+                climate_bridge_mode=ClimateBridgeMode.SHADOW,
+            ),
+            registry_store=store,
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        options_flow = self.config_flow.HausmanHubOptionsFlow()
+        options_flow.config_entry = FakeConfigEntry(
+            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
+            {"mode": "shadow"},
+        )
+        options_flow.hass = SimpleNamespace(  # type: ignore[attr-defined]
+            data={"hausman_hub": {"climate_runtime": runtime}}
+        )
+
+        await options_flow.async_step_init({"next_step": "manage_climate_registry"})
+        candidate_form = await options_flow.async_step_climate_registry(
+            {"climate_registry_action": "review_shadow_evidence"}
+        )
+        evidence_form = await options_flow.async_step_climate_shadow_candidate(
+            {"climate_shadow_candidate_room": "living"}
+        )
+
+        self.assertEqual("climate_shadow_candidate", candidate_form["step_id"])
+        self.assertEqual("climate_shadow_evidence", evidence_form["step_id"])
+        self.assertEqual("living", evidence_form["description_placeholders"]["room_id"])
+        self.assertEqual("collecting", evidence_form["description_placeholders"]["status"])
+        self.assertEqual([], store.saved)
+        self.assertEqual([], bridge.executed)
+        returned = await options_flow.async_step_climate_shadow_evidence(
+            {"close_shadow_evidence": True}
+        )
+        self.assertEqual("climate_registry", returned["step_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

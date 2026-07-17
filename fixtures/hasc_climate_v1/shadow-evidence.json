@@ -1,0 +1,31 @@
+{
+  "contract": {"name": "hausman-hasc-climate-shadow-evidence", "version": 1},
+  "bridge_mode": "shadow",
+  "window": {
+    "duration_ms": 86400000,
+    "sample_interval_ms": 300000,
+    "started_at": 1784280000000,
+    "updated_at": 1784280600000,
+    "observation_count": 3,
+    "intent_count": 2
+  },
+  "counts": {
+    "matched": 6,
+    "missing": 0,
+    "moved": 0,
+    "stale": 0,
+    "rejected": 0,
+    "translated": 2
+  },
+  "candidate": {
+    "room_id": "living",
+    "status": "ready",
+    "ready": true,
+    "matched_observation_count": 3,
+    "required_matched_observation_count": 3,
+    "translated_action_count": 2,
+    "required_actions": ["set_room_target", "turn_room_off"],
+    "anomaly_count": 0,
+    "reasons": []
+  }
+}

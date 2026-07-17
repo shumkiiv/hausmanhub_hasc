@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-shadow-evidence.schema.json",
+  "title": "HASC climate shadow evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "bridge_mode", "window", "counts", "candidate"],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "hausman-hasc-climate-shadow-evidence"},
+        "version": {"const": 1}
+      }
+    },
+    "bridge_mode": {"enum": ["disabled", "shadow", "canary"]},
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_ms", "sample_interval_ms", "started_at", "updated_at", "observation_count", "intent_count"],
+      "properties": {
+        "duration_ms": {"const": 86400000},
+        "sample_interval_ms": {"const": 300000},
+        "started_at": {"type": "integer", "minimum": 0},
+        "updated_at": {"type": "integer", "minimum": 0},
+        "observation_count": {"type": "integer", "minimum": 0, "maximum": 288},
+        "intent_count": {"type": "integer", "minimum": 0, "maximum": 512}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matched", "missing", "moved", "stale", "rejected", "translated"],
+      "properties": {
+        "matched": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "missing": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "moved": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "stale": {"type": "integer", "minimum": 0, "maximum": 288},
+        "rejected": {"type": "integer", "minimum": 0, "maximum": 512},
+        "translated": {"type": "integer", "minimum": 0, "maximum": 512}
+      }
+    },
+    "candidate": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/candidate"}
+      ]
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["room_id", "status", "ready", "matched_observation_count", "required_matched_observation_count", "translated_action_count", "required_actions", "anomaly_count", "reasons"],
+      "properties": {
+        "room_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+        "status": {"enum": ["collecting", "blocked", "ready"]},
+        "ready": {"type": "boolean"},
+        "matched_observation_count": {"type": "integer", "minimum": 0, "maximum": 288},
+        "required_matched_observation_count": {"const": 3},
+        "translated_action_count": {"type": "integer", "minimum": 0, "maximum": 2},
+        "required_actions": {
+          "type": "array",
+          "prefixItems": [
+            {"const": "set_room_target"},
+            {"const": "turn_room_off"}
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "anomaly_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "bridge_disabled",
+              "candidate_not_registered",
+              "climate_state_unavailable",
+              "state_stale",
+              "registry_mismatch",
+              "authority_not_ready",
+              "required_actions_unsupported",
+              "insufficient_matching_observations",
+              "required_shadow_intents_missing",
+              "shadow_anomalies_observed"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

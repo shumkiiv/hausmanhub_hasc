@@ -6,10 +6,11 @@ Safety-first Home Assistant custom integration for HausMan Hub.
 
 This repository contains a public Home Assistant integration under
 `custom_components/hausman_hub/`. It always creates nine diagnostic number
-sensors from the approved aggregate summary. Version 0.5.1 adds a guided
-local-admin registry draft/preview/confirmation flow, installed JSON Schemas,
-redacted readiness, measurable zero-POST shadow acceptance, and idempotent
-typed operation receipts on top of the private logical climate-device
+sensors from the approved aggregate summary. Version 0.5.2 adds a persistent,
+redacted 24-hour shadow-evidence window, guided candidate-room readiness, and
+a fail-closed evidence gate on top of the 0.5.1 registry workflow, installed
+JSON Schemas, zero-POST shadow acceptance, and idempotent operation receipts.
+These features build on the private logical climate-device
 registry, a local Android facade, read-only import of
 the existing Climate API, shadow validation, and a one-room typed climate
 canary. The existing climate-core remains the policy and execution owner.
@@ -33,9 +34,10 @@ backend command payload.
 
 General proxy execution remains blocked. The climate path is separately off by
 default, runs read-only in `shadow`, and may execute only for one explicitly
-selected authority-ready canary room. Returning it to `disabled` removes its
-target and room settings. The legacy single-`input_boolean` canary remains
-separate.
+selected authority-ready canary room after its persisted shadow evidence is
+ready. The first climate canary scope is limited to room target temperature
+and room off. Returning it to `disabled` removes its target and room settings.
+The legacy single-`input_boolean` canary remains separate.
 
 ## Current safe scope
 
@@ -75,6 +77,10 @@ separate.
     options, preview and reconcile before atomic save, publish installed JSON
     Schemas, and return idempotent operation receipts. Disposable real-auth
     shadow coverage proves that this path performs zero command POSTs.
+12. In version 0.5.2, retain a bounded redacted 24-hour shadow window, show one
+    room's `collecting`, `blocked`, or `ready` result in the guided options
+    flow, and keep canary execution closed until three spaced exact samples and
+    both initial room actions have been translated without anomalies.
 
 See [repository basics](docs/repository-basics.md) and
 [AI context](AI_CONTEXT.md) before changing the repository.

@@ -77,6 +77,23 @@
           "climate_device_control_entity": "Private control entity"
         }
       },
+      "climate_shadow_candidate": {
+        "title": "Choose a shadow candidate room",
+        "description": "This read-only check evaluates one public HASC room ID. It never sends a climate command.",
+        "data": {
+          "climate_shadow_candidate_room": "Candidate HASC room"
+        }
+      },
+      "climate_shadow_evidence": {
+        "title": "Climate shadow evidence",
+        "description": "Room {room_id}: {status}. Matching samples: {matched}/{required_matched}; required shadow actions: {translated}/2; anomalies: {anomalies}; rejected intents across the window: {global_rejected}; reasons: {reasons}. This result grants no physical authority.",
+        "data": {
+          "close_shadow_evidence": "Return to climate setup"
+        },
+        "data_description": {
+          "close_shadow_evidence": "Enable this only to close the read-only result. No setting or device is changed."
+        }
+      },
       "climate_registry_json": {
         "title": "Advanced climate registry JSON",
         "description": "Optional advanced editor for the complete private registry. The next step still previews it and requires separate confirmation.",
@@ -113,7 +130,8 @@
       "invalid_climate_registry_action": "Choose one approved registry setup action.",
       "invalid_climate_room": "Use one stable lowercase room ID and a non-empty room name.",
       "invalid_climate_device": "The device fields, required capabilities, ownership, scope, and control entity do not form a valid HASC device.",
-      "climate_registry_needs_room": "Add at least one room before adding a device."
+      "climate_registry_needs_room": "Add at least one room before adding a device.",
+      "climate_shadow_evidence_unavailable": "Shadow evidence for this room is unavailable. Keep the bridge in shadow and check its target, registry, and current state."
     }
   },
   "selector": {
@@ -147,6 +165,7 @@
       "options": {
         "add_room": "Add or replace room",
         "add_device": "Add or replace device",
+        "review_shadow_evidence": "Review shadow evidence",
         "review_registry": "Review and confirm draft",
         "advanced_json": "Advanced JSON editor",
         "reset_registry": "Reset complete registry"

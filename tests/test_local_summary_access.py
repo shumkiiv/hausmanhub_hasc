@@ -608,6 +608,36 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual("adapter-shadow-1", action_response.payload["request_id"])
         self.assertEqual([], bridge.executed)
 
+        evidence_path = "/api/hausman_hub/v1/admin/climate-shadow-evidence"
+        evidence_view = views[evidence_path]
+        evidence_response = asyncio.run(
+            evidence_view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    reader_user("system-admin", admin=True),
+                    evidence_path,
+                    {"room_id": "living"},
+                )
+            )
+        )
+        self.assertEqual(200, evidence_response.status)
+        self.assertEqual("collecting", evidence_response.payload["candidate"]["status"])
+        evidence_json = json.dumps(evidence_response.payload, sort_keys=True)
+        self.assertNotIn("synthetic-ac-source-living", evidence_json)
+        self.assertNotIn("entity_id", evidence_json)
+        forbidden = asyncio.run(
+            evidence_view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    tablet,
+                    evidence_path,
+                    {"room_id": "living"},
+                )
+            )
+        )
+        self.assertEqual(403, forbidden.status)
+        self.assertEqual([], bridge.executed)
+
     def test_view_rejects_admin_mixed_group_system_and_public_requests(self) -> None:
         rejected_requests = (
             FakeRequest("127.0.0.1", reader_user("system-admin", admin=True)),
@@ -761,7 +791,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(8, len(self.hass.http.views))
+        self.assertEqual(9, len(self.hass.http.views))
         self.assertEqual(
             1,
             sum(
@@ -1050,7 +1080,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual(7, len(closed_hass.http.views))
+        self.assertEqual(8, len(closed_hass.http.views))
         self.assertEqual(
             {
                 "/api/hausman_hub/v1/home",
@@ -1059,6 +1089,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 "/api/hausman_hub/v1/admin/climate-registry",
                 "/api/hausman_hub/v1/admin/climate-registry-preview",
                 "/api/hausman_hub/v1/admin/climate-readiness",
+                "/api/hausman_hub/v1/admin/climate-shadow-evidence",
                 "/api/hausman_hub/v1/operations",
             },
             {view.url for view in closed_hass.http.views},

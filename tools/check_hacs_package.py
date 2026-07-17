@@ -47,6 +47,8 @@ CONTRACT_PATHS = tuple(
         "climate-readiness.schema.json",
         "climate-registry-preview.schema.json",
         "climate-registry.schema.json",
+        "climate-shadow-candidate-query.schema.json",
+        "climate-shadow-evidence.schema.json",
     )
 )
 REQUIRED_PACKAGE_PATHS = (
@@ -61,6 +63,7 @@ REQUIRED_PACKAGE_PATHS = (
     INTEGRATION_DIRECTORY / "application/control.py",
     INTEGRATION_DIRECTORY / "application/android_climate.py",
     INTEGRATION_DIRECTORY / "application/climate_commands.py",
+    INTEGRATION_DIRECTORY / "application/climate_evidence.py",
     INTEGRATION_DIRECTORY / "application/climate_import.py",
     INTEGRATION_DIRECTORY / "application/climate_operations.py",
     INTEGRATION_DIRECTORY / "application/climate_registry.py",
@@ -70,6 +73,7 @@ REQUIRED_PACKAGE_PATHS = (
     INTEGRATION_DIRECTORY / "domain/climate_bridge.py",
     INTEGRATION_DIRECTORY / "climate_api.py",
     INTEGRATION_DIRECTORY / "climate_bridge.py",
+    INTEGRATION_DIRECTORY / "climate_evidence_storage.py",
     INTEGRATION_DIRECTORY / "climate_storage.py",
     MANIFEST_PATH,
     ICON_PATH,

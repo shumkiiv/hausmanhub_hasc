@@ -108,6 +108,7 @@ CLIMATE_ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 CLIMATE_ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
 CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH = "/api/hausman_hub/v1/admin/climate-registry-preview"
 CLIMATE_ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
+CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH = "/api/hausman_hub/v1/admin/climate-shadow-evidence"
 CLIMATE_OPERATION_PATH = "/api/hausman_hub/v1/operations"
 CLIMATE_API_PATHS = (
     CLIMATE_HOME_PATH,
@@ -116,6 +117,7 @@ CLIMATE_API_PATHS = (
     CLIMATE_ADMIN_REGISTRY_PATH,
     CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH,
     CLIMATE_ADMIN_READINESS_PATH,
+    CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
     CLIMATE_OPERATION_PATH,
 )
 ALTERNATE_LOCAL_SUMMARY_TARGET_STATUSES = {
@@ -2142,6 +2144,7 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
         CLIMATE_ADMIN_REGISTRY_PATH: {"GET", "POST", "OPTIONS"},
         CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_READINESS_PATH: {"GET", "OPTIONS"},
+        CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH: {"POST", "OPTIONS"},
         CLIMATE_OPERATION_PATH: {"POST", "OPTIONS"},
     }
     for path, routes in find_climate_routes(hass).items():
@@ -2791,6 +2794,23 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             "disabled readiness must use one normalized reason",
         )
 
+        disabled_evidence = await client.post(
+            CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
+            headers=owner_headers,
+            json={"room_id": "room-one"},
+        )
+        assert_result(
+            disabled_evidence.status,
+            HTTPStatus.OK,
+            "disabled shadow evidence must remain a read-only admin result",
+        )
+        disabled_candidate = (await disabled_evidence.json()).get("candidate", {})
+        assert_result(
+            disabled_candidate.get("ready"),
+            False,
+            "disabled shadow evidence must never claim candidate readiness",
+        )
+
         preview = await client.post(
             CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH,
             headers=owner_headers,
@@ -2970,6 +2990,35 @@ async def async_assert_shadow_climate_end_to_end(
             (await operation.json()).get("status"),
             "accepted",
             "shadow receipt must remain accepted rather than claim physical confirmation",
+        )
+        evidence = await home_client.post(
+            CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
+            headers=owner_headers,
+            json={"room_id": "living"},
+        )
+        assert_result(
+            evidence.status,
+            HTTPStatus.OK,
+            "local administrator must be able to inspect redacted shadow evidence",
+        )
+        evidence_payload = await evidence.json()
+        evidence_serialized = json.dumps(
+            evidence_payload,
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        if "source_id" in evidence_serialized or "entity_id" in evidence_serialized:
+            raise RuntimeError("shadow evidence must not expose private climate bindings")
+        evidence_candidate = evidence_payload.get("candidate", {})
+        assert_result(
+            evidence_candidate.get("status"),
+            "collecting",
+            "one disposable sample and intent must remain below the canary gate",
+        )
+        assert_result(
+            evidence_payload.get("counts", {}).get("translated"),
+            1,
+            "shadow evidence must count one translated intent without a POST",
         )
         if not state_gets:
             raise RuntimeError("shadow acceptance must perform measured read-only state GETs")

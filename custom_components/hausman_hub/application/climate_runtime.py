@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+import time
 from typing import Protocol
 
 from ..domain.climate import ClimateRegistry
@@ -13,7 +14,14 @@ from .android_climate import admin_climate_import_snapshot, android_climate_snap
 from .climate_commands import (
     ClimateCommandPlan,
     ClimateCommandRejected,
+    ClimateCommandViolation,
     plan_climate_command,
+)
+from .climate_evidence import (
+    ClimateShadowEvidence,
+    SHADOW_EVIDENCE_REQUIRED_ACTIONS,
+    candidate_room_from_payload,
+    public_intent_context,
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
@@ -48,6 +56,16 @@ class ClimateBridgeClient(Protocol):
         """Post only a plan explicitly marked executable."""
 
 
+class ClimateEvidenceStorage(Protocol):
+    """Minimal bounded shadow-evidence persistence boundary."""
+
+    async def async_load(self) -> ClimateShadowEvidence | None:
+        """Load a validated evidence window when one exists."""
+
+    async def async_save(self, evidence: ClimateShadowEvidence) -> None:
+        """Atomically save one bounded evidence window."""
+
+
 class ClimateRuntime:
     """One loaded HASC entry's climate facade and rollout state."""
 
@@ -58,6 +76,7 @@ class ClimateRuntime:
         configuration: SafeConfiguration,
         registry_store: ClimateRegistryStorage,
         bridge_client: ClimateBridgeClient | None,
+        evidence_store: ClimateEvidenceStorage | None = None,
         operation_id_factory: Callable[[], str] | None = None,
         now_ms: Callable[[], int] | None = None,
     ) -> None:
@@ -65,12 +84,15 @@ class ClimateRuntime:
         self.configuration = configuration
         self._registry_store = registry_store
         self._bridge_client = bridge_client
+        self._evidence_store = evidence_store
+        self._now_ms = now_ms or (lambda: int(time.time() * 1000))
         self._registry = ClimateRegistry()
         self._snapshot: ClimateImportSnapshot | None = None
+        self._evidence: ClimateShadowEvidence | None = None
         self._lock = asyncio.Lock()
         self._operations = _ClimateOperationLedger(
             operation_id_factory=operation_id_factory,
-            now_ms=now_ms,
+            now_ms=self._now_ms,
         )
         self.last_error: str | None = None
 
@@ -104,6 +126,22 @@ class ClimateRuntime:
         async with self._lock:
             try:
                 self._registry = await self._registry_store.async_load()
+                now = self._safe_now()
+                loaded_evidence = (
+                    await self._evidence_store.async_load()
+                    if self._evidence_store is not None
+                    else None
+                )
+                self._evidence = loaded_evidence or ClimateShadowEvidence.for_registry(
+                    self._registry,
+                    now_ms=now,
+                )
+                changed = loaded_evidence is None or self._evidence.ensure_registry(
+                    self._registry,
+                    now_ms=now,
+                )
+                if changed:
+                    await self._async_save_evidence()
                 if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
                     await self._async_refresh_unlocked()
                 else:
@@ -121,6 +159,10 @@ class ClimateRuntime:
             enabled = (
                 self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY
                 and snapshot.runtime_fresh
+                and self._candidate_is_ready(
+                    snapshot,
+                    self.configuration.climate_canary_room_id,
+                )
             )
             return android_climate_snapshot(
                 self._registry,
@@ -170,6 +212,30 @@ class ClimateRuntime:
                 reconciliation=reconciliation,
                 reasons=reasons,
             )
+
+    async def async_shadow_evidence(self, payload: object) -> dict[str, object]:
+        """Return one redacted candidate-room evidence result to a local admin."""
+
+        candidate_room_id = candidate_room_from_payload(payload)
+        async with self._lock:
+            snapshot = self._snapshot
+            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
+                try:
+                    snapshot = await self._async_refresh_unlocked(
+                        persist_evidence=False
+                    )
+                except ClimateRuntimeUnavailable:
+                    snapshot = None
+            evidence = self._require_evidence()
+            result = evidence.as_payload(
+                registry=self._registry,
+                snapshot=snapshot,
+                bridge_mode=self.configuration.climate_bridge_mode,
+                candidate_room_id=candidate_room_id,
+                now_ms=self._safe_now(),
+            )
+            await self._async_save_evidence()
+            return result
 
     async def async_preview_registry(self, payload: object) -> dict[str, object]:
         """Validate and reconcile an unsaved registry without mutating storage."""
@@ -221,6 +287,9 @@ class ClimateRuntime:
             registry = registry_from_payload(payload)
             await self._registry_store.async_save(registry)
             self._registry = registry
+            evidence = self._require_evidence()
+            evidence.ensure_registry(registry, now_ms=self._safe_now())
+            await self._async_save_evidence()
             self.last_error = None
             return registry_to_payload(registry)
 
@@ -236,14 +305,42 @@ class ClimateRuntime:
             if duplicate is not None:
                 return duplicate
             snapshot = await self._async_refresh_unlocked()
-            plan = plan_climate_command(
-                intent,
-                self._registry,
-                snapshot,
-                bridge_mode=self.configuration.climate_bridge_mode,
-                canary_room_id=self.configuration.climate_canary_room_id,
-            )
+            try:
+                plan = plan_climate_command(
+                    intent,
+                    self._registry,
+                    snapshot,
+                    bridge_mode=self.configuration.climate_bridge_mode,
+                    canary_room_id=self.configuration.climate_canary_room_id,
+                )
+            except ClimateCommandViolation as violation:
+                if self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW:
+                    room_id, action = public_intent_context(intent, self._registry)
+                    try:
+                        await self._async_record_shadow_intent(
+                            category="rejected",
+                            room_id=room_id,
+                            action=action,
+                        )
+                    except Exception as error:
+                        # Keep the public validation result stable while making
+                        # the evidence persistence fault visible to diagnostics.
+                        self.last_error = type(error).__name__
+                        raise violation from error
+                raise
+            if self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW:
+                await self._async_record_shadow_intent(
+                    category="translated",
+                    room_id=plan.room_id,
+                    action=plan.action,
+                )
             if plan.execute:
+                if not self._candidate_is_ready(snapshot, plan.room_id):
+                    raise ClimateCommandViolation("shadow evidence is not ready")
+                if plan.action not in SHADOW_EVIDENCE_REQUIRED_ACTIONS:
+                    raise ClimateCommandViolation(
+                        "action is outside the evidence-qualified canary scope"
+                    )
                 self._operations.ensure_submission_available(plan.room_id)
                 # Reserve the idempotency key before the POST. If transport
                 # becomes ambiguous, a retry returns this pending receipt and
@@ -281,7 +378,11 @@ class ClimateRuntime:
                     snapshot = None
             return self._operations.lookup(payload, snapshot)
 
-    async def _async_refresh_unlocked(self) -> ClimateImportSnapshot:
+    async def _async_refresh_unlocked(
+        self,
+        *,
+        persist_evidence: bool = True,
+    ) -> ClimateImportSnapshot:
         client = self._require_client()
         try:
             snapshot = await client.async_fetch_state()
@@ -289,8 +390,71 @@ class ClimateRuntime:
             self.last_error = type(error).__name__
             raise ClimateRuntimeUnavailable("climate state is unavailable") from error
         self._snapshot = snapshot
+        if self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW:
+            try:
+                evidence = self._require_evidence()
+                changed = evidence.record_observation(
+                    self._registry,
+                    snapshot,
+                    now_ms=self._safe_now(),
+                )
+                if changed and persist_evidence:
+                    await self._async_save_evidence()
+            except Exception as error:
+                self.last_error = type(error).__name__
+                raise ClimateRuntimeUnavailable(
+                    "climate shadow evidence is unavailable"
+                ) from error
         self.last_error = None
         return snapshot
+
+    async def _async_record_shadow_intent(
+        self,
+        *,
+        category: str,
+        room_id: str | None,
+        action: str | None,
+    ) -> None:
+        evidence = self._require_evidence()
+        evidence.record_intent(
+            category=category,
+            room_id=room_id,
+            action=action,
+            now_ms=self._safe_now(),
+        )
+        await self._async_save_evidence()
+
+    async def _async_save_evidence(self) -> None:
+        if self._evidence_store is not None:
+            await self._evidence_store.async_save(self._require_evidence())
+
+    def _candidate_is_ready(
+        self,
+        snapshot: ClimateImportSnapshot,
+        room_id: str | None,
+    ) -> bool:
+        if room_id is None:
+            return False
+        result = self._require_evidence().as_payload(
+            registry=self._registry,
+            snapshot=snapshot,
+            bridge_mode=self.configuration.climate_bridge_mode,
+            candidate_room_id=room_id,
+            now_ms=self._safe_now(),
+        )
+        candidate = result.get("candidate")
+        return isinstance(candidate, dict) and candidate.get("ready") is True
+
+    def _require_evidence(self) -> ClimateShadowEvidence:
+        if self._evidence is None:
+            raise ClimateRuntimeUnavailable("climate shadow evidence is unavailable")
+        return self._evidence
+
+    def _safe_now(self) -> int:
+        value = self._now_ms()
+        if type(value) is not int or value < 0:
+            raise RuntimeError("climate runtime clock returned an unsafe timestamp")
+        return value
 
     def _require_client(self) -> ClimateBridgeClient:
         if (

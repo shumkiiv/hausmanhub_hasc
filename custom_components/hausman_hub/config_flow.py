@@ -83,6 +83,8 @@ CLIMATE_DEVICE_SCOPE_FIELD = "climate_device_control_scope"
 CLIMATE_DEVICE_OWNER_FIELD = "climate_device_control_owner"
 CLIMATE_DEVICE_CAPABILITIES_FIELD = "climate_device_capabilities"
 CLIMATE_DEVICE_CONTROL_ENTITY_FIELD = "climate_device_control_entity"
+CLIMATE_SHADOW_CANDIDATE_ROOM_FIELD = "climate_shadow_candidate_room"
+CLIMATE_SHADOW_EVIDENCE_CLOSE_FIELD = "close_shadow_evidence"
 MAX_CLIMATE_REGISTRY_FORM_BYTES = 16 * 1024
 
 
@@ -135,6 +137,7 @@ CLIMATE_REGISTRY_ACTION_SELECTOR = SelectSelector(
             for value in (
                 "add_room",
                 "add_device",
+                "review_shadow_evidence",
                 "review_registry",
                 "advanced_json",
                 "reset_registry",
@@ -351,6 +354,27 @@ def _climate_registry_confirm_schema() -> vol.Schema:
     )
 
 
+def _climate_shadow_candidate_schema(rooms: list[dict[str, str]]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CLIMATE_SHADOW_CANDIDATE_ROOM_FIELD): SelectSelector(
+                SelectSelectorConfig(options=rooms)
+            )
+        }
+    )
+
+
+def _climate_shadow_evidence_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CLIMATE_SHADOW_EVIDENCE_CLOSE_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
+        }
+    )
+
+
 def _safe_mode_default(
     entry_data: Mapping[str, Any], options: Mapping[str, Any]
 ) -> str:
@@ -509,6 +533,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
 
     _registry_draft: object | None = None
     _registry_preview: Mapping[str, Any] | None = None
+    _shadow_evidence: Mapping[str, Any] | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Keep future options within the validated canary boundary."""
@@ -632,6 +657,8 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_climate_registry_room()
             if action == "add_device":
                 return await self.async_step_climate_registry_device()
+            if action == "review_shadow_evidence":
+                return await self.async_step_climate_shadow_candidate()
             if action == "advanced_json":
                 return await self.async_step_climate_registry_json()
             if action == "reset_registry":
@@ -645,6 +672,67 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             step_id="climate_registry",
             data_schema=_climate_registry_menu_schema(),
             errors=errors,
+        )
+
+    async def async_step_climate_shadow_candidate(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Select one public HASC room for a read-only evidence result."""
+
+        rooms = self._draft_rooms()
+        if not rooms:
+            return self.async_show_form(
+                step_id="climate_shadow_candidate",
+                data_schema=_climate_shadow_candidate_schema(
+                    [SelectOptionDict(value="missing", label="missing")]
+                ),
+                errors={"base": "climate_registry_needs_room"},
+            )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            runtime = self._climate_runtime()
+            if runtime is None:
+                errors["base"] = "climate_runtime_unavailable"
+            else:
+                try:
+                    evidence = await runtime.async_shadow_evidence(
+                        {
+                            "room_id": user_input.get(
+                                CLIMATE_SHADOW_CANDIDATE_ROOM_FIELD
+                            )
+                        }
+                    )
+                except Exception:
+                    errors["base"] = "climate_shadow_evidence_unavailable"
+                else:
+                    self._shadow_evidence = evidence
+                    return await self.async_step_climate_shadow_evidence()
+        return self.async_show_form(
+            step_id="climate_shadow_candidate",
+            data_schema=_climate_shadow_candidate_schema(rooms),
+            errors=errors,
+        )
+
+    async def async_step_climate_shadow_evidence(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Show the redacted evidence result without changing settings."""
+
+        if self._shadow_evidence is None:
+            return await self.async_step_climate_shadow_candidate()
+        if (
+            user_input is not None
+            and user_input.get(CLIMATE_SHADOW_EVIDENCE_CLOSE_FIELD) is True
+        ):
+            self._shadow_evidence = None
+            return await self.async_step_climate_registry()
+        return self.async_show_form(
+            step_id="climate_shadow_evidence",
+            data_schema=_climate_shadow_evidence_schema(),
+            errors={},
+            description_placeholders=self._shadow_evidence_placeholders(),
         )
 
     async def async_step_climate_registry_room(
@@ -881,5 +969,26 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             "status": str(preview.get("status", "unavailable")),
             "room_count": str(counts.get("room_count", 0)),
             "device_count": str(counts.get("device_count", 0)),
+            "reasons": ", ".join(str(value) for value in reason_values) or "none",
+        }
+
+    def _shadow_evidence_placeholders(self) -> dict[str, str]:
+        evidence = self._shadow_evidence or {}
+        candidate = evidence.get("candidate")
+        candidate_values = candidate if isinstance(candidate, Mapping) else {}
+        counts = evidence.get("counts")
+        count_values = counts if isinstance(counts, Mapping) else {}
+        reasons = candidate_values.get("reasons")
+        reason_values = reasons if isinstance(reasons, list) else []
+        return {
+            "room_id": str(candidate_values.get("room_id", "unknown")),
+            "status": str(candidate_values.get("status", "blocked")),
+            "matched": str(candidate_values.get("matched_observation_count", 0)),
+            "required_matched": str(
+                candidate_values.get("required_matched_observation_count", 3)
+            ),
+            "translated": str(candidate_values.get("translated_action_count", 0)),
+            "anomalies": str(candidate_values.get("anomaly_count", 0)),
+            "global_rejected": str(count_values.get("rejected", 0)),
             "reasons": ", ".join(str(value) for value in reason_values) or "none",
         }

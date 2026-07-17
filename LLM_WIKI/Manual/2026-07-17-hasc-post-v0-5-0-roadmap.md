@@ -95,14 +95,11 @@ not authorized by publishing 0.5.0 or by this roadmap.
 
 ## Next coding slice
 
-The immediate implementation order is:
-
-1. public JSON schemas and compatibility fixtures;
-2. local-admin multi-step registry setup;
-3. bridge readiness and reconciliation UX;
-4. end-to-end zero-POST shadow harness;
-5. operation receipts and confirmation model;
-6. release 0.5.1 after the same local/Core/Kimi gates.
+After the 0.5.2 measurable-shadow release, the next HASC-only work is to make
+the operator flow populate a registry from read-only import candidates without
+copying private IDs by hand, then prepare (but not activate) the supervised
+one-room rollout checklist. Physical canary execution still requires a new
+explicit authorization.
 
 ## 0.5.1 implementation status
 
@@ -110,5 +107,19 @@ Implemented on 2026-07-17: installed JSON Schemas and fixtures; guided
 room/device registry setup with preview and confirmation; redacted readiness;
 real-auth disposable shadow with measured zero command POSTs; idempotent
 request/operation IDs; typed receipts; observable confirmation; timeout; and
-one-pending-operation-per-room protection. Release, live HACS update, and final
-post-deployment verification remain the delivery gates for this worktree.
+one-pending-operation-per-room protection. Release `v0.5.1` and the live HACS
+update completed; the owner restarted Core and post-deployment verification
+proved the operation route loaded while the live climate bridge remained
+`disabled` with no target, canary room, or physical command.
+
+## 0.5.2 implementation status
+
+Implemented in the current worktree on 2026-07-17: a persisted rolling
+24-hour shadow evidence window sampled at a five-minute minimum interval;
+redacted matched/missing/moved/stale/rejected/translated counts; exact registry
+fingerprint reset; a local-admin candidate query/response contract; guided
+Home Assistant candidate-room evidence UX; and a fail-closed canary gate.
+Readiness requires three matching samples plus successful shadow translation
+of room target and room off. Runtime canary execution is limited to those two
+initial actions. Local/Core/Kimi/release/deployment gates remain pending, and
+live deployment must still finish in `disabled` without a physical canary.

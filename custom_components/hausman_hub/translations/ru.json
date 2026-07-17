@@ -77,6 +77,23 @@
           "climate_device_control_entity": "Приватный control entity"
         }
       },
+      "climate_shadow_candidate": {
+        "title": "Выбор shadow-кандидата",
+        "description": "Эта проверка только читает данные для одной комнаты HASC. Климатические команды не отправляются.",
+        "data": {
+          "climate_shadow_candidate_room": "Комната-кандидат HASC"
+        }
+      },
+      "climate_shadow_evidence": {
+        "title": "Доказательства climate shadow",
+        "description": "Комната {room_id}: {status}. Совпавших наблюдений: {matched}/{required_matched}; обязательных shadow-команд: {translated}/2; аномалий: {anomalies}; отклонённых намерений во всём окне: {global_rejected}; причины: {reasons}. Этот результат не даёт физического управления.",
+        "data": {
+          "close_shadow_evidence": "Вернуться к настройке климата"
+        },
+        "data_description": {
+          "close_shadow_evidence": "Включите только для закрытия результата. Настройки и устройства не изменяются."
+        }
+      },
       "climate_registry_json": {
         "title": "Расширенный JSON климатического реестра",
         "description": "Необязательный редактор полного приватного реестра. Следующий шаг всё равно покажет проверку и потребует отдельное подтверждение.",
@@ -113,7 +130,8 @@
       "invalid_climate_registry_action": "Выберите одно разрешённое действие настройки реестра.",
       "invalid_climate_room": "Нужны стабильный ID комнаты в нижнем регистре и непустое название.",
       "invalid_climate_device": "Поля, обязательные capabilities, owner, scope и control entity не образуют корректное устройство HASC.",
-      "climate_registry_needs_room": "Сначала добавьте хотя бы одну комнату."
+      "climate_registry_needs_room": "Сначала добавьте хотя бы одну комнату.",
+      "climate_shadow_evidence_unavailable": "Shadow-доказательства для комнаты недоступны. Оставьте мост в shadow и проверьте адрес, реестр и текущее состояние."
     }
   },
   "selector": {
@@ -147,6 +165,7 @@
       "options": {
         "add_room": "Добавить или заменить комнату",
         "add_device": "Добавить или заменить устройство",
+        "review_shadow_evidence": "Посмотреть shadow-доказательства",
         "review_registry": "Проверить и подтвердить черновик",
         "advanced_json": "Расширенный редактор JSON",
         "reset_registry": "Очистить весь реестр"

@@ -10,6 +10,9 @@ from custom_components.hausman_hub.application.climate_commands import (
     ClimateCommandViolation,
 )
 from custom_components.hausman_hub.application.climate_import import import_climate_state
+from custom_components.hausman_hub.application.climate_evidence import (
+    ClimateShadowEvidence,
+)
 from custom_components.hausman_hub.application.climate_registry import registry_from_payload
 from custom_components.hausman_hub.application.climate_runtime import (
     ClimateRuntime,
@@ -35,6 +38,30 @@ class MemoryStore:
     async def async_save(self, registry: ClimateRegistry) -> None:
         self.registry = registry
         self.saved.append(registry)
+
+
+class MemoryEvidenceStore:
+    def __init__(self, evidence: ClimateShadowEvidence | None = None) -> None:
+        self.evidence = evidence
+        self.saved: list[dict[str, object]] = []
+
+    async def async_load(self) -> ClimateShadowEvidence | None:
+        return self.evidence
+
+    async def async_save(self, evidence: ClimateShadowEvidence) -> None:
+        self.evidence = evidence
+        self.saved.append(evidence.as_storage_payload())
+
+
+class FailingEvidenceStore(MemoryEvidenceStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail = False
+
+    async def async_save(self, evidence: ClimateShadowEvidence) -> None:
+        if self.fail:
+            raise RuntimeError("synthetic evidence persistence failure")
+        await super().async_save(evidence)
 
 
 class MemoryBridge:
@@ -75,6 +102,23 @@ def configuration(mode: ClimateBridgeMode) -> SafeConfiguration:
     )
 
 
+def ready_evidence_store() -> MemoryEvidenceStore:
+    registry = registry_from_payload(registry_payload())
+    snapshot = import_climate_state(source_payload())
+    start = 1784279405000
+    evidence = ClimateShadowEvidence.for_registry(registry, now_ms=start)
+    for offset in (0, 300_000, 600_000):
+        evidence.record_observation(registry, snapshot, now_ms=start + offset)
+    for action in ("set_room_target", "turn_room_off"):
+        evidence.record_intent(
+            category="translated",
+            room_id="living",
+            action=action,
+            now_ms=start + 600_000,
+        )
+    return MemoryEvidenceStore(evidence)
+
+
 class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
     async def test_shadow_refreshes_but_never_posts(self) -> None:
         bridge = MemoryBridge()
@@ -103,13 +147,126 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], bridge.executed)
         self.assertGreaterEqual(bridge.fetch_count, 2)
 
-    async def test_canary_posts_only_private_plan_and_returns_public_result(self) -> None:
+    async def test_shadow_collects_persistent_candidate_evidence_without_posts(self) -> None:
+        bridge = MemoryBridge()
+        now = [1784280005000]
+        evidence_store = MemoryEvidenceStore()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry_from_payload(registry_payload())),
+            bridge_client=bridge,
+            evidence_store=evidence_store,
+            operation_id_factory=iter(("a" * 32, "b" * 32)).__next__,
+            now_ms=lambda: now[0],
+        )
+        await runtime.async_start()
+        for _ in range(2):
+            now[0] += 300_000
+            await runtime.async_public_snapshot()
+        await runtime.async_action(
+            {
+                "request_id": "evidence-target",
+                "action": "set_room_target",
+                "room_id": "living",
+                "target_temperature": 24.0,
+            }
+        )
+        await runtime.async_action(
+            {
+                "request_id": "evidence-off",
+                "action": "turn_room_off",
+                "room_id": "living",
+            }
+        )
+
+        evidence = await runtime.async_shadow_evidence({"room_id": "living"})
+
+        self.assertTrue(evidence["candidate"]["ready"])  # type: ignore[index]
+        self.assertEqual(3, evidence["counts"]["matched"])  # type: ignore[index]
+        self.assertEqual(2, evidence["counts"]["translated"])  # type: ignore[index]
+        self.assertGreaterEqual(len(evidence_store.saved), 6)
+        self.assertEqual([], bridge.executed)
+
+    async def test_shadow_evidence_query_persists_one_new_sample_once(self) -> None:
+        bridge = MemoryBridge()
+        now = [1784280005000]
+        evidence_store = MemoryEvidenceStore()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry_from_payload(registry_payload())),
+            bridge_client=bridge,
+            evidence_store=evidence_store,
+            now_ms=lambda: now[0],
+        )
+        await runtime.async_start()
+        saves_before_query = len(evidence_store.saved)
+        now[0] += 300_000
+
+        await runtime.async_shadow_evidence({"room_id": "living"})
+
+        self.assertEqual(saves_before_query + 1, len(evidence_store.saved))
+
+    async def test_rejected_intent_keeps_validation_error_when_evidence_save_fails(
+        self,
+    ) -> None:
+        bridge = MemoryBridge()
+        evidence_store = FailingEvidenceStore()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry_from_payload(registry_payload())),
+            bridge_client=bridge,
+            evidence_store=evidence_store,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        evidence_store.fail = True
+
+        with self.assertRaisesRegex(ClimateCommandViolation, "unsupported"):
+            await runtime.async_action(
+                {
+                    "request_id": "invalid-shadow-action",
+                    "action": "unsupported",
+                }
+            )
+
+        self.assertEqual("RuntimeError", runtime.last_error)
+        self.assertEqual([], bridge.executed)
+
+    async def test_canary_without_completed_shadow_evidence_fails_closed(self) -> None:
         bridge = MemoryBridge()
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+
+        snapshot = await runtime.async_public_snapshot()
+        with self.assertRaisesRegex(ClimateCommandViolation, "evidence"):
+            await runtime.async_action(
+                {
+                    "request_id": "blocked-canary",
+                    "action": "turn_room_off",
+                    "room_id": "living",
+                }
+            )
+
+        self.assertFalse(snapshot["climate"]["commands_enabled"])  # type: ignore[index]
+        self.assertEqual([], bridge.executed)
+
+    async def test_canary_posts_only_evidence_qualified_private_plan(self) -> None:
+        bridge = MemoryBridge()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.CANARY),
+            registry_store=MemoryStore(registry_from_payload(registry_payload())),
+            bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: "1" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -118,16 +275,27 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         result = await runtime.async_action(
             {
                 "request_id": "canary-1",
-                "action": "set_device_power",
-                "device_id": "living_ac",
-                "on": True,
+                "action": "set_room_target",
+                "room_id": "living",
+                "target_temperature": 24.5,
             }
         )
 
         self.assertEqual("pending", result.status)
-        self.assertEqual("living_ac", result.device_id)
+        self.assertEqual("living", result.room_id)
         self.assertEqual(1, len(bridge.executed))
         self.assertNotIn("deviceId", result.as_payload())
+
+        with self.assertRaisesRegex(ClimateCommandViolation, "canary scope"):
+            await runtime.async_action(
+                {
+                    "request_id": "canary-device-power",
+                    "action": "set_device_power",
+                    "device_id": "living_ac",
+                    "on": True,
+                }
+            )
+        self.assertEqual(1, len(bridge.executed))
 
     async def test_duplicate_request_is_idempotent_and_conflicting_reuse_is_rejected(self) -> None:
         bridge = MemoryBridge()
@@ -136,6 +304,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: "2" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -165,6 +334,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: "7" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -189,6 +359,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: "9" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -245,6 +416,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: "8" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -280,6 +452,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: "3" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -312,6 +485,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             configuration=configuration(ClimateBridgeMode.CANARY),
             registry_store=MemoryStore(registry_from_payload(registry_payload())),
             bridge_client=bridge,
+            evidence_store=ready_evidence_store(),
             operation_id_factory=lambda: next(operation_ids),
             now_ms=lambda: now[0],
         )
@@ -329,9 +503,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             await runtime.async_action(
                 {
                     "request_id": "room-lock-2",
-                    "action": "set_room_mode",
+                    "action": "turn_room_off",
                     "room_id": "living",
-                    "mode": "manual",
                 }
             )
         self.assertEqual(1, len(bridge.executed))
@@ -340,9 +513,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         second = await runtime.async_action(
             {
                 "request_id": "room-lock-2",
-                "action": "set_room_mode",
+                "action": "turn_room_off",
                 "room_id": "living",
-                "mode": "manual",
             }
         )
         first_after_timeout = await runtime.async_operation(

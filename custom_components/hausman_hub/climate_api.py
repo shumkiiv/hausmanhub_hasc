@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Final
 from homeassistant.components.http import HomeAssistantView
 
 from .application.climate_commands import ClimateCommandViolation
+from .application.climate_evidence import ClimateEvidenceViolation
 from .application.climate_registry import ClimateRegistryViolation
 from .application.climate_runtime import ClimateRuntime, ClimateRuntimeUnavailable
 
@@ -25,6 +26,7 @@ ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
 ADMIN_REGISTRY_PREVIEW_PATH = "/api/hausman_hub/v1/admin/climate-registry-preview"
 ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
+ADMIN_SHADOW_EVIDENCE_PATH = "/api/hausman_hub/v1/admin/climate-shadow-evidence"
 OPERATION_PATH = "/api/hausman_hub/v1/operations"
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 MAX_ACTION_BODY_BYTES = 16 * 1024
@@ -50,6 +52,7 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ClimateAdminRegistryView(hass),
             ClimateAdminRegistryPreviewView(hass),
             ClimateAdminReadinessView(hass),
+            ClimateAdminShadowEvidenceView(hass),
             ClimateOperationView(hass),
         )
         for view in views:
@@ -285,6 +288,34 @@ class ClimateAdminReadinessView(_ClimateView):
             return self._unavailable()
         try:
             result = await runtime.async_readiness()
+        except Exception:
+            return self._unavailable()
+        return self.json(result, headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminShadowEvidenceView(_ClimateView):
+    """Evaluate one public HASC room against redacted shadow evidence."""
+
+    url = ADMIN_SHADOW_EVIDENCE_PATH
+    name = "api:hausman_hub:climate_admin_shadow_evidence"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_SHADOW_EVIDENCE_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+            result = await runtime.async_shadow_evidence(payload)
+        except (ClimateEvidenceViolation, ValueError):
+            return self.json_message(
+                "The climate shadow candidate is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
         except Exception:
             return self._unavailable()
         return self.json(result, headers=NO_STORE_HEADERS)

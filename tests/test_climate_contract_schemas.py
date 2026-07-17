@@ -44,6 +44,8 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "registry.json": "climate-registry.schema.json",
             "readiness.json": "climate-readiness.schema.json",
             "registry-preview.json": "climate-registry-preview.schema.json",
+            "shadow-candidate-query.json": "climate-shadow-candidate-query.schema.json",
+            "shadow-evidence.json": "climate-shadow-evidence.schema.json",
         }
         for fixture_name, schema_name in pairs.items():
             with self.subTest(fixture=fixture_name):

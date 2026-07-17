@@ -76,6 +76,23 @@ Last updated: 2026-07-17.
   live climate bridge remained `disabled`, with no target or canary room; the
   fail-closed action check returned unavailable before execution. No physical
   climate canary or device command was run.
+- Version 0.5.2 is the current measurable-shadow worktree. It persists a
+  redacted rolling 24-hour evidence window with a five-minute sample interval,
+  bounded matched/missing/moved/stale observations and rejected/translated
+  intents. The window stores only timestamps, public HASC room IDs, and
+  approved action labels; it is bound to the exact registry fingerprint and
+  resets on any registry change. Private origin, source/entity identifiers,
+  payloads, backend responses, and tokens never enter its Store or API shape.
+- A local administrator can evaluate one candidate room through the guided
+  options flow or the versioned climate-shadow-evidence route. `ready` requires
+  fresh exact registered bindings, current climate-core authority, three
+  spaced matching samples, successful shadow translation of room target and
+  room off, and no candidate anomaly. A configured canary remains fail-closed
+  before POST until this persisted result is ready, and 0.5.2 limits the first
+  executable climate canary scope to those two room actions. This code does
+  not authorize or activate a live physical canary; live deployment must keep
+  the climate bridge `disabled`. The durable decision is in
+  [the 0.5.2 evidence note](LLM_WIKI/Manual/2026-07-17-hasc-v0-5-2-shadow-evidence.md).
 - Further HASC-only development is prioritized in the
   [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
   operator-friendly registry setup and a formal Android contract first,
