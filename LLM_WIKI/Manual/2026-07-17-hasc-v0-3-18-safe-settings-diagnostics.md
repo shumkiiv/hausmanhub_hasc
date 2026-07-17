@@ -33,8 +33,10 @@ unchanged.
 ## Status
 
 Implementation, tests, documentation, and disposable Core checks are complete.
-The bounded Kimi `k2p7` review returned `NO FINDINGS`. No commit or publication
-is authorized by this note.
+The bounded Kimi `k2p7` review returned `NO FINDINGS`. After the owner explicitly
+authorized a push, the accumulated 0.3.15–0.3.18 work was committed as
+`a032303` and pushed to `origin/main` on 2026-07-17. No tag, GitHub Release,
+HACS release publication, deployment, or live-home change was performed.
 
 ## Implemented contract
 

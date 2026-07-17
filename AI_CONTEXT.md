@@ -223,7 +223,11 @@ Last updated: 2026-07-17.
   page. Empty Core 2026.6.4 and 2026.7.0 checks confirm the header on the
   approved and closed paths. Kimi found no issue; see the [local no-store
   review note](LLM_WIKI/Manual/2026-07-16-kimi-local-summary-no-store-review.md).
-- Unpublished local work for version 0.3.15 closes the unspecified local
+- On 2026-07-17 the owner explicitly authorized a push. The accumulated
+  0.3.15–0.3.18 work was committed as `a032303` and pushed to `origin/main`.
+  This was a source push only: no tag, GitHub Release, HACS release
+  publication, deployment, or live-home change was performed.
+- Work included in version 0.3.18 closes the unspecified local
   origins 0.0.0.0, ::, and IPv4-mapped ::ffff:0.0.0.0 before any nine-count
   read. The same nine approved rows now have only fixed ordinary visual icons;
   the disposable Core check proves the icon for each row without adding data or
@@ -239,7 +243,7 @@ Last updated: 2026-07-17.
   names. The combined working tree passed 139 local tests and both disposable
   Core checks. The later mixed-diff Kimi review cycle is recorded with version
   0.3.16 below.
-- Unpublished local work for version 0.3.16 adds only the exact boolean
+- Work included in version 0.3.18 adds only the exact boolean
   `local_summary_enabled` option. It lets the owner close or restore the
   already-approved optional local nine-count page without adding a URL, data,
   command, service, device, proxy, or execution right. With the page closed,
@@ -271,7 +275,7 @@ Last updated: 2026-07-17.
   and 0.3.16 Kimi review cycle](LLM_WIKI/Manual/2026-07-17-kimi-v0-3-15-v0-3-16-review.md).
   These local reviews do not themselves authorize a commit, push, release,
   deployment, or publication.
-- Unpublished local work for version 0.3.17 adds only one fixed refresh choice
+- Work included in version 0.3.18 adds only one fixed refresh choice
   for the same nine diagnostic count sensors: the established `5m` default or
   the slower `15m` and `30m` choices. Exact validation rejects faster,
   arbitrary, numeric, and missing submitted values. Old entries whose options
@@ -287,7 +291,7 @@ Last updated: 2026-07-17.
   cycle](LLM_WIKI/Manual/2026-07-17-kimi-v0-3-17-summary-interval-review.md).
   No review authorizes a commit, push, release, deployment, publication, or
   live-home change.
-- Unpublished local work for version 0.3.18 adds only the effective validated
+- Version 0.3.18 adds only the effective validated
   HASC settings to the existing redacted diagnostics `entry_summary`: safe
   mode, the optional local-page boolean, and the exact `5m`, `15m`, or `30m`
   nine-count refresh choice. It never copies raw entry data or options. Legacy
@@ -301,9 +305,10 @@ Last updated: 2026-07-17.
   settings diagnostics note](LLM_WIKI/Manual/2026-07-17-hasc-v0-3-18-safe-settings-diagnostics.md).
   A bounded Kimi `k2p7` review of the 0.3.18 delta returned `NO FINDINGS` after
   its completed child session was resumed with the Kimi model explicitly
-  pinned. This local work and review do not authorize a commit, push, release,
-  deployment, publication, or live-home change.
-- The same unpublished version now accepts the local nine-count page only from
+  pinned. The review itself did not authorize a commit, push, release,
+  deployment, publication, or live-home change; the later source push was
+  explicitly authorized by the owner.
+- The same accumulated version now accepts the local nine-count page only from
   loopback, RFC 1918 IPv4, unique-local IPv6, or an IPv4-mapped form of the
   same approved IPv4 range. Test, link-local, carrier-grade, public, and other
   special addresses fail closed before the summary reader runs. The local fast
