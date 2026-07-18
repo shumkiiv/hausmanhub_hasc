@@ -8,7 +8,7 @@
           "mode": "Operating mode"
         },
         "data_description": {
-          "mode": "Choose read-only observation or a comparison without changes."
+          "mode": "Normal information reading shows aggregate counts. The additional check also compares data without changing anything."
         }
       }
     },
@@ -22,29 +22,61 @@
   "options": {
     "step": {
       "init": {
-        "title": "HausMan Hub HASC settings",
-        "description": "Both control paths are off by default. The legacy helper canary controls one input boolean. The climate bridge reads the existing Climate API in shadow and can post typed commands only for one explicitly selected canary room.",
+        "title": "HASC: choose a settings area",
+        "description": "Choose one area. The next screen shows only its relevant fields. For normal climate setup, start with rooms and devices, then connect the existing climate controller separately.",
         "data": {
-          "mode": "Operating mode",
-          "local_summary_enabled": "Optional local page",
-          "summary_update_interval": "Nine-count refresh interval",
-          "canary_control_enabled": "Arm control canary",
-          "canary_control_target": "Canary input boolean",
-          "climate_bridge_mode": "Climate bridge rollout",
-          "climate_bridge_target": "Private Climate API origin",
-          "climate_canary_room_id": "Climate canary room ID",
-          "next_step": "After this form"
+          "settings_section": "Settings area"
         },
         "data_description": {
-          "mode": "Choose read-only observation or a comparison without changes.",
-          "local_summary_enabled": "Shows or closes only the optional local page with the same nine aggregate counts. It does not control the home.",
-          "summary_update_interval": "Choose 5, 15, or 30 minutes for the same nine local counts. HASC never reads them more often than the existing five-minute interval.",
-          "canary_control_enabled": "Creates one HASC switch only for the selected input boolean. Turn this off for immediate rollback.",
-          "canary_control_target": "Select exactly one input_boolean helper. Lights, climate, locks, covers, scripts, scenes, and other domains are rejected.",
-          "climate_bridge_mode": "Disabled is full rollback. Shadow reads and validates without posting. Canary may post only typed commands for one eligible room.",
-          "climate_bridge_target": "Use only an HTTP(S) origin with a literal loopback or RFC1918/ULA address, for example http://192.168.1.10:1880. Paths, credentials, DNS names, query strings, and public addresses are rejected.",
-          "climate_canary_room_id": "Required only in canary mode. Use the stable room ID advertised by the Climate API.",
-          "next_step": "Save these settings or open the separate local climate-registry setup."
+          "settings_section": "Rooms and devices is the main setup wizard. Climate connection configures the safe connection mode and address. General information and the service test are separate."
+        }
+      },
+      "general_settings": {
+        "title": "HASC: general information",
+        "description": "These settings only affect the page with aggregate home counts. They do not connect climate or control devices.",
+        "data": {
+          "mode": "How to check general information",
+          "local_summary_enabled": "Show a separate aggregate-count page",
+          "summary_update_interval": "Aggregate-count refresh interval"
+        },
+        "data_description": {
+          "mode": "Normal reading is suitable for continuous operation. The additional check only compares data without changing anything.",
+          "local_summary_enabled": "The page shows nine aggregate counts for areas, devices, and entities. It contains no names or controls.",
+          "summary_update_interval": "Fifteen minutes is recommended. This does not affect climate-control response time."
+        }
+      },
+      "test_switch": {
+        "title": "HASC: service switch test",
+        "description": "This is not climate control. The service test creates one test control only for a Home Assistant Input boolean helper. Leave it off if you do not need this test.",
+        "data": {
+          "canary_control_enabled": "Use the service test",
+          "canary_control_target": "Input boolean helper for the test"
+        },
+        "data_description": {
+          "canary_control_enabled": "Turning this off immediately removes the HASC test control.",
+          "canary_control_target": "Select one manually created Input boolean helper. Climate, lights, locks, and other devices are not allowed."
+        }
+      },
+      "climate_connection": {
+        "title": "HASC: climate-controller connection",
+        "description": "Choose how HASC connects to the existing climate controller. Use check-only mode for the first connection. One-room trial control comes later, after successful room checks.",
+        "data": {
+          "climate_bridge_mode": "How to connect the climate controller"
+        },
+        "data_description": {
+          "climate_bridge_mode": "Disabling immediately closes commands and removes the saved address. Check-only mode only reads and compares data."
+        }
+      },
+      "climate_endpoint": {
+        "title": "HASC: climate-controller address",
+        "description": "Enter where the existing climate controller runs. HASC adds the required service paths. One-room trial control also requires one previously verified stable room ID.",
+        "data": {
+          "climate_bridge_target": "Local climate-controller IP address and port",
+          "climate_canary_room_id": "Stable ID of the verified room"
+        },
+        "data_description": {
+          "climate_bridge_target": "Example: http://192.168.1.10:1880. Enter only the protocol, local IP, and port, without paths, DNS names, credentials, or parameters.",
+          "climate_canary_room_id": "This is not a room name or Home Assistant entity. Use a stable ID from the saved HASC registry, for example living."
         }
       },
       "climate_registry": {
@@ -159,6 +191,7 @@
       }
     },
     "error": {
+      "unsafe_settings_section": "Choose one of the four HASC settings areas.",
       "unsafe_mode": "Only read-only and comparison-without-changes modes are allowed.",
       "unsafe_local_summary_setting": "The optional local page can only be turned on or off.",
       "unsafe_summary_update_interval": "Choose only 5, 15, or 30 minutes for the nine-count refresh.",
@@ -184,8 +217,8 @@
   "selector": {
     "mode": {
       "options": {
-        "read-only": "Read-only",
-        "shadow": "Comparison without changes"
+        "read-only": "Normal information reading",
+        "shadow": "Additional information check"
       }
     },
     "summary_update_interval": {
@@ -197,15 +230,17 @@
     },
     "climate_bridge_mode": {
       "options": {
-        "disabled": "Disabled",
-        "shadow": "Shadow (read only)",
-        "canary": "One-room canary"
+        "disabled": "Do not connect the climate controller",
+        "shadow": "Connect for checks only — no commands",
+        "canary": "One-room trial control — after verification"
       }
     },
-    "next_step": {
+    "settings_section": {
       "options": {
-        "save_settings": "Save settings",
-        "manage_climate_registry": "Set up climate devices"
+        "climate_registry": "Rooms and climate devices",
+        "climate_connection": "Connect the existing climate controller",
+        "general_settings": "HASC general information",
+        "test_switch": "Service switch test — not climate"
       }
     },
     "climate_registry_action": {

@@ -93,6 +93,7 @@ CLIMATE_BRIDGE_MODE_FIELD = "climate_bridge_mode"
 CLIMATE_BRIDGE_MODE_DEFAULT = "disabled"
 CLIMATE_BRIDGE_TARGET_FIELD = "climate_bridge_target"
 CLIMATE_CANARY_ROOM_ID_FIELD = "climate_canary_room_id"
+OPTIONS_SECTION_FIELD = "settings_section"
 CANARY_TARGET_ENTITY_ID = "input_boolean.hasc_disposable_canary"
 CANARY_SWITCH_ENTITY_ID = "switch.hausman_hub_hasc_canary_control"
 CANARY_SWITCH_UNIQUE_ID_SUFFIX = "canary_control"
@@ -812,7 +813,12 @@ async def async_update_safe_options(
     if current_summary_update_interval not in SUMMARY_UPDATE_INTERVAL_MINUTES:
         raise RuntimeError("safe options must retain an approved summary update interval")
 
-    rejected_options_form = await hass.config_entries.options.async_init(entry.entry_id)
+    rejected_options_form = await async_open_options_section(
+        hass,
+        entry,
+        "general_settings",
+    )
+    assert_general_settings_form(rejected_options_form)
     assert_result(
         rejected_options_form["type"],
         "form",
@@ -823,7 +829,11 @@ async def async_update_safe_options(
     try:
         await hass.config_entries.options.async_configure(
             rejected_flow_id,
-            {"mode": "proxy"},
+            {
+                "mode": "proxy",
+                LOCAL_SUMMARY_ENABLED_FIELD: current_local_page_enabled,
+                SUMMARY_UPDATE_INTERVAL_FIELD: current_summary_update_interval,
+            },
         )
     except InvalidData:
         hass.config_entries.options.async_abort(rejected_flow_id)
@@ -840,9 +850,9 @@ async def async_update_safe_options(
         "rejected options must keep the entry loaded",
     )
 
-    options_form = await hass.config_entries.options.async_init(entry.entry_id)
+    options_form = await async_open_options_section(hass, entry, "general_settings")
     assert_result(options_form["type"], "form", "options flow must show a form")
-    assert_options_form_uses_safe_native_selectors(options_form)
+    assert_general_settings_form(options_form)
     reload_calls: list[str] = []
     original_async_reload = hass.config_entries.async_reload
 
@@ -902,8 +912,8 @@ async def async_update_safe_options(
     )
 
 
-def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any]) -> None:
-    """Require observation and canary fields to use native fixed selectors."""
+def serialized_options_fields(options_form: dict[str, Any]) -> list[dict[str, Any]]:
+    """Serialize one real options step into its frontend field descriptions."""
 
     data_schema = options_form.get("data_schema")
     serialized_schema = voluptuous_serialize.convert(
@@ -912,6 +922,53 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
     )
     if not isinstance(serialized_schema, list):
         raise RuntimeError("options form schema must serialize to frontend fields")
+    if not all(isinstance(field, dict) for field in serialized_schema):
+        raise RuntimeError("options form must serialize only frontend field mappings")
+    return serialized_schema
+
+
+def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any]) -> None:
+    """Require the first options screen to contain only one section selector."""
+
+    serialized_schema = serialized_options_fields(options_form)
+    if len(serialized_schema) != 1:
+        raise RuntimeError("initial options form must expose only one settings section")
+    field = serialized_schema[0]
+    assert_result(
+        field.get("name"),
+        OPTIONS_SECTION_FIELD,
+        "initial options form must ask only which settings area to open",
+    )
+    selector = field.get("selector")
+    if not isinstance(selector, dict) or not isinstance(selector.get("select"), dict):
+        raise RuntimeError("settings section must use Home Assistant's select selector")
+    select = selector["select"]
+    assert_result(
+        select.get("translation_key"),
+        OPTIONS_SECTION_FIELD,
+        "settings section selector must retain translated choices",
+    )
+    assert_result(
+        select.get("options"),
+        [
+            "climate_registry",
+            "climate_connection",
+            "general_settings",
+            "test_switch",
+        ],
+        "initial options form must expose exactly four separated settings areas",
+    )
+
+
+def assert_general_settings_form(options_form: dict[str, Any]) -> None:
+    """Require only the three aggregate-information settings on this step."""
+
+    serialized_schema = serialized_options_fields(options_form)
+    assert_result(
+        [field.get("name") for field in serialized_schema],
+        ["mode", LOCAL_SUMMARY_ENABLED_FIELD, SUMMARY_UPDATE_INTERVAL_FIELD],
+        "general settings must contain only aggregate-information fields",
+    )
     local_page_fields = [
         field
         for field in serialized_schema
@@ -952,6 +1009,17 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
         list(SUMMARY_UPDATE_INTERVAL_MINUTES),
         "summary update interval selector must expose only translated fixed choices",
     )
+
+
+def assert_test_switch_form(options_form: dict[str, Any]) -> None:
+    """Require the input-boolean service test to stay on its own step."""
+
+    serialized_schema = serialized_options_fields(options_form)
+    assert_result(
+        [field.get("name") for field in serialized_schema],
+        [CANARY_CONTROL_ENABLED_FIELD, CANARY_CONTROL_TARGET_FIELD],
+        "service switch test must contain only its arm and helper fields",
+    )
     canary_enabled_fields = [
         field
         for field in serialized_schema
@@ -989,6 +1057,17 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
         False,
         "canary target selector must accept only one helper",
     )
+
+
+def assert_climate_connection_form(options_form: dict[str, Any]) -> None:
+    """Require the first climate connection step to ask only for its mode."""
+
+    serialized_schema = serialized_options_fields(options_form)
+    assert_result(
+        [field.get("name") for field in serialized_schema],
+        [CLIMATE_BRIDGE_MODE_FIELD],
+        "climate connection must first ask only for the safe connection mode",
+    )
     climate_mode_fields = [
         field
         for field in serialized_schema
@@ -1008,14 +1087,46 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
         ["disabled", "shadow", "canary"],
         "climate bridge selector must expose only translated fixed stages",
     )
-    for field_name in (CLIMATE_BRIDGE_TARGET_FIELD, CLIMATE_CANARY_ROOM_ID_FIELD):
-        fields = [
-            field
-            for field in serialized_schema
-            if isinstance(field, dict) and field.get("name") == field_name
-        ]
-        if len(fields) != 1:
-            raise RuntimeError(f"options form must serialize one {field_name} field")
+
+
+def assert_climate_endpoint_form(
+    options_form: dict[str, Any],
+    *,
+    expect_room: bool,
+) -> None:
+    """Require the address step to add a room only for one-room trial control."""
+
+    serialized_schema = serialized_options_fields(options_form)
+    expected_names = [CLIMATE_BRIDGE_TARGET_FIELD]
+    if expect_room:
+        expected_names.append(CLIMATE_CANARY_ROOM_ID_FIELD)
+    assert_result(
+        [field.get("name") for field in serialized_schema],
+        expected_names,
+        "climate endpoint must contain only values required by the chosen mode",
+    )
+
+
+async def async_open_options_section(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    section: str,
+) -> dict[str, Any]:
+    """Open one separated HASC options area through the real first screen."""
+
+    initial = await hass.config_entries.options.async_init(entry.entry_id)
+    assert_result(initial["type"], "form", "options flow must show its section menu")
+    assert_options_form_uses_safe_native_selectors(initial)
+    result = await hass.config_entries.options.async_configure(
+        initial["flow_id"],
+        {OPTIONS_SECTION_FIELD: section},
+    )
+    assert_result(
+        (result["type"], result.get("step_id")),
+        ("form", section),
+        f"options menu must open the {section} step",
+    )
+    return result
 
 
 async def async_assert_canary_control_lifecycle(
@@ -1050,20 +1161,12 @@ async def async_assert_canary_control_lifecycle(
     assert_result(target_state.state, STATE_OFF, "canary target must begin off")
 
     current_mode = entry.options.get("mode", entry.data["mode"])
-    current_local_page_enabled = entry.options.get(LOCAL_SUMMARY_ENABLED_FIELD, True)
-    current_summary_interval = entry.options.get(
-        SUMMARY_UPDATE_INTERVAL_FIELD,
-        SUMMARY_UPDATE_INTERVAL_DEFAULT,
-    )
-    options_form = await hass.config_entries.options.async_init(entry.entry_id)
+    options_form = await async_open_options_section(hass, entry, "test_switch")
     assert_result(options_form["type"], "form", "canary arm must show options")
-    assert_options_form_uses_safe_native_selectors(options_form)
+    assert_test_switch_form(options_form)
     armed = await hass.config_entries.options.async_configure(
         options_form["flow_id"],
         {
-            "mode": current_mode,
-            LOCAL_SUMMARY_ENABLED_FIELD: current_local_page_enabled,
-            SUMMARY_UPDATE_INTERVAL_FIELD: current_summary_interval,
             CANARY_CONTROL_ENABLED_FIELD: True,
             CANARY_CONTROL_TARGET_FIELD: CANARY_TARGET_ENTITY_ID,
         },
@@ -1147,15 +1250,12 @@ async def async_assert_canary_control_lifecycle(
     )
     await async_assert_safe_diagnostics(hass, domain, entry, current_mode)
 
-    rollback_form = await hass.config_entries.options.async_init(entry.entry_id)
+    rollback_form = await async_open_options_section(hass, entry, "test_switch")
+    assert_test_switch_form(rollback_form)
     rollback = await hass.config_entries.options.async_configure(
         rollback_form["flow_id"],
         {
-            "mode": current_mode,
-            LOCAL_SUMMARY_ENABLED_FIELD: current_local_page_enabled,
-            SUMMARY_UPDATE_INTERVAL_FIELD: current_summary_interval,
             CANARY_CONTROL_ENABLED_FIELD: False,
-            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
             # Deliberately submit the visible old target. The application
             # boundary must discard it as part of the rollback.
             CANARY_CONTROL_TARGET_FIELD: CANARY_TARGET_ENTITY_ID,
@@ -1216,7 +1316,8 @@ async def async_update_optional_local_page(
             "the optional local page must retain an approved summary update interval"
         )
 
-    rejected_form = await hass.config_entries.options.async_init(entry.entry_id)
+    rejected_form = await async_open_options_section(hass, entry, "general_settings")
+    assert_general_settings_form(rejected_form)
     assert_result(
         rejected_form["type"],
         "form",
@@ -1242,12 +1343,13 @@ async def async_update_optional_local_page(
         "rejected optional local page text must not change saved options",
     )
 
-    options_form = await hass.config_entries.options.async_init(entry.entry_id)
+    options_form = await async_open_options_section(hass, entry, "general_settings")
     assert_result(
         options_form["type"],
         "form",
         "optional local page settings must show a form",
     )
+    assert_general_settings_form(options_form)
     reload_calls: list[str] = []
     original_async_reload = hass.config_entries.async_reload
 
@@ -1357,7 +1459,8 @@ async def async_update_summary_interval(
     if not isinstance(current_mode, str) or type(current_local_page_enabled) is not bool:
         raise RuntimeError("summary interval settings must preserve safe current options")
 
-    rejected_form = await hass.config_entries.options.async_init(entry.entry_id)
+    rejected_form = await async_open_options_section(hass, entry, "general_settings")
+    assert_general_settings_form(rejected_form)
     options_before_rejection = dict(entry.options)
     try:
         await hass.config_entries.options.async_configure(
@@ -1378,8 +1481,8 @@ async def async_update_summary_interval(
         "rejected summary interval must not mutate the entry",
     )
 
-    options_form = await hass.config_entries.options.async_init(entry.entry_id)
-    assert_options_form_uses_safe_native_selectors(options_form)
+    options_form = await async_open_options_section(hass, entry, "general_settings")
+    assert_general_settings_form(options_form)
     reload_calls: list[str] = []
     original_async_reload = hass.config_entries.async_reload
 
@@ -1479,9 +1582,13 @@ async def async_update_inactive_safe_options_without_reading_home(
     hass.config_entries.async_reload = async_recording_reload
     try:
         async with async_block_home_summary_reads(hass, domain, "inactive safe options"):
-            options_form = await hass.config_entries.options.async_init(entry.entry_id)
+            options_form = await async_open_options_section(
+                hass,
+                entry,
+                "general_settings",
+            )
             assert_result(options_form["type"], "form", "inactive options must show a form")
-            assert_options_form_uses_safe_native_selectors(options_form)
+            assert_general_settings_form(options_form)
             safe_options = await hass.config_entries.options.async_configure(
                 options_form["flow_id"],
                 {
@@ -1552,43 +1659,38 @@ async def async_assert_broken_options_form_defaults_to_read_only(
         "form",
         f"{scenario_name} options form must still open for manual repair",
     )
-    schema = options_form.get("data_schema")
-    schema_fields = getattr(schema, "schema", None)
-    if not isinstance(schema_fields, dict) or len(schema_fields) != 9:
-        raise RuntimeError(
-            f"{scenario_name} options form must expose only the approved settings"
-        )
     assert_options_form_uses_safe_native_selectors(options_form)
-    (
-        mode_field,
-        local_page_field,
-        summary_interval_field,
-        canary_enabled_field,
-        climate_bridge_mode_field,
-        _,
-        _,
-        _,
-        next_step_field,
-    ) = schema_fields
+    section_schema = getattr(options_form.get("data_schema"), "schema", None)
+    if not isinstance(section_schema, dict) or len(section_schema) != 1:
+        raise RuntimeError(f"{scenario_name} must keep a one-field settings menu")
+    section_field = next(iter(section_schema))
+    section_default_factory = getattr(section_field, "default", None)
+    if not callable(section_default_factory):
+        raise RuntimeError(f"{scenario_name} settings menu must provide a safe default")
+    assert_result(
+        section_default_factory(),
+        "climate_registry",
+        f"{scenario_name} settings menu must start with rooms and devices",
+    )
+
+    general_form = await hass.config_entries.options.async_configure(
+        options_form["flow_id"],
+        {OPTIONS_SECTION_FIELD: "general_settings"},
+    )
+    assert_general_settings_form(general_form)
+    schema_fields = getattr(general_form.get("data_schema"), "schema", None)
+    if not isinstance(schema_fields, dict) or len(schema_fields) != 3:
+        raise RuntimeError(f"{scenario_name} general settings must expose three fields")
+    mode_field, local_page_field, summary_interval_field = schema_fields
     mode_default_factory = getattr(mode_field, "default", None)
     local_page_default_factory = getattr(local_page_field, "default", None)
     summary_interval_default_factory = getattr(summary_interval_field, "default", None)
-    canary_enabled_default_factory = getattr(canary_enabled_field, "default", None)
-    climate_bridge_mode_default_factory = getattr(
-        climate_bridge_mode_field,
-        "default",
-        None,
-    )
-    next_step_default_factory = getattr(next_step_field, "default", None)
     if (
         not callable(mode_default_factory)
         or not callable(local_page_default_factory)
         or not callable(summary_interval_default_factory)
-        or not callable(canary_enabled_default_factory)
-        or not callable(climate_bridge_mode_default_factory)
-        or not callable(next_step_default_factory)
     ):
-        raise RuntimeError(f"{scenario_name} options form must provide safe defaults")
+        raise RuntimeError(f"{scenario_name} general settings must provide safe defaults")
     assert_result(
         mode_default_factory(),
         "read-only",
@@ -1604,22 +1706,37 @@ async def async_assert_broken_options_form_defaults_to_read_only(
         SUMMARY_UPDATE_INTERVAL_DEFAULT,
         f"{scenario_name} options form must default to the established five minutes",
     )
+    hass.config_entries.options.async_abort(options_form["flow_id"])
+
+    test_form = await async_open_options_section(hass, entry, "test_switch")
+    assert_test_switch_form(test_form)
+    test_fields = getattr(test_form.get("data_schema"), "schema", None)
+    if not isinstance(test_fields, dict) or len(test_fields) != 2:
+        raise RuntimeError(f"{scenario_name} service test must expose two fields")
+    canary_default_factory = getattr(next(iter(test_fields)), "default", None)
+    if not callable(canary_default_factory):
+        raise RuntimeError(f"{scenario_name} service test must default safely")
     assert_result(
-        canary_enabled_default_factory(),
+        canary_default_factory(),
         False,
-        f"{scenario_name} options form must default to a disarmed canary",
+        f"{scenario_name} service test must default to off",
     )
+    hass.config_entries.options.async_abort(test_form["flow_id"])
+
+    climate_form = await async_open_options_section(hass, entry, "climate_connection")
+    assert_climate_connection_form(climate_form)
+    climate_fields = getattr(climate_form.get("data_schema"), "schema", None)
+    if not isinstance(climate_fields, dict) or len(climate_fields) != 1:
+        raise RuntimeError(f"{scenario_name} climate connection must expose one field")
+    climate_default_factory = getattr(next(iter(climate_fields)), "default", None)
+    if not callable(climate_default_factory):
+        raise RuntimeError(f"{scenario_name} climate connection must default safely")
     assert_result(
-        climate_bridge_mode_default_factory(),
+        climate_default_factory(),
         CLIMATE_BRIDGE_MODE_DEFAULT,
         f"{scenario_name} climate bridge must default to disabled",
     )
-    assert_result(
-        next_step_default_factory(),
-        "save_settings",
-        f"{scenario_name} options form must default to saving ordinary settings",
-    )
-    hass.config_entries.options.async_abort(options_form["flow_id"])
+    hass.config_entries.options.async_abort(climate_form["flow_id"])
     await hass.async_block_till_done()
     assert_result(
         dict(entry.data),
@@ -2918,14 +3035,16 @@ async def async_assert_shadow_climate_end_to_end(
     home_server = TestServer(hass.http.app, host="127.0.0.1")
     home_client = TestClient(home_server)
     try:
-        form = await hass.config_entries.options.async_init(entry.entry_id)
+        form = await async_open_options_section(hass, entry, "climate_connection")
+        assert_climate_connection_form(form)
+        endpoint = await hass.config_entries.options.async_configure(
+            form["flow_id"],
+            {CLIMATE_BRIDGE_MODE_FIELD: "shadow"},
+        )
+        assert_climate_endpoint_form(endpoint, expect_room=False)
         configured = await hass.config_entries.options.async_configure(
             form["flow_id"],
-            {
-                "mode": entry.options.get("mode", entry.data["mode"]),
-                CLIMATE_BRIDGE_MODE_FIELD: "shadow",
-                CLIMATE_BRIDGE_TARGET_FIELD: bridge_origin,
-            },
+            {CLIMATE_BRIDGE_TARGET_FIELD: bridge_origin},
         )
         assert_result(
             configured["type"],
@@ -2935,11 +3054,12 @@ async def async_assert_shadow_climate_end_to_end(
         await hass.async_block_till_done()
         await home_client.start_server()
 
-        registry_form = await hass.config_entries.options.async_init(entry.entry_id)
-        registry_menu = await hass.config_entries.options.async_configure(
-            registry_form["flow_id"],
-            {"next_step": "manage_climate_registry"},
+        registry_form = await async_open_options_section(
+            hass,
+            entry,
+            "climate_registry",
         )
+        registry_menu = registry_form
         assert_result(
             (registry_menu["type"], registry_menu["step_id"]),
             ("form", "climate_registry"),
@@ -3262,11 +3382,12 @@ async def async_assert_shadow_climate_end_to_end(
         if "source_id" in api_preflight_serialized or "entity_id" in api_preflight_serialized:
             raise RuntimeError("API preflight must not expose private climate bindings")
 
-        preflight_flow = await hass.config_entries.options.async_init(entry.entry_id)
-        preflight_menu = await hass.config_entries.options.async_configure(
-            preflight_flow["flow_id"],
-            {"next_step": "manage_climate_registry"},
+        preflight_flow = await async_open_options_section(
+            hass,
+            entry,
+            "climate_registry",
         )
+        preflight_menu = preflight_flow
         preflight_candidate = await hass.config_entries.options.async_configure(
             preflight_flow["flow_id"],
             {"climate_registry_action": "review_canary_preflight"},
@@ -3343,13 +3464,11 @@ async def async_assert_shadow_climate_end_to_end(
         await home_client.close()
         await bridge_server.close()
 
-    form = await hass.config_entries.options.async_init(entry.entry_id)
+    form = await async_open_options_section(hass, entry, "climate_connection")
+    assert_climate_connection_form(form)
     disabled = await hass.config_entries.options.async_configure(
         form["flow_id"],
-        {
-            "mode": entry.options.get("mode", entry.data["mode"]),
-            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
-        },
+        {CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT},
     )
     assert_result(
         disabled["type"],

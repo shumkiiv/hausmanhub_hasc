@@ -71,8 +71,8 @@ from .domain.climate_bridge import (
 )
 
 
-OPTIONS_NEXT_STEP_FIELD = "next_step"
-OPTIONS_NEXT_STEP_DEFAULT = "save_settings"
+OPTIONS_SECTION_FIELD = "settings_section"
+OPTIONS_SECTION_DEFAULT = "climate_registry"
 CLIMATE_REGISTRY_JSON_FIELD = "climate_registry_json"
 CLIMATE_REGISTRY_CONFIRM_FIELD = "confirm_registry_save"
 CLIMATE_REGISTRY_ACTION_FIELD = "climate_registry_action"
@@ -197,10 +197,15 @@ CLIMATE_BRIDGE_MODE_SELECTOR = SelectSelector(
         translation_key="climate_bridge_mode",
     )
 )
-OPTIONS_NEXT_STEP_SELECTOR = SelectSelector(
+OPTIONS_SECTION_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=["save_settings", "manage_climate_registry"],
-        translation_key="next_step",
+        options=[
+            "climate_registry",
+            "climate_connection",
+            "general_settings",
+            "test_switch",
+        ],
+        translation_key="settings_section",
     )
 )
 CLIMATE_REGISTRY_JSON_SELECTOR = TextSelector(
@@ -282,37 +287,47 @@ def _mode_schema(default: str) -> vol.Schema:
     return vol.Schema({vol.Required(MODE_FIELD, default=default): MODE_SELECTOR})
 
 
-def _options_schema(
+def _options_section_schema() -> vol.Schema:
+    """Show only the four understandable settings areas on the first screen."""
+
+    return vol.Schema(
+        {
+            vol.Required(
+                OPTIONS_SECTION_FIELD,
+                default=OPTIONS_SECTION_DEFAULT,
+            ): OPTIONS_SECTION_SELECTOR
+        }
+    )
+
+
+def _general_settings_schema(
     mode_default: str,
     local_summary_enabled_default: bool,
     summary_update_interval_default: str,
+) -> vol.Schema:
+    """Show only settings for HASC's aggregate informational display."""
+
+    return vol.Schema(
+        {
+            vol.Required(MODE_FIELD, default=mode_default): MODE_SELECTOR,
+            vol.Required(
+                LOCAL_SUMMARY_ENABLED_FIELD,
+                default=local_summary_enabled_default,
+            ): StrictBooleanSelector(),
+            vol.Required(
+                SUMMARY_UPDATE_INTERVAL_FIELD,
+                default=summary_update_interval_default,
+            ): SUMMARY_UPDATE_INTERVAL_SELECTOR,
+        }
+    )
+
+
+def _test_switch_schema(
     canary_control_enabled_default: bool,
     canary_control_target_default: str | None,
-    climate_bridge_mode_default: str,
-    climate_bridge_target_default: str | None,
-    climate_canary_room_id_default: str | None,
 ) -> vol.Schema:
-    """Show observation choices and the one narrow control-canary target."""
+    """Keep the unrelated input-boolean test on its own clearly named screen."""
 
-    fields: dict[vol.Marker, object] = {
-        vol.Required(MODE_FIELD, default=mode_default): MODE_SELECTOR,
-        vol.Required(
-            LOCAL_SUMMARY_ENABLED_FIELD,
-            default=local_summary_enabled_default,
-        ): StrictBooleanSelector(),
-        vol.Required(
-            SUMMARY_UPDATE_INTERVAL_FIELD,
-            default=summary_update_interval_default,
-        ): SUMMARY_UPDATE_INTERVAL_SELECTOR,
-        vol.Required(
-            CANARY_CONTROL_ENABLED_FIELD,
-            default=canary_control_enabled_default,
-        ): StrictBooleanSelector(),
-        vol.Required(
-            CLIMATE_BRIDGE_MODE_FIELD,
-            default=climate_bridge_mode_default,
-        ): CLIMATE_BRIDGE_MODE_SELECTOR,
-    }
     target_field = (
         vol.Optional(
             CANARY_CONTROL_TARGET_FIELD,
@@ -321,31 +336,57 @@ def _options_schema(
         if canary_control_target_default is not None
         else vol.Optional(CANARY_CONTROL_TARGET_FIELD)
     )
-    fields[target_field] = CANARY_CONTROL_TARGET_SELECTOR
+    return vol.Schema(
+        {
+            vol.Required(
+                CANARY_CONTROL_ENABLED_FIELD,
+                default=canary_control_enabled_default,
+            ): StrictBooleanSelector(),
+            target_field: CANARY_CONTROL_TARGET_SELECTOR,
+        }
+    )
+
+
+def _climate_connection_schema(climate_bridge_mode_default: str) -> vol.Schema:
+    """Choose the bridge stage before asking for stage-specific values."""
+
+    return vol.Schema(
+        {
+            vol.Required(
+                CLIMATE_BRIDGE_MODE_FIELD,
+                default=climate_bridge_mode_default,
+            ): CLIMATE_BRIDGE_MODE_SELECTOR
+        }
+    )
+
+
+def _climate_endpoint_schema(
+    *,
+    bridge_mode: str,
+    climate_bridge_target_default: str | None,
+    climate_canary_room_id_default: str | None,
+) -> vol.Schema:
+    """Ask for the address and only the room needed by one-room control."""
+
     bridge_target_field = (
-        vol.Optional(
+        vol.Required(
             CLIMATE_BRIDGE_TARGET_FIELD,
             default=climate_bridge_target_default,
         )
         if climate_bridge_target_default is not None
-        else vol.Optional(CLIMATE_BRIDGE_TARGET_FIELD)
+        else vol.Required(CLIMATE_BRIDGE_TARGET_FIELD)
     )
-    fields[bridge_target_field] = str
-    canary_room_field = (
-        vol.Optional(
-            CLIMATE_CANARY_ROOM_ID_FIELD,
-            default=climate_canary_room_id_default,
+    fields: dict[vol.Marker, object] = {bridge_target_field: str}
+    if bridge_mode == ClimateBridgeMode.CANARY.value:
+        canary_room_field = (
+            vol.Required(
+                CLIMATE_CANARY_ROOM_ID_FIELD,
+                default=climate_canary_room_id_default,
+            )
+            if climate_canary_room_id_default is not None
+            else vol.Required(CLIMATE_CANARY_ROOM_ID_FIELD)
         )
-        if climate_canary_room_id_default is not None
-        else vol.Optional(CLIMATE_CANARY_ROOM_ID_FIELD)
-    )
-    fields[canary_room_field] = str
-    fields[
-        vol.Required(
-            OPTIONS_NEXT_STEP_FIELD,
-            default=OPTIONS_NEXT_STEP_DEFAULT,
-        )
-    ] = OPTIONS_NEXT_STEP_SELECTOR
+        fields[canary_room_field] = str
     return vol.Schema(fields)
 
 
@@ -588,49 +629,56 @@ def _safe_climate_bridge_defaults(
     )
 
 
-def _option_error_field(user_input: Mapping[str, Any]) -> str:
-    """Point a rejected form value at the field that can safely explain it."""
+def _merged_safe_options(
+    entry_data: Mapping[str, Any],
+    saved_options: Mapping[str, Any],
+    updates: Mapping[str, object],
+) -> dict[str, str | bool]:
+    """Apply one small settings screen while preserving other validated areas."""
 
-    if user_input.get(MODE_FIELD) not in APPROVED_MODES:
-        return MODE_FIELD
-    if (
-        LOCAL_SUMMARY_ENABLED_FIELD in user_input
-        and type(user_input[LOCAL_SUMMARY_ENABLED_FIELD]) is not bool
-    ):
-        return LOCAL_SUMMARY_ENABLED_FIELD
-    if (
-        SUMMARY_UPDATE_INTERVAL_FIELD in user_input
-        and user_input[SUMMARY_UPDATE_INTERVAL_FIELD]
-        not in APPROVED_SUMMARY_UPDATE_INTERVALS
-    ):
-        return SUMMARY_UPDATE_INTERVAL_FIELD
-    if (
-        CANARY_CONTROL_ENABLED_FIELD in user_input
-        and type(user_input[CANARY_CONTROL_ENABLED_FIELD]) is not bool
-    ):
-        return CANARY_CONTROL_ENABLED_FIELD
-    if user_input.get(CANARY_CONTROL_ENABLED_FIELD) is True:
-        try:
-            canary_control_target(user_input.get(CANARY_CONTROL_TARGET_FIELD))
-        except UnsafeCanaryTargetError:
-            return CANARY_CONTROL_TARGET_FIELD
-    bridge_mode = user_input.get(CLIMATE_BRIDGE_MODE_FIELD, CLIMATE_BRIDGE_MODE_DEFAULT)
-    if bridge_mode not in {mode.value for mode in ClimateBridgeMode}:
-        return CLIMATE_BRIDGE_MODE_FIELD
-    if bridge_mode != ClimateBridgeMode.DISABLED.value:
-        try:
-            climate_bridge_target(user_input.get(CLIMATE_BRIDGE_TARGET_FIELD))
-        except UnsafeClimateBridgeTarget:
-            return CLIMATE_BRIDGE_TARGET_FIELD
-    if bridge_mode == ClimateBridgeMode.CANARY.value:
-        try:
-            ClimateRoom(
-                user_input.get(CLIMATE_CANARY_ROOM_ID_FIELD),  # type: ignore[arg-type]
-                "Temporary",
-            )
-        except ClimateModelViolation:
-            return CLIMATE_CANARY_ROOM_ID_FIELD
-    return CANARY_CONTROL_TARGET_FIELD
+    try:
+        current = effective_configuration(entry_data, saved_options)
+    except ConfigurationViolation:
+        values: dict[str, object] = {
+            MODE_FIELD: READ_ONLY_MODE,
+            LOCAL_SUMMARY_ENABLED_FIELD: LOCAL_SUMMARY_ENABLED_DEFAULT,
+            SUMMARY_UPDATE_INTERVAL_FIELD: SUMMARY_UPDATE_INTERVAL_DEFAULT,
+            CANARY_CONTROL_ENABLED_FIELD: CANARY_CONTROL_ENABLED_DEFAULT,
+            CANARY_CONTROL_TARGET_FIELD: None,
+            CLIMATE_BRIDGE_MODE_FIELD: CLIMATE_BRIDGE_MODE_DEFAULT,
+            CLIMATE_BRIDGE_TARGET_FIELD: None,
+            CLIMATE_CANARY_ROOM_ID_FIELD: None,
+        }
+    else:
+        values = {
+            MODE_FIELD: current.mode,
+            LOCAL_SUMMARY_ENABLED_FIELD: current.local_summary_enabled,
+            SUMMARY_UPDATE_INTERVAL_FIELD: current.summary_update_interval,
+            CANARY_CONTROL_ENABLED_FIELD: current.canary_control_enabled,
+            CANARY_CONTROL_TARGET_FIELD: (
+                None
+                if current.canary_control_target is None
+                else current.canary_control_target.entity_id
+            ),
+            CLIMATE_BRIDGE_MODE_FIELD: current.climate_bridge_mode.value,
+            CLIMATE_BRIDGE_TARGET_FIELD: (
+                None
+                if current.climate_bridge_target is None
+                else current.climate_bridge_target.origin
+            ),
+            CLIMATE_CANARY_ROOM_ID_FIELD: current.climate_canary_room_id,
+        }
+    values.update(updates)
+    return create_options(
+        values[MODE_FIELD],
+        values[LOCAL_SUMMARY_ENABLED_FIELD],
+        values[SUMMARY_UPDATE_INTERVAL_FIELD],
+        values[CANARY_CONTROL_ENABLED_FIELD],
+        values[CANARY_CONTROL_TARGET_FIELD],
+        values[CLIMATE_BRIDGE_MODE_FIELD],
+        values[CLIMATE_BRIDGE_TARGET_FIELD],
+        values[CLIMATE_CANARY_ROOM_ID_FIELD],
+    )
 
 
 class HausmanHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -671,6 +719,7 @@ class HausmanHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     """Edit observation settings and the opt-in input-boolean canary."""
 
+    _climate_bridge_mode_draft: str | None = None
     _registry_draft: object | None = None
     _registry_preview: Mapping[str, Any] | None = None
     _shadow_evidence: Mapping[str, Any] | None = None
@@ -680,101 +729,204 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _selected_import_source_id: str | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Keep future options within the validated canary boundary."""
+        """Show one short choice instead of mixing unrelated settings."""
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            section = user_input.get(OPTIONS_SECTION_FIELD)
+            if section == "climate_registry":
+                return await self.async_step_climate_registry()
+            if section == "climate_connection":
+                return await self.async_step_climate_connection()
+            if section == "general_settings":
+                return await self.async_step_general_settings()
+            if section == "test_switch":
+                return await self.async_step_test_switch()
+            errors[OPTIONS_SECTION_FIELD] = "unsafe_settings_section"
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_options_section_schema(),
+            errors=errors,
+        )
+
+    async def async_step_general_settings(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Configure only aggregate informational reads and their display."""
 
         mode_default = _safe_mode_default(self.config_entry.data, self.config_entry.options)
-        local_summary_enabled_default = _safe_local_summary_default(
+        local_page_default = _safe_local_summary_default(
             self.config_entry.data,
             self.config_entry.options,
         )
-        summary_update_interval_default = _safe_summary_update_interval_default(
-            self.config_entry.data,
-            self.config_entry.options,
-        )
-        canary_control_enabled_default = _safe_canary_control_enabled_default(
-            self.config_entry.data,
-            self.config_entry.options,
-        )
-        canary_control_target_default = _safe_canary_control_target_default(
-            self.config_entry.data,
-            self.config_entry.options,
-        )
-        (
-            climate_bridge_mode_default,
-            climate_bridge_target_default,
-            climate_canary_room_id_default,
-        ) = _safe_climate_bridge_defaults(
+        interval_default = _safe_summary_update_interval_default(
             self.config_entry.data,
             self.config_entry.options,
         )
         errors: dict[str, str] = {}
         if user_input is not None:
-            if user_input.get(OPTIONS_NEXT_STEP_FIELD) == "manage_climate_registry":
-                return await self.async_step_climate_registry()
-            try:
-                options = create_options(
-                    user_input.get(MODE_FIELD),
-                    user_input.get(
-                        LOCAL_SUMMARY_ENABLED_FIELD,
-                        local_summary_enabled_default,
-                    ),
-                    user_input.get(
-                        SUMMARY_UPDATE_INTERVAL_FIELD,
-                        summary_update_interval_default,
-                    ),
-                    user_input.get(
-                        CANARY_CONTROL_ENABLED_FIELD,
-                        canary_control_enabled_default,
-                    ),
-                    user_input.get(
-                        CANARY_CONTROL_TARGET_FIELD,
-                        canary_control_target_default,
-                    ),
-                    user_input.get(
-                        CLIMATE_BRIDGE_MODE_FIELD,
-                        climate_bridge_mode_default,
-                    ),
-                    user_input.get(
-                        CLIMATE_BRIDGE_TARGET_FIELD,
-                        climate_bridge_target_default,
-                    ),
-                    user_input.get(
-                        CLIMATE_CANARY_ROOM_ID_FIELD,
-                        climate_canary_room_id_default,
-                    ),
-                )
-            except ConfigurationViolation:
-                error_field = _option_error_field(user_input)
-                if error_field == MODE_FIELD:
-                    errors[error_field] = "unsafe_mode"
-                elif error_field == LOCAL_SUMMARY_ENABLED_FIELD:
-                    errors[error_field] = "unsafe_local_summary_setting"
-                elif error_field == SUMMARY_UPDATE_INTERVAL_FIELD:
-                    errors[error_field] = "unsafe_summary_update_interval"
-                elif error_field == CANARY_CONTROL_ENABLED_FIELD:
-                    errors[error_field] = "unsafe_canary_control_setting"
-                elif error_field == CLIMATE_BRIDGE_MODE_FIELD:
-                    errors[error_field] = "unsafe_climate_bridge_mode"
-                elif error_field == CLIMATE_BRIDGE_TARGET_FIELD:
-                    errors[error_field] = "unsafe_climate_bridge_target"
-                elif error_field == CLIMATE_CANARY_ROOM_ID_FIELD:
-                    errors[error_field] = "unsafe_climate_canary_room"
-                else:
-                    errors[error_field] = "unsafe_canary_control_target"
+            mode = user_input.get(MODE_FIELD, mode_default)
+            local_page = user_input.get(LOCAL_SUMMARY_ENABLED_FIELD, local_page_default)
+            interval = user_input.get(SUMMARY_UPDATE_INTERVAL_FIELD, interval_default)
+            if mode not in APPROVED_MODES:
+                errors[MODE_FIELD] = "unsafe_mode"
+            elif type(local_page) is not bool:
+                errors[LOCAL_SUMMARY_ENABLED_FIELD] = "unsafe_local_summary_setting"
+            elif interval not in APPROVED_SUMMARY_UPDATE_INTERVALS:
+                errors[SUMMARY_UPDATE_INTERVAL_FIELD] = "unsafe_summary_update_interval"
             else:
+                options = _merged_safe_options(
+                    self.config_entry.data,
+                    self.config_entry.options,
+                    {
+                        MODE_FIELD: mode,
+                        LOCAL_SUMMARY_ENABLED_FIELD: local_page,
+                        SUMMARY_UPDATE_INTERVAL_FIELD: interval,
+                    },
+                )
                 return self.async_create_entry(title="", data=options)
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=_options_schema(
+            step_id="general_settings",
+            data_schema=_general_settings_schema(
                 mode_default,
-                local_summary_enabled_default,
-                summary_update_interval_default,
-                canary_control_enabled_default,
-                canary_control_target_default,
-                climate_bridge_mode_default,
-                climate_bridge_target_default,
-                climate_canary_room_id_default,
+                local_page_default,
+                interval_default,
+            ),
+            errors=errors,
+        )
+
+    async def async_step_test_switch(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Keep the legacy input-boolean test separate from climate settings."""
+
+        enabled_default = _safe_canary_control_enabled_default(
+            self.config_entry.data,
+            self.config_entry.options,
+        )
+        target_default = _safe_canary_control_target_default(
+            self.config_entry.data,
+            self.config_entry.options,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            enabled = user_input.get(CANARY_CONTROL_ENABLED_FIELD, enabled_default)
+            target = user_input.get(CANARY_CONTROL_TARGET_FIELD, target_default)
+            if type(enabled) is not bool:
+                errors[CANARY_CONTROL_ENABLED_FIELD] = "unsafe_canary_control_setting"
+            elif enabled:
+                try:
+                    canary_control_target(target)
+                except UnsafeCanaryTargetError:
+                    errors[CANARY_CONTROL_TARGET_FIELD] = "unsafe_canary_control_target"
+            if not errors:
+                options = _merged_safe_options(
+                    self.config_entry.data,
+                    self.config_entry.options,
+                    {
+                        CANARY_CONTROL_ENABLED_FIELD: enabled,
+                        CANARY_CONTROL_TARGET_FIELD: target,
+                    },
+                )
+                return self.async_create_entry(title="", data=options)
+
+        return self.async_show_form(
+            step_id="test_switch",
+            data_schema=_test_switch_schema(enabled_default, target_default),
+            errors=errors,
+        )
+
+    async def async_step_climate_connection(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Select a safe bridge stage before showing its required details."""
+
+        mode_default, _, _ = _safe_climate_bridge_defaults(
+            self.config_entry.data,
+            self.config_entry.options,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            mode = user_input.get(CLIMATE_BRIDGE_MODE_FIELD)
+            if mode not in {value.value for value in ClimateBridgeMode}:
+                errors[CLIMATE_BRIDGE_MODE_FIELD] = "unsafe_climate_bridge_mode"
+            elif mode == ClimateBridgeMode.DISABLED.value:
+                options = _merged_safe_options(
+                    self.config_entry.data,
+                    self.config_entry.options,
+                    {
+                        CLIMATE_BRIDGE_MODE_FIELD: mode,
+                        CLIMATE_BRIDGE_TARGET_FIELD: None,
+                        CLIMATE_CANARY_ROOM_ID_FIELD: None,
+                    },
+                )
+                return self.async_create_entry(title="", data=options)
+            else:
+                self._climate_bridge_mode_draft = mode
+                return await self.async_step_climate_endpoint()
+
+        return self.async_show_form(
+            step_id="climate_connection",
+            data_schema=_climate_connection_schema(mode_default),
+            errors=errors,
+        )
+
+    async def async_step_climate_endpoint(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Request only the address and optional one-room control ID."""
+
+        mode = self._climate_bridge_mode_draft
+        if mode not in {
+            ClimateBridgeMode.SHADOW.value,
+            ClimateBridgeMode.CANARY.value,
+        }:
+            return await self.async_step_init()
+        _, target_default, room_default = _safe_climate_bridge_defaults(
+            self.config_entry.data,
+            self.config_entry.options,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            target = user_input.get(CLIMATE_BRIDGE_TARGET_FIELD)
+            room_id = (
+                user_input.get(CLIMATE_CANARY_ROOM_ID_FIELD)
+                if mode == ClimateBridgeMode.CANARY.value
+                else None
+            )
+            try:
+                climate_bridge_target(target)
+            except UnsafeClimateBridgeTarget:
+                errors[CLIMATE_BRIDGE_TARGET_FIELD] = "unsafe_climate_bridge_target"
+            if mode == ClimateBridgeMode.CANARY.value:
+                try:
+                    ClimateRoom(room_id, "Temporary")  # type: ignore[arg-type]
+                except ClimateModelViolation:
+                    errors[CLIMATE_CANARY_ROOM_ID_FIELD] = "unsafe_climate_canary_room"
+            if not errors:
+                options = _merged_safe_options(
+                    self.config_entry.data,
+                    self.config_entry.options,
+                    {
+                        CLIMATE_BRIDGE_MODE_FIELD: mode,
+                        CLIMATE_BRIDGE_TARGET_FIELD: target,
+                        CLIMATE_CANARY_ROOM_ID_FIELD: room_id,
+                    },
+                )
+                return self.async_create_entry(title="", data=options)
+
+        return self.async_show_form(
+            step_id="climate_endpoint",
+            data_schema=_climate_endpoint_schema(
+                bridge_mode=mode,
+                climate_bridge_target_default=target_default,
+                climate_canary_room_id_default=room_default,
             ),
             errors=errors,
         )

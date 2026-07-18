@@ -207,7 +207,7 @@ Last updated: 2026-07-18.
   session `ses_08b312059ffedrMEVGxBLevcNI` with PASS and no substantial
   findings. See
   the [0.5.8 input-contract note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-8-action-inputs.md).
-- Version 0.5.9 is the current HASC-only worktree. Android home contract v4
+- Version 0.5.9 was published and installed through HACS. Android home contract v4
   adds `action_presentations` for the two initial room actions. Each advertised
   action has fixed Russian title and description; the target-temperature field
   has its own title and explanation; room off requires user confirmation while
@@ -221,6 +221,21 @@ Last updated: 2026-07-18.
   final read-only staged review in session `ses_08a6b28e4ffeLp6u9BYpGw1F4O`
   with PASS and no substantial findings. See the
   [0.5.9 action presentation note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-9-action-presentations.md).
+- Version 0.5.10 is the current HASC-only worktree. The single nine-field
+  options form is replaced by a one-choice settings menu with four separate
+  areas: rooms/devices, climate-controller connection, aggregate information,
+  and a clearly non-climate service switch test. The connection flow asks for
+  its mode first, then an address only for check/trial modes, and a room only
+  for one-room trial control. Saving one area preserves the other validated
+  areas; choosing disabled still removes the private address and room. Russian
+  labels and repository instructions describe the resulting user path in
+  ordinary language. This changes no Android contract or runtime authority,
+  keeps the live bridge disabled, and sends no physical commands. The 233
+  local tests and disposable Core 2026.6.4/2026.7.0 checks pass. Kimi model
+  `kimi-for-coding/k2p7` completed the final staged read-only review in session
+  `ses_08a36c03bffeXybMbvHK4IPj8g` with PASS and no substantial findings.
+  Commit, publication, and HACS installation remain pending. See the
+  [0.5.10 settings-menu note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-10-simple-settings-menu.md).
 - Further HASC-only development is tracked in the
   [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
   the operator registry, formal Android contract, measurable shadow, command

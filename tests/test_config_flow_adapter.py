@@ -299,7 +299,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             "mode": self.config_flow.MODE_SELECTOR,
             "summary_update_interval": self.config_flow.SUMMARY_UPDATE_INTERVAL_SELECTOR,
             "climate_bridge_mode": self.config_flow.CLIMATE_BRIDGE_MODE_SELECTOR,
-            "next_step": self.config_flow.OPTIONS_NEXT_STEP_SELECTOR,
+            "settings_section": self.config_flow.OPTIONS_SECTION_SELECTOR,
             "climate_registry_action": self.config_flow.CLIMATE_REGISTRY_ACTION_SELECTOR,
             "climate_device_kind": self.config_flow.CLIMATE_DEVICE_KIND_SELECTOR,
             "climate_device_control_scope": self.config_flow.CLIMATE_DEVICE_SCOPE_SELECTOR,
@@ -315,31 +315,39 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                     all(isinstance(option, str) for option in selector.config.options)
                 )
 
-    def assert_options_fields(
+    def assert_section_form(self, schema: FakeSchema) -> None:
+        """Verify the short first screen that only selects one settings area."""
+
+        self.assertEqual(1, len(schema.fields))
+        field, selector = next(iter(schema.fields.items()))
+        self.assertIsInstance(field, FakeRequired)
+        self.assertEqual("settings_section", field.key)
+        self.assertEqual("climate_registry", field.default)
+        self.assertIsInstance(selector, FakeSelectSelector)
+        self.assertEqual(
+            [
+                "climate_registry",
+                "climate_connection",
+                "general_settings",
+                "test_switch",
+            ],
+            selector.config.options,
+        )
+
+    def assert_general_settings_fields(
         self,
         schema: FakeSchema,
         expected_mode_default: str,
         expected_local_page_default: bool,
         expected_summary_update_interval_default: str,
-        expected_canary_control_enabled_default: bool = False,
-        expected_canary_control_target_default: str | None = None,
-        expected_climate_bridge_mode_default: str = "disabled",
-        expected_climate_bridge_target_default: str | None = None,
-        expected_climate_canary_room_default: str | None = None,
     ) -> FakeSelectSelector:
-        """Verify fixed observation, helper-canary, and climate rollout fields."""
+        """Verify the three fields used only for aggregate information."""
 
-        self.assertEqual(9, len(schema.fields))
+        self.assertEqual(3, len(schema.fields))
         fields = list(schema.fields.items())
         mode_field, mode_selector = fields[0]
         page_field, page_selector = fields[1]
         interval_field, interval_selector = fields[2]
-        canary_field, canary_selector = fields[3]
-        bridge_mode_field, bridge_mode_selector = fields[4]
-        target_field, target_selector = fields[5]
-        bridge_target_field, bridge_target_selector = fields[6]
-        bridge_room_field, bridge_room_selector = fields[7]
-        next_step_field, next_step_selector = fields[8]
         self.assertIsInstance(mode_field, FakeRequired)
         self.assertEqual("mode", mode_field.key)
         self.assertEqual(expected_mode_default, mode_field.default)
@@ -364,42 +372,73 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             "summary_update_interval",
             interval_selector.config.translation_key,
         )
-        self.assertIsInstance(canary_field, FakeRequired)
-        self.assertEqual("canary_control_enabled", canary_field.key)
-        self.assertEqual(expected_canary_control_enabled_default, canary_field.default)
-        self.assertIsInstance(canary_selector, FakeBooleanSelector)
-        self.assertEqual("boolean", canary_selector.selector_type)
+        return mode_selector
+
+    def assert_test_switch_fields(
+        self,
+        schema: FakeSchema,
+        expected_enabled_default: bool,
+        expected_target_default: str | None,
+    ) -> None:
+        """Verify the legacy helper test is isolated from climate settings."""
+
+        self.assertEqual(2, len(schema.fields))
+        (enabled_field, enabled_selector), (target_field, target_selector) = list(
+            schema.fields.items()
+        )
+        self.assertIsInstance(enabled_field, FakeRequired)
+        self.assertEqual("canary_control_enabled", enabled_field.key)
+        self.assertEqual(expected_enabled_default, enabled_field.default)
+        self.assertIsInstance(enabled_selector, FakeBooleanSelector)
+        self.assertEqual("boolean", enabled_selector.selector_type)
+        self.assertIsInstance(target_field, FakeOptional)
+        self.assertEqual("canary_control_target", target_field.key)
+        self.assertEqual(expected_target_default, target_field.default)
+        self.assertIsInstance(target_selector, FakeEntitySelector)
+        self.assertEqual("input_boolean", target_selector.config.domain)
+        self.assertFalse(target_selector.config.multiple)
+
+    def assert_climate_connection_fields(
+        self,
+        schema: FakeSchema,
+        expected_mode_default: str,
+    ) -> None:
+        """Verify the connection screen asks only for the safe bridge stage."""
+
+        self.assertEqual(1, len(schema.fields))
+        bridge_mode_field, bridge_mode_selector = next(iter(schema.fields.items()))
         self.assertIsInstance(bridge_mode_field, FakeRequired)
         self.assertEqual("climate_bridge_mode", bridge_mode_field.key)
-        self.assertEqual(expected_climate_bridge_mode_default, bridge_mode_field.default)
+        self.assertEqual(expected_mode_default, bridge_mode_field.default)
         self.assertIsInstance(bridge_mode_selector, FakeSelectSelector)
         self.assertEqual(
             ["disabled", "shadow", "canary"],
             bridge_mode_selector.config.options,
         )
-        self.assertIsInstance(target_field, FakeOptional)
-        self.assertEqual("canary_control_target", target_field.key)
-        self.assertEqual(expected_canary_control_target_default, target_field.default)
-        self.assertIsInstance(target_selector, FakeEntitySelector)
-        self.assertEqual("input_boolean", target_selector.config.domain)
-        self.assertFalse(target_selector.config.multiple)
-        self.assertIsInstance(bridge_target_field, FakeOptional)
-        self.assertEqual("climate_bridge_target", bridge_target_field.key)
-        self.assertEqual(expected_climate_bridge_target_default, bridge_target_field.default)
-        self.assertIs(bridge_target_selector, str)
-        self.assertIsInstance(bridge_room_field, FakeOptional)
-        self.assertEqual("climate_canary_room_id", bridge_room_field.key)
-        self.assertEqual(expected_climate_canary_room_default, bridge_room_field.default)
-        self.assertIs(bridge_room_selector, str)
-        self.assertIsInstance(next_step_field, FakeRequired)
-        self.assertEqual("next_step", next_step_field.key)
-        self.assertEqual("save_settings", next_step_field.default)
-        self.assertIsInstance(next_step_selector, FakeSelectSelector)
-        self.assertEqual(
-            ["save_settings", "manage_climate_registry"],
-            next_step_selector.config.options,
-        )
-        return mode_selector
+
+    def assert_climate_endpoint_fields(
+        self,
+        schema: FakeSchema,
+        *,
+        target_default: str | None,
+        room_default: str | None = None,
+        expect_room: bool,
+    ) -> None:
+        """Verify the room field exists only for one-room trial control."""
+
+        self.assertEqual(2 if expect_room else 1, len(schema.fields))
+        fields = list(schema.fields.items())
+        target_field, target_validator = fields[0]
+        self.assertIsInstance(target_field, FakeRequired)
+        self.assertEqual("climate_bridge_target", target_field.key)
+        self.assertEqual(target_default, target_field.default)
+        self.assertIs(target_validator, str)
+        if expect_room:
+            room_field, room_validator = fields[1]
+            self.assertIsInstance(room_field, FakeRequired)
+            self.assertEqual("climate_canary_room_id", room_field.key)
+            self.assertEqual(room_default, room_field.default)
+            self.assertIs(room_validator, str)
 
     async def test_user_form_exposes_only_the_two_approved_modes(self) -> None:
         flow = self.config_flow.HausmanHubConfigFlow()
@@ -455,7 +494,11 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
             {},
         )
-        options_result = await options_flow.async_step_init(extra_input)
+        section_result = await options_flow.async_step_init(
+            {"settings_section": "general_settings", "unmodelled": "outside_contract"}
+        )
+        self.assertEqual("general_settings", section_result["step_id"])
+        options_result = await options_flow.async_step_general_settings(extra_input)
 
         self.assertEqual("create_entry", options_result["type"])
         self.assertEqual(
@@ -485,11 +528,20 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
 
         initial_form = await options_flow.async_step_init()
-        shadow_result = await options_flow.async_step_init({"mode": "shadow"})
-        proxy_result = await options_flow.async_step_init({"mode": "proxy"})
+        general_form = await options_flow.async_step_init(
+            {"settings_section": "general_settings"}
+        )
+        shadow_result = await options_flow.async_step_general_settings({"mode": "shadow"})
+
+        proxy_flow = self.config_flow.HausmanHubOptionsFlow()
+        proxy_flow.config_entry = options_flow.config_entry
+        proxy_result = await proxy_flow.async_step_general_settings({"mode": "proxy"})
 
         self.assertEqual("form", initial_form["type"])
-        self.assert_options_fields(initial_form["schema"], "read-only", True, "5m")
+        self.assert_section_form(initial_form["schema"])
+        self.assert_general_settings_fields(
+            general_form["schema"], "read-only", True, "5m"
+        )
         self.assertEqual("create_entry", shadow_result["type"])
         self.assertEqual(
             {
@@ -503,6 +555,26 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual("form", proxy_result["type"])
         self.assertEqual({"mode": "unsafe_mode"}, proxy_result["errors"])
+
+    async def test_options_menu_rejects_an_unknown_settings_area(self) -> None:
+        """The short menu cannot be used to jump to an unapproved step."""
+
+        options_flow = self.config_flow.HausmanHubOptionsFlow()
+        options_flow.config_entry = FakeConfigEntry(
+            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
+            {},
+        )
+
+        result = await options_flow.async_step_init(
+            {"settings_section": "unknown_settings"}
+        )
+
+        self.assertEqual("form", result["type"])
+        self.assert_section_form(result["schema"])
+        self.assertEqual(
+            {"settings_section": "unsafe_settings_section"},
+            result["errors"],
+        )
 
     async def test_options_form_hides_a_broken_saved_configuration(self) -> None:
         """A damaged saved configuration cannot make shadow look selected."""
@@ -556,9 +628,13 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 original_options = dict(options_flow.config_entry.options)
 
                 result = await options_flow.async_step_init()
+                general = await options_flow.async_step_general_settings()
 
                 self.assertEqual("form", result["type"])
-                self.assert_options_fields(result["schema"], "read-only", True, "5m")
+                self.assert_section_form(result["schema"])
+                self.assert_general_settings_fields(
+                    general["schema"], "read-only", True, "5m"
+                )
                 self.assertEqual(original_data, options_flow.config_entry.data)
                 self.assertEqual(original_options, options_flow.config_entry.options)
 
@@ -573,10 +649,10 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         original_data = dict(options_flow.config_entry.data)
         original_options = dict(options_flow.config_entry.options)
 
-        result = await options_flow.async_step_init()
+        result = await options_flow.async_step_general_settings()
 
         self.assertEqual("form", result["type"])
-        self.assert_options_fields(result["schema"], "shadow", True, "5m")
+        self.assert_general_settings_fields(result["schema"], "shadow", True, "5m")
         self.assertEqual(original_data, options_flow.config_entry.data)
         self.assertEqual(original_options, options_flow.config_entry.options)
 
@@ -589,7 +665,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {},
         )
 
-        result = await options_flow.async_step_init(
+        result = await options_flow.async_step_general_settings(
             {"mode": "read-only", "local_summary_enabled": False}
         )
 
@@ -614,8 +690,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"mode": "shadow", "local_summary_enabled": False},
         )
 
-        initial_form = await options_flow.async_step_init()
-        result = await options_flow.async_step_init(
+        initial_form = await options_flow.async_step_general_settings()
+        result = await options_flow.async_step_general_settings(
             {
                 "mode": "shadow",
                 "local_summary_enabled": False,
@@ -625,7 +701,9 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        self.assert_options_fields(initial_form["schema"], "shadow", False, "5m")
+        self.assert_general_settings_fields(
+            initial_form["schema"], "shadow", False, "5m"
+        )
         self.assertEqual("create_entry", result["type"])
         self.assertEqual(
             {
@@ -647,14 +725,10 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {},
         )
 
-        armed = await options_flow.async_step_init(
+        armed = await options_flow.async_step_test_switch(
             {
-                "mode": "read-only",
-                "local_summary_enabled": True,
-                "summary_update_interval": "5m",
                 "canary_control_enabled": True,
                 "canary_control_target": "input_boolean.hasc_canary",
-                "climate_bridge_mode": "disabled",
             }
         )
 
@@ -672,19 +746,15 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
 
         options_flow.config_entry.options = dict(armed["data"])
-        armed_form = await options_flow.async_step_init()
-        self.assert_options_fields(
+        armed_form = await options_flow.async_step_test_switch()
+        self.assert_test_switch_fields(
             armed_form["schema"],
-            "read-only",
-            True,
-            "5m",
             True,
             "input_boolean.hasc_canary",
         )
 
-        disarmed = await options_flow.async_step_init(
+        disarmed = await options_flow.async_step_test_switch(
             {
-                **armed["data"],
                 "canary_control_enabled": False,
             }
         )
@@ -700,37 +770,53 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
             {},
         )
-        shadow = await options_flow.async_step_init(
-            {
-                "mode": "shadow",
-                "climate_bridge_mode": "shadow",
-                "climate_bridge_target": "http://127.0.0.1:1880",
-            }
+        connection = await options_flow.async_step_climate_connection()
+        self.assert_climate_connection_fields(connection["schema"], "disabled")
+        endpoint = await options_flow.async_step_climate_connection(
+            {"climate_bridge_mode": "shadow"}
+        )
+        self.assert_climate_endpoint_fields(
+            endpoint["schema"], target_default=None, expect_room=False
+        )
+        shadow = await options_flow.async_step_climate_endpoint(
+            {"climate_bridge_target": "http://127.0.0.1:1880"}
         )
         self.assertEqual("create_entry", shadow["type"])
         self.assertEqual("shadow", shadow["data"]["climate_bridge_mode"])
         self.assertNotIn("climate_canary_room_id", shadow["data"])
 
         options_flow.config_entry.options = dict(shadow["data"])
-        form = await options_flow.async_step_init()
-        self.assert_options_fields(
+        form = await options_flow.async_step_climate_connection()
+        self.assert_climate_connection_fields(
             form["schema"],
             "shadow",
-            True,
-            "5m",
-            expected_climate_bridge_mode_default="shadow",
-            expected_climate_bridge_target_default="http://127.0.0.1:1880",
         )
 
-        canary = await options_flow.async_step_init(
+        canary_endpoint = await options_flow.async_step_climate_connection(
+            {"climate_bridge_mode": "canary"}
+        )
+        self.assert_climate_endpoint_fields(
+            canary_endpoint["schema"],
+            target_default="http://127.0.0.1:1880",
+            expect_room=True,
+        )
+        canary = await options_flow.async_step_climate_endpoint(
             {
-                **shadow["data"],
-                "climate_bridge_mode": "canary",
+                "climate_bridge_target": "http://127.0.0.1:1880",
                 "climate_canary_room_id": "living",
             }
         )
         self.assertEqual("create_entry", canary["type"])
         self.assertEqual("living", canary["data"]["climate_canary_room_id"])
+
+        options_flow.config_entry.options = dict(canary["data"])
+        disabled = await options_flow.async_step_climate_connection(
+            {"climate_bridge_mode": "disabled"}
+        )
+        self.assertEqual("create_entry", disabled["type"])
+        self.assertEqual("disabled", disabled["data"]["climate_bridge_mode"])
+        self.assertNotIn("climate_bridge_target", disabled["data"])
+        self.assertNotIn("climate_canary_room_id", disabled["data"])
 
     async def test_options_reject_unsafe_canary_values(self) -> None:
         """No missing target, other entity domain, or truth-like arm value passes."""
@@ -740,24 +826,17 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
             {},
         )
-        base = {
-            "mode": "read-only",
-            "local_summary_enabled": True,
-            "summary_update_interval": "5m",
-        }
-
         for invalid_input, expected_error in (
             (
-                {**base, "canary_control_enabled": "true"},
+                {"canary_control_enabled": "true"},
                 {"canary_control_enabled": "unsafe_canary_control_setting"},
             ),
             (
-                {**base, "canary_control_enabled": True},
+                {"canary_control_enabled": True},
                 {"canary_control_target": "unsafe_canary_control_target"},
             ),
             (
                 {
-                    **base,
                     "canary_control_enabled": True,
                     "canary_control_target": "light.kitchen",
                 },
@@ -765,7 +844,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             with self.subTest(invalid_input=invalid_input):
-                result = await options_flow.async_step_init(invalid_input)
+                result = await options_flow.async_step_test_switch(invalid_input)
                 self.assertEqual("form", result["type"])
                 self.assertEqual(expected_error, result["errors"])
 
@@ -780,7 +859,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         for invalid_value in ("true", 1, None):
             with self.subTest(invalid_value=invalid_value):
-                result = await options_flow.async_step_init(
+                result = await options_flow.async_step_general_settings(
                     {"mode": "read-only", "local_summary_enabled": invalid_value}
                 )
 
@@ -801,7 +880,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         for invalid_value in ("1m", "60m", 5, None):
             with self.subTest(invalid_value=invalid_value):
-                result = await options_flow.async_step_init(
+                result = await options_flow.async_step_general_settings(
                     {
                         "mode": "read-only",
                         "local_summary_enabled": True,
@@ -867,7 +946,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
 
         editor = await options_flow.async_step_init(
-            {"next_step": "manage_climate_registry"}
+            {"settings_section": "climate_registry"}
         )
         room_form = await options_flow.async_step_climate_registry(
             {"climate_registry_action": "add_room"}
@@ -975,7 +1054,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        await options_flow.async_step_init({"next_step": "manage_climate_registry"})
+        await options_flow.async_step_init({"settings_section": "climate_registry"})
         ac_choices = await options_flow.async_step_climate_registry(
             {"climate_registry_action": "import_candidate"}
         )
@@ -1123,7 +1202,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        await options_flow.async_step_init({"next_step": "manage_climate_registry"})
+        await options_flow.async_step_init({"settings_section": "climate_registry"})
         candidate_form = await options_flow.async_step_climate_registry(
             {"climate_registry_action": "review_shadow_evidence"}
         )
@@ -1210,7 +1289,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        await options_flow.async_step_init({"next_step": "manage_climate_registry"})
+        await options_flow.async_step_init({"settings_section": "climate_registry"})
         options_flow._registry_draft = {  # type: ignore[attr-defined]
             **registry,
             "rooms": [

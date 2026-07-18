@@ -61,7 +61,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.5.9", manifest["version"])
+        self.assertEqual("0.5.10", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -2278,11 +2278,25 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             )
             self.assertIn("mode", content["selector"])
             self.assertIn("unsafe_mode", content["config"]["error"])
-            self.assertIn("local_summary_enabled", content["options"]["step"]["init"]["data"])
-            self.assertIn(
-                "local_summary_enabled",
-                content["options"]["step"]["init"]["data_description"],
+            steps = content["options"]["step"]
+            self.assertEqual({"settings_section"}, set(steps["init"]["data"]))
+            self.assertEqual(
+                {"mode", "local_summary_enabled", "summary_update_interval"},
+                set(steps["general_settings"]["data"]),
             )
+            self.assertEqual(
+                {"canary_control_enabled", "canary_control_target"},
+                set(steps["test_switch"]["data"]),
+            )
+            self.assertEqual(
+                {"climate_bridge_mode"},
+                set(steps["climate_connection"]["data"]),
+            )
+            self.assertEqual(
+                {"climate_bridge_target", "climate_canary_room_id"},
+                set(steps["climate_endpoint"]["data"]),
+            )
+            self.assertIn("unsafe_settings_section", content["options"]["error"])
             self.assertIn(
                 "unsafe_local_summary_setting",
                 content["options"]["error"],
@@ -2290,11 +2304,11 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             self.assertIn("summary_update_interval", content["selector"])
             self.assertIn(
                 "summary_update_interval",
-                content["options"]["step"]["init"]["data"],
+                steps["general_settings"]["data"],
             )
             self.assertIn(
                 "summary_update_interval",
-                content["options"]["step"]["init"]["data_description"],
+                steps["general_settings"]["data_description"],
             )
             self.assertIn(
                 "unsafe_summary_update_interval",
@@ -2304,10 +2318,17 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                 set(APPROVED_SUMMARY_UPDATE_INTERVALS),
                 set(content["selector"]["summary_update_interval"]["options"]),
             )
-            self.assertIn("canary_control_enabled", content["options"]["step"]["init"]["data"])
-            self.assertIn("canary_control_target", content["options"]["step"]["init"]["data"])
             self.assertIn("unsafe_canary_control_setting", content["options"]["error"])
             self.assertIn("unsafe_canary_control_target", content["options"]["error"])
+            self.assertEqual(
+                {
+                    "climate_registry",
+                    "climate_connection",
+                    "general_settings",
+                    "test_switch",
+                },
+                set(content["selector"]["settings_section"]["options"]),
+            )
 
     def test_sensor_translations_have_only_the_approved_nine_counts(self) -> None:
         """Every visible label must map to an already-approved aggregate count."""
@@ -2340,47 +2361,35 @@ class ReadOnlySkeletonTest(unittest.TestCase):
 
         expected_labels = {
             "en": {
-                "read-only": "Read-only",
-                "shadow": "Comparison without changes",
+                "read-only": "Normal information reading",
+                "shadow": "Additional information check",
             },
             "ru": {
-                "read-only": "Только чтение",
-                "shadow": "Проверка без изменений",
+                "read-only": "Обычное чтение сведений",
+                "shadow": "Дополнительная проверка сведений",
             },
         }
 
         for language, content in (("en", english), ("ru", russian)):
             with self.subTest(language=language):
                 user_step = content["config"]["step"]["user"]
-                options_step = content["options"]["step"]["init"]
-                rendered_text = "\n".join(
-                    (
-                        user_step["description"],
-                        user_step["data_description"]["mode"],
-                        content["config"]["error"]["unsafe_mode"],
-                        options_step["description"],
-                        options_step["data_description"]["mode"],
-                        options_step["data_description"]["local_summary_enabled"],
-                        options_step["data_description"]["summary_update_interval"],
-                        options_step["data_description"]["canary_control_enabled"],
-                        options_step["data_description"]["canary_control_target"],
-                        content["options"]["error"]["unsafe_mode"],
-                        content["options"]["error"]["unsafe_local_summary_setting"],
-                        content["options"]["error"]["unsafe_summary_update_interval"],
-                        content["options"]["error"]["unsafe_canary_control_setting"],
-                        content["options"]["error"]["unsafe_canary_control_target"],
-                        *content["selector"]["mode"]["options"].values(),
-                        *content["selector"]["summary_update_interval"]["options"].values(),
-                    )
-                ).lower()
+                steps = content["options"]["step"]
                 self.assertEqual(
                     expected_labels[language],
                     content["selector"]["mode"]["options"],
                 )
+                self.assertIn("mode", user_step["data_description"])
+                self.assertEqual({"settings_section"}, set(steps["init"]["data"]))
 
         self.assertIn("grants no device control", english["config"]["step"]["user"]["description"])
-        self.assertIn("input boolean", english["options"]["step"]["init"]["description"])
-        self.assertIn("shadow", english["options"]["step"]["init"]["description"].lower())
+        self.assertIn(
+            "not climate control",
+            english["options"]["step"]["test_switch"]["description"].lower(),
+        )
+        self.assertIn(
+            "no commands",
+            english["selector"]["climate_bridge_mode"]["options"]["shadow"].lower(),
+        )
         self.assertEqual(
             {"disabled", "shadow", "canary"},
             set(english["selector"]["climate_bridge_mode"]["options"]),
@@ -2390,8 +2399,12 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             russian["config"]["step"]["user"]["description"],
         )
         self.assertIn(
-            "пробное управление одной комнатой",
-            russian["options"]["step"]["init"]["description"],
+            "Это не управление климатом",
+            russian["options"]["step"]["test_switch"]["description"],
+        )
+        self.assertIn(
+            "Для первого подключения используйте проверку без команд",
+            russian["options"]["step"]["climate_connection"]["description"],
         )
 
         def translated_strings(value: object):
