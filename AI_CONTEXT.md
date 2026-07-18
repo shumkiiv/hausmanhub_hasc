@@ -248,8 +248,12 @@ Last updated: 2026-07-18.
   default to the disabled native policy. Existing climate-core remains the
   transitional observation/execution adapter while native HASC observation,
   planning, cooldown, manual override, and later separately authorized
-  execution are developed. Publication and live installation remain pending.
-  See the
+  execution are developed. All 244 local tests, the release checks, and the
+  disposable Core 2026.6.4/2026.7.0 checks pass. The staged implementation and
+  the final fail-closed delta received Kimi PASS reviews with no substantial
+  findings. Commit `a765cc7` was pushed, release `v0.6.0` was published, and
+  HACS reports installed/latest `v0.6.0`; the owner still needs to restart Home
+  Assistant before using the new fifth settings area. See the
   [0.6.0 native preview note](LLM_WIKI/Manual/2026-07-18-hasc-v0-6-0-native-climate-preview.md).
 - Further HASC-only development is tracked in the
   [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
