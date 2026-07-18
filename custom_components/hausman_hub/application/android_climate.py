@@ -26,7 +26,7 @@ from .climate_registry import reconcile_climate_registry
 
 
 ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hasc-home"
-ANDROID_CLIMATE_CONTRACT_VERSION = 3
+ANDROID_CLIMATE_CONTRACT_VERSION = 4
 ANDROID_ROOM_CONTROL_ACTIONS = (
     "set_room_target",
     "turn_room_off",
@@ -200,6 +200,7 @@ def _room_control_projection(
         "enabled": not blocked_reasons,
         "actions": actions,
         "action_inputs": _room_action_inputs(actions),
+        "action_presentations": _room_action_presentations(actions),
         "blocked_reasons": blocked_reasons,
     }
 
@@ -221,6 +222,34 @@ def _room_action_inputs(actions: Collection[str]) -> dict[str, object]:
             }
         }
     }
+
+
+def _room_action_presentations(actions: Collection[str]) -> dict[str, object]:
+    """Return fixed Russian text only for actions advertised to Android."""
+
+    presentations: dict[str, object] = {}
+    if "set_room_target" in actions:
+        presentations["set_room_target"] = {
+            "title": "Установить температуру",
+            "description": "Изменить желаемую температуру в комнате.",
+            "confirmation_required": False,
+            "fields": {
+                "target_temperature": {
+                    "title": "Желаемая температура",
+                    "description": (
+                        "Значение, которое должен поддерживать климатический контур."
+                    ),
+                }
+            },
+        }
+    if "turn_room_off" in actions:
+        presentations["turn_room_off"] = {
+            "title": "Выключить климат",
+            "description": "Остановить поддержание климата в комнате.",
+            "confirmation_required": True,
+            "fields": {},
+        }
+    return presentations
 
 
 def admin_climate_import_snapshot(

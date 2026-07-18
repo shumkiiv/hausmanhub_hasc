@@ -193,7 +193,7 @@ Last updated: 2026-07-18.
   installed it on the live home without configuring a registry or enabling
   the bridge. See the
   [0.5.7 Russian interface note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-7-russian-interface.md).
-- Version 0.5.8 is the current HASC-only worktree. Android home contract v3
+- Version 0.5.8 was released on 2026-07-18. Android home contract v3
   keeps the v2 room action and blocked-reason shape and adds `action_inputs`.
   The target-temperature input is numeric and required, with an exact public
   range of 18–28 °C and a 0.5 °C step. The command validator and public
@@ -207,6 +207,20 @@ Last updated: 2026-07-18.
   session `ses_08b312059ffedrMEVGxBLevcNI` with PASS and no substantial
   findings. See
   the [0.5.8 input-contract note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-8-action-inputs.md).
+- Version 0.5.9 is the current HASC-only worktree. Android home contract v4
+  adds `action_presentations` for the two initial room actions. Each advertised
+  action has fixed Russian title and description; the target-temperature field
+  has its own title and explanation; room off requires user confirmation while
+  target adjustment does not. Presentation keys must exactly follow advertised
+  actions, and strict v4 schema/fixture enforce the copy and confirmation rule.
+  Earlier v1-v3 home schemas remain packaged. This is still client-contract
+  preparation only: it changes no Android repository, live registry, bridge
+  state, or physical authority. All 232 local tests, the release/package/file
+  safety checks, and disposable Core 2026.6.4/2026.7.0 passed with measured
+  zero climate command POSTs. Kimi model `kimi-for-coding/k2p7` completed the
+  final read-only staged review in session `ses_08a6b28e4ffeLp6u9BYpGw1F4O`
+  with PASS and no substantial findings. See the
+  [0.5.9 action presentation note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-9-action-presentations.md).
 - Further HASC-only development is tracked in the
   [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
   the operator registry, formal Android contract, measurable shadow, command

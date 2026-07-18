@@ -95,13 +95,14 @@ not authorized by publishing 0.5.0 or by this roadmap.
 
 ## Next coding slice
 
-The 0.5.8 worktree implements the typed public target-temperature constraints
-planned after 0.5.6. The next HASC-only slice should add stable public display
-metadata for the two first room actions and their fields, so Android can render
-Russian labels and explanations from a versioned contract without learning
-backend details. This remains contract preparation, not Android repository
-work or physical authorization. Physical execution still requires a new
-explicit authorization naming one public room and exact actions.
+The 0.5.9 worktree implements stable public display metadata for the first two
+room actions and the target-temperature field. The next HASC-only slice should
+add stable Russian presentation metadata for the public blocked reasons and
+operation lifecycle, so Android can explain why a control is unavailable or
+still waiting without translating backend codes itself. This remains contract
+preparation, not Android repository work or physical authorization. Physical
+execution still requires a new explicit authorization naming one public room
+and exact actions.
 
 ## 0.5.1 implementation status
 
@@ -220,4 +221,19 @@ outside this slice. All 232 local tests, the release/package/file-safety
 checks, and disposable Core 2026.6.4/2026.7.0 passed with measured zero climate
 command POSTs. Kimi `kimi-for-coding/k2p7` session
 `ses_08b312059ffedrMEVGxBLevcNI` returned PASS with no substantial findings.
+Publication gates remain.
+
+## 0.5.9 implementation status
+
+Implemented in the current worktree on 2026-07-18: Android home contract v4
+adds exact `action_presentations` for the first two room actions. The tablet
+gets fixed Russian titles and descriptions, target field copy, and a boolean
+confirmation rule: room off requires confirmation while target adjustment
+does not. Presentation keys exactly mirror advertised actions. Strict v4
+schema and fixture are added while v1-v3 remain packaged. Android code, live
+registry configuration, bridge activation, and physical commands remain
+outside this slice. All 232 local tests, the release/package/file-safety
+checks, and disposable Core 2026.6.4/2026.7.0 passed with measured zero climate
+command POSTs. Kimi `kimi-for-coding/k2p7` session
+`ses_08a6b28e4ffeLp6u9BYpGw1F4O` returned PASS with no substantial findings.
 Publication gates remain.

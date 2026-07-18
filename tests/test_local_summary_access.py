@@ -609,7 +609,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, home_response.status)
-        self.assertEqual(3, home_response.payload["contract"]["version"])
+        self.assertEqual(4, home_response.payload["contract"]["version"])
         living_control = home_response.payload["rooms"][0]["control"]
         self.assertFalse(living_control["enabled"])
         self.assertEqual(
@@ -623,6 +623,24 @@ class LocalSummaryAccessTest(unittest.TestCase):
                     "target_temperature"
                 ][key]
                 for key in ("minimum", "maximum", "step", "unit")
+            ),
+        )
+        self.assertEqual(
+            ("Установить температуру", False),
+            (
+                living_control["action_presentations"]["set_room_target"]["title"],
+                living_control["action_presentations"]["set_room_target"][
+                    "confirmation_required"
+                ],
+            ),
+        )
+        self.assertEqual(
+            ("Выключить климат", True),
+            (
+                living_control["action_presentations"]["turn_room_off"]["title"],
+                living_control["action_presentations"]["turn_room_off"][
+                    "confirmation_required"
+                ],
             ),
         )
         self.assertEqual(["shadow_only"], living_control["blocked_reasons"])

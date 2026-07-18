@@ -3084,8 +3084,8 @@ async def async_assert_shadow_climate_end_to_end(
             raise RuntimeError("tablet home contract must not expose private climate bindings")
         assert_result(
             home_payload.get("contract"),
-            {"name": "hausman-hasc-home", "version": 3},
-            "tablet must receive the explicit v3 home contract",
+            {"name": "hausman-hasc-home", "version": 4},
+            "tablet must receive the explicit v4 home contract",
         )
         home_rooms = home_payload.get("rooms", [])
         living_room = next(
@@ -3106,6 +3106,7 @@ async def async_assert_shadow_climate_end_to_end(
                 living_control.get("enabled"),
                 living_control.get("actions"),
                 living_control.get("action_inputs"),
+                living_control.get("action_presentations"),
                 living_control.get("blocked_reasons"),
                 home_payload.get("climate", {}).get("commands_enabled"),
             ),
@@ -3123,6 +3124,28 @@ async def async_assert_shadow_climate_end_to_end(
                             "unit": "°C",
                         }
                     }
+                },
+                {
+                    "set_room_target": {
+                        "title": "Установить температуру",
+                        "description": "Изменить желаемую температуру в комнате.",
+                        "confirmation_required": False,
+                        "fields": {
+                            "target_temperature": {
+                                "title": "Желаемая температура",
+                                "description": (
+                                    "Значение, которое должен поддерживать "
+                                    "климатический контур."
+                                ),
+                            }
+                        },
+                    },
+                    "turn_room_off": {
+                        "title": "Выключить климат",
+                        "description": "Остановить поддержание климата в комнате.",
+                        "confirmation_required": True,
+                        "fields": {},
+                    },
                 },
                 ["shadow_only"],
                 False,

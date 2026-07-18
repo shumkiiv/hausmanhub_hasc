@@ -55,6 +55,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v1/canary-preflight.json": "v1/climate-canary-preflight.schema.json",
             "hasc_climate_v2/home.json": "v2/climate-home.schema.json",
             "hasc_climate_v3/home.json": "v3/climate-home.schema.json",
+            "hasc_climate_v4/home.json": "v4/climate-home.schema.json",
         }
         for fixture_name, schema_name in pairs.items():
             with self.subTest(fixture=fixture_name):
@@ -75,7 +76,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         )
         admin = admin_climate_import_snapshot(registry, snapshot)
 
-        validator("v3/climate-home.schema.json").validate(home)
+        validator("v4/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
@@ -158,6 +159,36 @@ class ClimateContractSchemasTest(unittest.TestCase):
         ]["target_temperature"]["maximum"] = 30
         with self.assertRaises(Exception):
             validator("v3/climate-home.schema.json").validate(weakened_limit)
+
+        missing_presentations = load_json(
+            ROOT / "fixtures" / "hasc_climate_v4" / "home.json"
+        )
+        missing_presentations["rooms"][0]["control"].pop(  # type: ignore[index]
+            "action_presentations"
+        )
+        with self.assertRaises(Exception):
+            validator("v4/climate-home.schema.json").validate(
+                missing_presentations
+            )
+
+        wrong_confirmation = load_json(
+            ROOT / "fixtures" / "hasc_climate_v4" / "home.json"
+        )
+        wrong_confirmation["rooms"][0]["control"]["action_presentations"][  # type: ignore[index]
+            "turn_room_off"
+        ]["confirmation_required"] = False
+        with self.assertRaises(Exception):
+            validator("v4/climate-home.schema.json").validate(wrong_confirmation)
+
+        orphan_presentation = load_json(
+            ROOT / "fixtures" / "hasc_climate_v4" / "home.json"
+        )
+        orphan_presentation["rooms"][0]["control"]["actions"] = [  # type: ignore[index]
+            "turn_room_off"
+        ]
+        orphan_presentation["rooms"][0]["control"]["action_inputs"] = {}  # type: ignore[index]
+        with self.assertRaises(Exception):
+            validator("v4/climate-home.schema.json").validate(orphan_presentation)
 
 
 if __name__ == "__main__":

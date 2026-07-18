@@ -28,7 +28,7 @@ class AndroidClimateTest(unittest.TestCase):
         )
 
         self.assertEqual("hausman-hasc-home", result["contract"]["name"])
-        self.assertEqual(3, result["contract"]["version"])
+        self.assertEqual(4, result["contract"]["version"])
         self.assertEqual("living_ac", result["rooms"][0]["devices"][0]["id"])
         self.assertEqual(25.8, result["rooms"][0]["temperature"])
         self.assertFalse(result["climate"]["commands_enabled"])
@@ -50,6 +50,31 @@ class AndroidClimateTest(unittest.TestCase):
                 }
             },
             result["rooms"][0]["control"]["action_inputs"],
+        )
+        self.assertEqual(
+            {
+                "set_room_target": {
+                    "title": "Установить температуру",
+                    "description": "Изменить желаемую температуру в комнате.",
+                    "confirmation_required": False,
+                    "fields": {
+                        "target_temperature": {
+                            "title": "Желаемая температура",
+                            "description": (
+                                "Значение, которое должен поддерживать "
+                                "климатический контур."
+                            ),
+                        }
+                    },
+                },
+                "turn_room_off": {
+                    "title": "Выключить климат",
+                    "description": "Остановить поддержание климата в комнате.",
+                    "confirmation_required": True,
+                    "fields": {},
+                },
+            },
+            result["rooms"][0]["control"]["action_presentations"],
         )
         self.assertEqual(
             ["shadow_only"],
@@ -75,7 +100,7 @@ class AndroidClimateTest(unittest.TestCase):
         self.assertNotIn("source_id", encoded)
         self.assertNotIn("entity_id", encoded)
 
-    def test_action_inputs_exist_only_for_advertised_typed_actions(self) -> None:
+    def test_action_metadata_exists_only_for_advertised_actions(self) -> None:
         source = source_payload()
         source["capabilities"][0]["commandTypes"].remove(  # type: ignore[index]
             "climate.set_temperature"
@@ -92,7 +117,33 @@ class AndroidClimateTest(unittest.TestCase):
 
         self.assertEqual(["turn_room_off"], control["actions"])
         self.assertEqual({}, control["action_inputs"])
+        self.assertEqual(
+            {
+                "turn_room_off": {
+                    "title": "Выключить климат",
+                    "description": "Остановить поддержание климата в комнате.",
+                    "confirmation_required": True,
+                    "fields": {},
+                }
+            },
+            control["action_presentations"],
+        )
         self.assertIn("actions_unsupported", control["blocked_reasons"])
+
+        source["capabilities"][0]["commandTypes"].remove(  # type: ignore[index]
+            "climate.turn_off"
+        )
+        without_actions = android_climate_snapshot(
+            registry_from_payload(registry_payload()),
+            import_climate_state(source),
+            bridge_mode=ClimateBridgeMode.CANARY,
+            canary_room_id="living",
+            candidate_ready=True,
+        )
+        empty_control = without_actions["rooms"][0]["control"]
+        self.assertEqual([], empty_control["actions"])
+        self.assertEqual({}, empty_control["action_inputs"])
+        self.assertEqual({}, empty_control["action_presentations"])
 
     def test_room_control_fails_closed_for_unavailable_device_and_pending_operation(
         self,
