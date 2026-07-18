@@ -23,7 +23,7 @@ _GUIDANCE = {
     "unsafe_mode": ManualRepairGuidance(
         category="unsafe_mode",
         severity="error",
-        message="Выберите только режим чтения или shadow-проверки.",
+        message="Выберите только чтение или проверку без команд.",
     ),
     "unresolved_owner_contour": ManualRepairGuidance(
         category="unresolved_owner_contour",
@@ -33,7 +33,7 @@ _GUIDANCE = {
     "stale_parity": ManualRepairGuidance(
         category="stale_parity",
         severity="warning",
-        message="Обновите evidence отдельным read-only или shadow-процессом.",
+        message="Заново запустите безопасную проверку данных без команд.",
     ),
     "redaction_failure": ManualRepairGuidance(
         category="redaction_failure",

@@ -58,7 +58,7 @@ class FakeSelectSelectorConfig:
     def __init__(
         self,
         *,
-        options: list[dict[str, str]],
+        options: list[dict[str, str]] | list[str],
         translation_key: str | None = None,
         multiple: bool = False,
     ) -> None:
@@ -270,6 +270,51 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(selector, FakeSelectSelector)
         return selector
 
+    def test_operator_result_labels_are_plain_russian(self) -> None:
+        """Internal contract codes must not leak into Russian result screens."""
+
+        self.assertEqual("готово", self.config_flow._russian_status("ready"))
+        self.assertEqual("нет", self.config_flow._russian_yes_no(False))
+        self.assertEqual(
+            "данные о климате устарели; ещё не проверены обязательные действия",
+            self.config_flow._russian_reasons(
+                ["state_stale", "required_shadow_intents_missing"]
+            ),
+        )
+        self.assertEqual(
+            "установка температуры, выключение климата",
+            self.config_flow._russian_actions(
+                ["set_room_target", "turn_room_off"]
+            ),
+        )
+        self.assertEqual(
+            "неизвестная причина",
+            self.config_flow._russian_reasons(["unexpected_internal_code"]),
+        )
+
+    def test_fixed_selectors_defer_visible_labels_to_translations(self) -> None:
+        """A raw English label must not override the Russian selector text."""
+
+        selectors = {
+            "mode": self.config_flow.MODE_SELECTOR,
+            "summary_update_interval": self.config_flow.SUMMARY_UPDATE_INTERVAL_SELECTOR,
+            "climate_bridge_mode": self.config_flow.CLIMATE_BRIDGE_MODE_SELECTOR,
+            "next_step": self.config_flow.OPTIONS_NEXT_STEP_SELECTOR,
+            "climate_registry_action": self.config_flow.CLIMATE_REGISTRY_ACTION_SELECTOR,
+            "climate_device_kind": self.config_flow.CLIMATE_DEVICE_KIND_SELECTOR,
+            "climate_device_control_scope": self.config_flow.CLIMATE_DEVICE_SCOPE_SELECTOR,
+            "climate_device_control_owner": self.config_flow.CLIMATE_DEVICE_OWNER_SELECTOR,
+            "climate_device_capabilities": (
+                self.config_flow.CLIMATE_DEVICE_CAPABILITIES_SELECTOR
+            ),
+        }
+        for translation_key, selector in selectors.items():
+            with self.subTest(translation_key=translation_key):
+                self.assertEqual(translation_key, selector.config.translation_key)
+                self.assertTrue(
+                    all(isinstance(option, str) for option in selector.config.options)
+                )
+
     def assert_options_fields(
         self,
         schema: FakeSchema,
@@ -313,7 +358,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(interval_selector, FakeSelectSelector)
         self.assertEqual(
             ["5m", "15m", "30m"],
-            [option["value"] for option in interval_selector.config.options],
+            interval_selector.config.options,
         )
         self.assertEqual(
             "summary_update_interval",
@@ -330,7 +375,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(bridge_mode_selector, FakeSelectSelector)
         self.assertEqual(
             ["disabled", "shadow", "canary"],
-            [option["value"] for option in bridge_mode_selector.config.options],
+            bridge_mode_selector.config.options,
         )
         self.assertIsInstance(target_field, FakeOptional)
         self.assertEqual("canary_control_target", target_field.key)
@@ -352,7 +397,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(next_step_selector, FakeSelectSelector)
         self.assertEqual(
             ["save_settings", "manage_climate_registry"],
-            [option["value"] for option in next_step_selector.config.options],
+            next_step_selector.config.options,
         )
         return mode_selector
 
@@ -368,7 +413,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         selector = self.assert_mode_field(schema, "read-only")
         self.assertEqual(
             ["read-only", "shadow"],
-            [option["value"] for option in selector.config.options],
+            selector.config.options,
         )
 
     async def test_user_flow_creates_only_a_safe_shadow_entry(self) -> None:
@@ -1088,8 +1133,14 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("climate_shadow_candidate", candidate_form["step_id"])
         self.assertEqual("climate_shadow_evidence", evidence_form["step_id"])
-        self.assertEqual("living", evidence_form["description_placeholders"]["room_id"])
-        self.assertEqual("collecting", evidence_form["description_placeholders"]["status"])
+        self.assertEqual(
+            "Living room",
+            evidence_form["description_placeholders"]["room_id"],
+        )
+        self.assertEqual(
+            "нужно больше наблюдений",
+            evidence_form["description_placeholders"]["status"],
+        )
         self.assertEqual([], store.saved)
         self.assertEqual([], bridge.executed)
         returned = await options_flow.async_step_climate_shadow_evidence(
@@ -1179,12 +1230,15 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("climate_preflight_candidate", candidate["step_id"])
         self.assertEqual("climate_canary_preflight", result["step_id"])
         placeholders = result["description_placeholders"]
-        self.assertEqual("ready", placeholders["status"])
-        self.assertEqual("true", placeholders["registry_matches"])
-        self.assertEqual("clear", placeholders["operation"])
-        self.assertEqual("ready", placeholders["rollback"])
-        self.assertIn("set_room_target", placeholders["scope"])
+        self.assertEqual("Living room", placeholders["room_id"])
+        self.assertEqual("готово", placeholders["status"])
+        self.assertEqual("да", placeholders["registry_matches"])
+        self.assertEqual("нет", placeholders["operation"])
+        self.assertEqual("готово", placeholders["rollback"])
+        self.assertIn("установка температуры", placeholders["scope"])
         serialized = str(placeholders)
+        self.assertNotIn("set_room_target", serialized)
+        self.assertNotIn("turn_room_off", serialized)
         self.assertNotIn("synthetic-ac-source", serialized)
         self.assertNotIn("climate.synthetic", serialized)
         self.assertEqual([], store.saved)

@@ -948,9 +948,9 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
     if not isinstance(serialized_options, list):
         raise RuntimeError("summary update interval selector must serialize fixed options")
     assert_result(
-        [option.get("value") for option in serialized_options],
+        serialized_options,
         list(SUMMARY_UPDATE_INTERVAL_MINUTES),
-        "summary update interval selector must expose only 5, 15, and 30 minutes",
+        "summary update interval selector must expose only translated fixed choices",
     )
     canary_enabled_fields = [
         field
@@ -1004,9 +1004,9 @@ def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any])
     if not isinstance(climate_select, dict):
         raise RuntimeError("climate bridge mode must use a native select selector")
     assert_result(
-        [option.get("value") for option in climate_select.get("options", [])],
+        climate_select.get("options"),
         ["disabled", "shadow", "canary"],
-        "climate bridge selector must expose only its rollout stages",
+        "climate bridge selector must expose only translated fixed stages",
     )
     for field_name in (CLIMATE_BRIDGE_TARGET_FIELD, CLIMATE_CANARY_ROOM_ID_FIELD):
         fields = [
@@ -3263,7 +3263,7 @@ async def async_assert_shadow_climate_end_to_end(
                 preflight_placeholders.get("operation"),
                 preflight_placeholders.get("rollback"),
             ),
-            ("collecting", "true", "clear", "ready"),
+            ("нужно больше наблюдений", "да", "нет", "готово"),
             "preflight must combine reconciliation, evidence, operation, and rollback",
         )
         preflight_serialized = json.dumps(

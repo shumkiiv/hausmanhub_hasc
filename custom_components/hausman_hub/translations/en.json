@@ -14,6 +14,9 @@
     },
     "error": {
       "unsafe_mode": "Only read-only and comparison-without-changes modes are allowed."
+    },
+    "abort": {
+      "already_configured": "HASC is already configured. Change its settings from the integration page."
     }
   },
   "options": {

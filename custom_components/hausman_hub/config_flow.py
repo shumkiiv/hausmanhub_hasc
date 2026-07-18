@@ -93,20 +93,98 @@ CLIMATE_IMPORT_CANDIDATE_FIELD = "climate_import_candidate"
 CLIMATE_PREFLIGHT_ROOM_FIELD = "climate_preflight_room"
 CLIMATE_PREFLIGHT_CLOSE_FIELD = "close_canary_preflight"
 MAX_CLIMATE_REGISTRY_FORM_BYTES = 16 * 1024
+MISSING_CLIMATE_DEVICE_LABEL = "Нет доступных устройств"
+MISSING_CLIMATE_ROOM_LABEL = "Сначала добавьте комнату"
+
+_RUSSIAN_STATUS_LABELS = {
+    "ready": "готово",
+    "collecting": "нужно больше наблюдений",
+    "blocked": "заблокировано",
+    "validated_offline": "проверено без подключения",
+    "unavailable": "недоступно",
+    "not_ready": "требуется проверка",
+    "pending": "есть",
+    "clear": "нет",
+    "effective": "контур уже выключен",
+}
+_RUSSIAN_REASON_LABELS = {
+    "bridge_disabled": "климатический контур выключен",
+    "candidate_not_registered": "комната не добавлена в HASC",
+    "climate_state_unavailable": "текущее состояние климата недоступно",
+    "state_stale": "данные о климате устарели",
+    "registry_mismatch": "список устройств не совпадает с текущим состоянием",
+    "authority_not_ready": "климатический контур ещё не готов управлять комнатой",
+    "required_actions_unsupported": "устройство не поддерживает нужные команды",
+    "insufficient_matching_observations": "нужно больше успешных проверок состояния",
+    "required_shadow_intents_missing": "ещё не проверены обязательные действия",
+    "shadow_anomalies_observed": "при проверке обнаружены расхождения",
+    "preflight_requires_shadow": "нужно включить режим «Проверка без команд»",
+    "registry_not_reconciled": "список устройств ещё не сверен",
+    "command_scope_not_qualified": "набор команд ещё не подтверждён",
+    "preflight_state_not_fresh": "нужно обновить состояние климата",
+    "pending_operation": "в комнате ещё выполняется команда",
+    "rollback_not_ready": "безопасное отключение пока не готово",
+    "registry_has_no_rooms": "в списке нет комнат",
+    "registry_has_no_devices": "в списке нет устройств",
+    "canary_registry_locked": "во время пробного управления список нельзя менять",
+}
+_RUSSIAN_ACTION_LABELS = {
+    "set_room_target": "установка температуры",
+    "turn_room_off": "выключение климата",
+}
+
+
+def _russian_status(value: object) -> str:
+    """Return a readable status without exposing an internal contract code."""
+
+    if isinstance(value, str):
+        return _RUSSIAN_STATUS_LABELS.get(value, "неизвестно")
+    return "неизвестно"
+
+
+def _russian_reasons(values: object) -> str:
+    """Render known blocking reasons as plain Russian operator guidance."""
+
+    if not isinstance(values, list) or not values:
+        return "нет"
+    labels = [
+        _RUSSIAN_REASON_LABELS.get(value, "неизвестная причина")
+        if isinstance(value, str)
+        else "неизвестная причина"
+        for value in values
+    ]
+    return "; ".join(dict.fromkeys(labels))
+
+
+def _russian_actions(values: object) -> str:
+    """Render only the fixed first climate actions as readable Russian text."""
+
+    if not isinstance(values, list) or not values:
+        return "нет"
+    labels = [
+        _RUSSIAN_ACTION_LABELS.get(value, "неизвестное действие")
+        if isinstance(value, str)
+        else "неизвестное действие"
+        for value in values
+    ]
+    return ", ".join(dict.fromkeys(labels))
+
+
+def _russian_yes_no(value: object) -> str:
+    """Render strict booleans for the Russian operator screen."""
+
+    return "да" if value is True else "нет"
 
 
 MODE_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[SelectOptionDict(value=mode, label=mode) for mode in APPROVED_MODES],
+        options=list(APPROVED_MODES),
         translation_key="mode",
     )
 )
 SUMMARY_UPDATE_INTERVAL_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[
-            SelectOptionDict(value=interval, label=interval)
-            for interval in APPROVED_SUMMARY_UPDATE_INTERVALS
-        ],
+        options=list(APPROVED_SUMMARY_UPDATE_INTERVALS),
         translation_key="summary_update_interval",
     )
 )
@@ -115,22 +193,13 @@ CANARY_CONTROL_TARGET_SELECTOR = EntitySelector(
 )
 CLIMATE_BRIDGE_MODE_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[
-            SelectOptionDict(value=mode.value, label=mode.value)
-            for mode in ClimateBridgeMode
-        ],
+        options=[mode.value for mode in ClimateBridgeMode],
         translation_key="climate_bridge_mode",
     )
 )
 OPTIONS_NEXT_STEP_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[
-            SelectOptionDict(value="save_settings", label="save_settings"),
-            SelectOptionDict(
-                value="manage_climate_registry",
-                label="manage_climate_registry",
-            ),
-        ],
+        options=["save_settings", "manage_climate_registry"],
         translation_key="next_step",
     )
 )
@@ -140,17 +209,14 @@ CLIMATE_REGISTRY_JSON_SELECTOR = TextSelector(
 CLIMATE_REGISTRY_ACTION_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
-            SelectOptionDict(value=value, label=value)
-            for value in (
-                "import_candidate",
-                "add_room",
-                "add_device",
-                "review_canary_preflight",
-                "review_shadow_evidence",
-                "review_registry",
-                "advanced_json",
-                "reset_registry",
-            )
+            "import_candidate",
+            "add_room",
+            "add_device",
+            "review_canary_preflight",
+            "review_shadow_evidence",
+            "review_registry",
+            "advanced_json",
+            "reset_registry",
         ],
         translation_key="climate_registry_action",
     )
@@ -158,52 +224,40 @@ CLIMATE_REGISTRY_ACTION_SELECTOR = SelectSelector(
 CLIMATE_DEVICE_KIND_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
-            SelectOptionDict(value=value, label=value)
-            for value in (
-                "air_conditioner",
-                "radiator_thermostat",
-                "humidifier",
-                "floor_heating",
-                "temperature_sensor",
-                "humidity_sensor",
-            )
+            "air_conditioner",
+            "radiator_thermostat",
+            "humidifier",
+            "floor_heating",
+            "temperature_sensor",
+            "humidity_sensor",
         ],
         translation_key="climate_device_kind",
     )
 )
 CLIMATE_DEVICE_SCOPE_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[
-            SelectOptionDict(value=value, label=value)
-            for value in ("observed", "canary", "managed")
-        ],
+        options=["observed", "canary", "managed"],
         translation_key="climate_device_control_scope",
     )
 )
 CLIMATE_DEVICE_OWNER_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[
-            SelectOptionDict(value=value, label=value)
-            for value in ("climate_core", "manual", "observed")
-        ],
+        options=["climate_core", "manual", "observed"],
         translation_key="climate_device_control_owner",
     )
 )
 CLIMATE_DEVICE_CAPABILITIES_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
-            SelectOptionDict(value=value, label=value)
-            for value in (
-                "power",
-                "target_temperature",
-                "target_humidity",
-                "hvac_mode",
-                "fan_mode",
-                "auto_manual",
-                "target_strategy",
-                "cooldown",
-                "physical_feedback",
-            )
+            "power",
+            "target_temperature",
+            "target_humidity",
+            "hvac_mode",
+            "fan_mode",
+            "auto_manual",
+            "target_strategy",
+            "cooldown",
+            "physical_feedback",
         ],
         multiple=True,
         translation_key="climate_device_capabilities",
@@ -338,7 +392,7 @@ def _climate_import_device_schema(candidate: ImportedClimateDevice) -> vol.Schem
         vol.Required(CLIMATE_DEVICE_NAME_FIELD, default=candidate.name): str,
         vol.Required(CLIMATE_DEVICE_KIND_FIELD, default=kinds[0]): SelectSelector(
             SelectSelectorConfig(
-                options=[SelectOptionDict(value=value, label=value) for value in kinds],
+                options=kinds,
                 translation_key="climate_device_kind",
             )
         ),
@@ -800,7 +854,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 if not candidates:
                     errors["base"] = "climate_import_no_candidates"
         if not candidates:
-            candidates = [SelectOptionDict(value="missing", label="missing")]
+            candidates = [
+                SelectOptionDict(
+                    value="missing",
+                    label=MISSING_CLIMATE_DEVICE_LABEL,
+                )
+            ]
         return self.async_show_form(
             step_id="climate_import_candidate",
             data_schema=_climate_import_candidate_schema(candidates),
@@ -884,7 +943,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             return self.async_show_form(
                 step_id="climate_shadow_candidate",
                 data_schema=_climate_shadow_candidate_schema(
-                    [SelectOptionDict(value="missing", label="missing")]
+                    [
+                        SelectOptionDict(
+                            value="missing",
+                            label=MISSING_CLIMATE_ROOM_LABEL,
+                        )
+                    ]
                 ),
                 errors={"base": "climate_registry_needs_room"},
             )
@@ -944,7 +1008,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 self._canary_preflight = preflight
                 return await self.async_step_climate_canary_preflight()
         if not rooms:
-            rooms = [SelectOptionDict(value="missing", label="missing")]
+            rooms = [
+                SelectOptionDict(
+                    value="missing",
+                    label=MISSING_CLIMATE_ROOM_LABEL,
+                )
+            ]
         return self.async_show_form(
             step_id="climate_preflight_candidate",
             data_schema=_climate_preflight_candidate_schema(rooms),
@@ -1039,7 +1108,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             return self.async_show_form(
                 step_id="climate_registry_device",
                 data_schema=_climate_device_schema(
-                    [SelectOptionDict(value="missing", label="missing")]
+                    [
+                        SelectOptionDict(
+                            value="missing",
+                            label=MISSING_CLIMATE_ROOM_LABEL,
+                        )
+                    ]
                 ),
                 errors={"base": "climate_registry_needs_room"},
             )
@@ -1224,6 +1298,15 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             and isinstance(room.get("name"), str)
         ]
 
+    def _room_display_name(self, room_id: object) -> str:
+        """Return the configured room name instead of its technical identifier."""
+
+        if isinstance(room_id, str):
+            for room in self._draft_rooms():
+                if room.get("value") == room_id:
+                    return room["label"]
+        return "неизвестная комната"
+
     def _set_import_candidates(
         self,
         snapshot: ClimateImportSnapshot,
@@ -1291,13 +1374,11 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         preview = self._registry_preview or {}
         registry = preview.get("registry")
         counts = registry if isinstance(registry, Mapping) else {}
-        reasons = preview.get("reasons")
-        reason_values = reasons if isinstance(reasons, list) else []
         return {
-            "status": str(preview.get("status", "unavailable")),
+            "status": _russian_status(preview.get("status")),
             "room_count": str(counts.get("room_count", 0)),
             "device_count": str(counts.get("device_count", 0)),
-            "reasons": ", ".join(str(value) for value in reason_values) or "none",
+            "reasons": _russian_reasons(preview.get("reasons")),
         }
 
     def _shadow_evidence_placeholders(self) -> dict[str, str]:
@@ -1306,11 +1387,9 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         candidate_values = candidate if isinstance(candidate, Mapping) else {}
         counts = evidence.get("counts")
         count_values = counts if isinstance(counts, Mapping) else {}
-        reasons = candidate_values.get("reasons")
-        reason_values = reasons if isinstance(reasons, list) else []
         return {
-            "room_id": str(candidate_values.get("room_id", "unknown")),
-            "status": str(candidate_values.get("status", "blocked")),
+            "room_id": self._room_display_name(candidate_values.get("room_id")),
+            "status": _russian_status(candidate_values.get("status")),
             "matched": str(candidate_values.get("matched_observation_count", 0)),
             "required_matched": str(
                 candidate_values.get("required_matched_observation_count", 3)
@@ -1318,7 +1397,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             "translated": str(candidate_values.get("translated_action_count", 0)),
             "anomalies": str(candidate_values.get("anomaly_count", 0)),
             "global_rejected": str(count_values.get("rejected", 0)),
-            "reasons": ", ".join(str(value) for value in reason_values) or "none",
+            "reasons": _russian_reasons(candidate_values.get("reasons")),
         }
 
     def _canary_preflight_placeholders(self) -> dict[str, str]:
@@ -1339,14 +1418,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         operation_values = operation if isinstance(operation, Mapping) else {}
         rollback = preflight.get("rollback")
         rollback_values = rollback if isinstance(rollback, Mapping) else {}
-        reasons = preflight.get("reasons")
-        reason_values = reasons if isinstance(reasons, list) else []
         return {
-            "room_id": str(preflight.get("room_id", "unknown")),
-            "status": str(preflight.get("status", "blocked")),
-            "registry_matches": str(
-                reconciliation_values.get("matches", False)
-            ).lower(),
+            "room_id": self._room_display_name(preflight.get("room_id")),
+            "status": _russian_status(preflight.get("status")),
+            "registry_matches": _russian_yes_no(
+                reconciliation_values.get("matches")
+            ),
             "matched_devices": str(
                 reconciliation_values.get("matched_device_count", 0)
             ),
@@ -1359,7 +1436,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             "unregistered_devices": str(
                 reconciliation_values.get("unregistered_source_count", 0)
             ),
-            "shadow_status": str(shadow_values.get("status", "blocked")),
+            "shadow_status": _russian_status(shadow_values.get("status")),
             "matched": str(shadow_values.get("matched_observation_count", 0)),
             "required_matched": str(
                 shadow_values.get("required_matched_observation_count", 3)
@@ -1369,9 +1446,9 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 shadow_values.get("required_action_count", 2)
             ),
             "anomalies": str(shadow_values.get("anomaly_count", 0)),
-            "scope": ", ".join(str(value) for value in action_values) or "none",
-            "scope_qualified": str(scope_values.get("qualified", False)).lower(),
-            "operation": str(operation_values.get("status", "pending")),
-            "rollback": str(rollback_values.get("status", "blocked")),
-            "reasons": ", ".join(str(value) for value in reason_values) or "none",
+            "scope": _russian_actions(action_values),
+            "scope_qualified": _russian_yes_no(scope_values.get("qualified")),
+            "operation": _russian_status(operation_values.get("status")),
+            "rollback": _russian_status(rollback_values.get("status")),
+            "reasons": _russian_reasons(preflight.get("reasons")),
         }

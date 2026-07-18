@@ -162,7 +162,7 @@ Last updated: 2026-07-18.
   home/action remained unavailable because the bridge stayed `disabled`. No
   physical command or canary was attempted. The decision is recorded in
   [the 0.5.5 contract note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-5-preflight-admin-contract.md).
-- Version 0.5.6 is the current HASC-only worktree. The tablet home contract is
+- Version 0.5.6 published the tablet home contract v2. It
   explicitly v2 and adds one public `control` result per room: whether commands
   are enabled, the evidence-qualified target/off actions, and a closed set of
   normalized blocked reasons. It derives availability from the same canary,
@@ -175,9 +175,22 @@ Last updated: 2026-07-18.
   and disposable Core 2026.6.4/2026.7.0. Kimi
   `kimi-for-coding/k2p7` session `ses_08b7a860affeOVomxNvxlvfWbi` completed
   the staged review and follow-up with PASS and no substantial findings.
-  Publication and disabled live deployment remain pending. The decision is
-  recorded in
+  Commit `b62f1d7` was pushed, passed GitHub Actions, and was published as the
+  latest stable release `v0.5.6`. HACS installed it on the live home while the
+  climate bridge and action path stayed closed; the owner restart remained
+  pending when the next development slice began. The decision is recorded in
   [the 0.5.6 room-control note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-6-android-room-control.md).
+- Version 0.5.7 is the current HASC-only worktree. It replaces mixed Russian
+  and internal English operator text with plain Russian names, descriptions,
+  errors, statuses, reasons, actions, and room names. Fixed selectors now pass
+  string values plus translation keys instead of explicit English labels that
+  could override frontend translations. Unknown result codes stay hidden.
+  The repository README and GitHub workflow labels are Russian, and the public
+  GitHub About description will be updated during publication. This slice
+  changes no climate contract or authority and must deploy with the bridge
+  disabled. It passed 231 local tests and disposable Core 2026.6.4/2026.7.0
+  before final review. See the
+  [0.5.7 Russian interface note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-7-russian-interface.md).
 - Further HASC-only development is tracked in the
   [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
   the operator registry, formal Android contract, measurable shadow, command

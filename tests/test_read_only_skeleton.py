@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import fields
 import json
 from pathlib import Path
+import re
 import struct
 import sys
 import unittest
@@ -60,7 +61,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("0.5.6", manifest["version"])
+        self.assertEqual("0.5.7", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -158,7 +159,6 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         }
 
         for document_name in (
-            "README",
             "repository basics",
             "project context",
         ):
@@ -187,6 +187,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
         for document_name in (
+            "README",
             "contribution guide",
             "release checklist",
             "pull request template",
@@ -2384,8 +2385,41 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             {"disabled", "shadow", "canary"},
             set(english["selector"]["climate_bridge_mode"]["options"]),
         )
-        self.assertIn("не даёт управления", russian["config"]["step"]["user"]["description"])
-        self.assertIn("input_boolean", russian["options"]["step"]["init"]["description"])
+        self.assertIn(
+            "Управление устройствами здесь не включается",
+            russian["config"]["step"]["user"]["description"],
+        )
+        self.assertIn(
+            "пробное управление одной комнатой",
+            russian["options"]["step"]["init"]["description"],
+        )
+
+        def translated_strings(value: object):
+            if isinstance(value, dict):
+                for nested in value.values():
+                    yield from translated_strings(nested)
+            elif isinstance(value, str):
+                yield re.sub(r"\{[^}]+\}", "", value).lower()
+
+        russian_user_text = "\n".join(translated_strings(russian))
+        for leftover in (
+            "canary",
+            "shadow",
+            "rollout",
+            "read-only",
+            "input_boolean",
+            "source id",
+            "control entity",
+            "preview",
+            "scope",
+            "owner",
+            "disabled",
+            "climate api",
+            "cooldown",
+            "json schema",
+        ):
+            with self.subTest(leftover=leftover):
+                self.assertNotIn(leftover, russian_user_text)
 
     @staticmethod
     def home_summary() -> HomeSummary:
