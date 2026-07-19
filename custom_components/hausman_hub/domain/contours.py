@@ -7,13 +7,14 @@ reimplementing that mature policy inside the Home Assistant integration.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 import re
 
 
-CONTOUR_REGISTRY_VERSION = 1
+CONTOUR_REGISTRY_VERSION = 2
 MAX_CONTOURS = 32
 MAX_CONTOUR_ROOMS = 128
 MAX_CONTOUR_DEVICES = 512
@@ -61,15 +62,37 @@ class ClimateStrategy(StrEnum):
     AGGRESSIVE = "aggressive"
 
 
+class ClimateProfile(StrEnum):
+    """Two simple comfort profiles understood by the HASC 1.x UI."""
+
+    DAY = "day"
+    NIGHT = "night"
+
+
+@dataclass(frozen=True, slots=True)
+class ClimateComfortSettings:
+    """One validated temperature, humidity, and strategy bundle."""
+
+    target_temperature: float
+    target_humidity: int
+    strategy: ClimateStrategy
+
+    def __post_init__(self) -> None:
+        _temperature(self.target_temperature)
+        _humidity(self.target_humidity)
+        if not isinstance(self.strategy, ClimateStrategy):
+            raise ContourViolation("climate strategy must be approved")
+
+
 @dataclass(frozen=True, slots=True)
 class ClimateContourRoom:
     """One room assignment and its user-facing comfort parameters."""
 
     room_id: str
     device_ids: tuple[str, ...]
-    target_temperature: float = CLIMATE_TARGET_TEMPERATURE_DEFAULT
-    target_humidity: int = CLIMATE_TARGET_HUMIDITY_DEFAULT
-    strategy: ClimateStrategy = ClimateStrategy.NORMAL
+    day_profile: ClimateComfortSettings
+    night_profile: ClimateComfortSettings
+    active_profile: ClimateProfile = ClimateProfile.DAY
 
     def __post_init__(self) -> None:
         _stable_id(self.room_id, "contour room id")
@@ -80,10 +103,40 @@ class ClimateContourRoom:
         for device_id in self.device_ids:
             _stable_id(device_id, "contour device id")
         _unique(self.device_ids, "contour device ids")
-        _temperature(self.target_temperature)
-        _humidity(self.target_humidity)
-        if not isinstance(self.strategy, ClimateStrategy):
-            raise ContourViolation("climate strategy must be approved")
+        if not isinstance(self.day_profile, ClimateComfortSettings):
+            raise ContourViolation("day climate profile must be validated")
+        if not isinstance(self.night_profile, ClimateComfortSettings):
+            raise ContourViolation("night climate profile must be validated")
+        if not isinstance(self.active_profile, ClimateProfile):
+            raise ContourViolation("active climate profile must be approved")
+
+    @property
+    def active_settings(self) -> ClimateComfortSettings:
+        """Return the profile whose values are applied to the climate engine."""
+
+        return (
+            self.day_profile
+            if self.active_profile is ClimateProfile.DAY
+            else self.night_profile
+        )
+
+    @property
+    def target_temperature(self) -> float:
+        """Keep existing contour consumers on the active profile target."""
+
+        return self.active_settings.target_temperature
+
+    @property
+    def target_humidity(self) -> int:
+        """Keep existing contour consumers on the active profile target."""
+
+        return self.active_settings.target_humidity
+
+    @property
+    def strategy(self) -> ClimateStrategy:
+        """Keep existing contour consumers on the active profile strategy."""
+
+        return self.active_settings.strategy
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,9 +201,11 @@ def climate_contour_room(
     *,
     room_id: object,
     device_ids: object,
-    target_temperature: object,
-    target_humidity: object,
-    strategy: object,
+    target_temperature: object = None,
+    target_humidity: object = None,
+    strategy: object = None,
+    profiles: object = None,
+    active_profile: object = None,
 ) -> ClimateContourRoom:
     """Build one exact room policy from a form or persisted payload."""
 
@@ -160,13 +215,74 @@ def climate_contour_room(
         not isinstance(value, str) for value in device_ids
     ):
         raise ContourViolation("contour device ids must be a list of strings")
+    if profiles is None:
+        if active_profile is not None:
+            raise ContourViolation("active profile requires climate profiles")
+        settings = _comfort_settings(
+            target_temperature=target_temperature,
+            target_humidity=target_humidity,
+            strategy=strategy,
+        )
+        day_profile = settings
+        night_profile = settings
+        selected_profile = ClimateProfile.DAY
+    else:
+        if any(
+            value is not None
+            for value in (target_temperature, target_humidity, strategy)
+        ):
+            raise ContourViolation(
+                "shared room targets cannot be mixed with climate profiles"
+            )
+        if not isinstance(profiles, Mapping) or set(profiles) != {
+            ClimateProfile.DAY.value,
+            ClimateProfile.NIGHT.value,
+        }:
+            raise ContourViolation("climate profiles must contain day and night")
+        day_profile = _comfort_settings_from_payload(
+            profiles[ClimateProfile.DAY.value]
+        )
+        night_profile = _comfort_settings_from_payload(
+            profiles[ClimateProfile.NIGHT.value]
+        )
+        try:
+            selected_profile = ClimateProfile(active_profile)
+        except (TypeError, ValueError) as error:
+            raise ContourViolation("active climate profile must be approved") from error
+    return ClimateContourRoom(
+        room_id=room_id,
+        device_ids=tuple(device_ids),
+        day_profile=day_profile,
+        night_profile=night_profile,
+        active_profile=selected_profile,
+    )
+
+
+def _comfort_settings_from_payload(payload: object) -> ClimateComfortSettings:
+    if not isinstance(payload, Mapping) or set(payload) != {
+        "target_temperature",
+        "target_humidity",
+        "strategy",
+    }:
+        raise ContourViolation("climate profile fields are invalid")
+    return _comfort_settings(
+        target_temperature=payload.get("target_temperature"),
+        target_humidity=payload.get("target_humidity"),
+        strategy=payload.get("strategy"),
+    )
+
+
+def _comfort_settings(
+    *,
+    target_temperature: object,
+    target_humidity: object,
+    strategy: object,
+) -> ClimateComfortSettings:
     try:
         selected_strategy = ClimateStrategy(strategy)
     except (TypeError, ValueError) as error:
         raise ContourViolation("climate strategy must be approved") from error
-    return ClimateContourRoom(
-        room_id=room_id,
-        device_ids=tuple(device_ids),
+    return ClimateComfortSettings(
         target_temperature=_temperature(target_temperature),
         target_humidity=_humidity(target_humidity),
         strategy=selected_strategy,

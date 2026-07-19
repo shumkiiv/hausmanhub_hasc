@@ -16,8 +16,11 @@ from custom_components.hausman_hub.application.contours import (
     contour_registry_from_payload,
     contour_registry_to_payload,
     contour_snapshot,
+    migrate_contour_registry_payload,
     validate_contour_bindings,
+    with_active_climate_profile,
     with_climate_contour_mode,
+    with_climate_room_profiles,
 )
 from custom_components.hausman_hub.domain.climate import (
     ClimateControlOwner,
@@ -89,12 +92,138 @@ class ContoursTest(unittest.TestCase):
         result = contour_snapshot(contours, climate_registry, source_snapshot())
 
         contour = result["contours"][0]  # type: ignore[index]
+        self.assertEqual(3, result["contract"]["version"])  # type: ignore[index]
         self.assertEqual("hausman-climate", contour["engine"]["name"])
         self.assertTrue(contour["execution"]["automatic_active"])
         self.assertFalse(contour["execution"]["hasc_direct_commands"])
         serialized = json.dumps(result, ensure_ascii=False)
         self.assertNotIn("synthetic-ac-source-living", serialized)
         self.assertNotIn("entity_id", serialized)
+
+    def test_profiles_switch_active_targets_without_commands_or_bindings(self) -> None:
+        climate_registry, contours = setup()
+        configured = with_climate_room_profiles(
+            contours,
+            {
+                "living": {
+                    "profiles": {
+                        "day": {
+                            "target_temperature": 25.0,
+                            "target_humidity": 45,
+                            "strategy": "normal",
+                        },
+                        "night": {
+                            "target_temperature": 22.0,
+                            "target_humidity": 40,
+                            "strategy": "soft",
+                        },
+                    },
+                    "active_profile": "day",
+                }
+            },
+        )
+        selected = with_active_climate_profile(configured, "night")
+
+        room = selected.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertEqual("night", room.active_profile.value)
+        self.assertEqual(22.0, room.target_temperature)
+        self.assertEqual("soft", room.strategy.value)
+        self.assertEqual(
+            contours.contour("climate").rooms[0].device_ids,  # type: ignore[union-attr]
+            room.device_ids,
+        )
+        public = contour_snapshot(selected, climate_registry, source_snapshot())
+        public_room = public["contours"][0]["rooms"][0]  # type: ignore[index]
+        self.assertEqual("night", public_room["comfort_profiles"]["active"])
+        self.assertEqual(25.0, public_room["comfort_profiles"]["day"]["temperature"])
+        self.assertEqual(22.0, public_room["targets"]["temperature"])
+
+    def test_legacy_contour_migration_duplicates_values_into_safe_profiles(self) -> None:
+        legacy = {
+            "version": 1,
+            "contours": [
+                {
+                    "id": "climate",
+                    "name": "Климат",
+                    "kind": "climate",
+                    "mode": "automatic",
+                    "engine": "existing_climate_core",
+                    "rooms": [
+                        {
+                            "room_id": "living",
+                            "device_ids": ["living_air_conditioner"],
+                            "target_temperature": 25.0,
+                            "target_humidity": 45,
+                            "strategy": "normal",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        migrated = migrate_contour_registry_payload(1, legacy)
+        room = migrated["contours"][0]["rooms"][0]  # type: ignore[index]
+        self.assertEqual(2, migrated["version"])
+        self.assertEqual("day", room["active_profile"])
+        self.assertEqual(room["profiles"]["day"], room["profiles"]["night"])
+        self.assertEqual(
+            contour_registry_from_payload(migrated),
+            contour_registry_from_payload(
+                contour_registry_to_payload(contour_registry_from_payload(migrated))
+            ),
+        )
+
+        hidden = copy.deepcopy(legacy)
+        hidden["contours"][0]["rooms"][0]["hidden"] = True  # type: ignore[index]
+        with self.assertRaises(ContourRegistryViolation):
+            migrate_contour_registry_payload(1, hidden)
+
+    def test_contour_edit_updates_active_profile_and_keeps_inactive_profile(self) -> None:
+        _, contours = setup()
+        profiles = {
+            "living": {
+                "profiles": {
+                    "day": {
+                        "target_temperature": 25.0,
+                        "target_humidity": 45,
+                        "strategy": "normal",
+                    },
+                    "night": {
+                        "target_temperature": 22.0,
+                        "target_humidity": 40,
+                        "strategy": "soft",
+                    },
+                },
+                "active_profile": "night",
+            }
+        }
+
+        _, edited = build_climate_contour_setup(
+            source_snapshot(),
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            room_parameters={
+                "living": {
+                    "target_temperature": 21.5,
+                    "target_humidity": 35,
+                    "strategy": "aggressive",
+                }
+            },
+            room_profiles=profiles,
+        )
+
+        room = edited.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertEqual("night", room.active_profile.value)
+        self.assertEqual(21.5, room.night_profile.target_temperature)
+        self.assertEqual(25.0, room.day_profile.target_temperature)
+        self.assertEqual(45, room.day_profile.target_humidity)
+
+        invalid = copy.deepcopy(profiles)
+        invalid["living"]["profiles"]["day"]["hidden"] = True  # type: ignore[index]
+        with self.assertRaises(ContourRegistryViolation):
+            with_climate_room_profiles(contours, invalid)
 
     def test_unavailable_or_manual_engine_never_looks_automatic(self) -> None:
         climate_registry, contours = setup()

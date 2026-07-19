@@ -35,7 +35,7 @@ Last updated: 2026-07-19.
   observed strategy and apply capability; local tablet preview/apply routes
   expose no private binding or backend payload. See the
   [1.1.0 apply decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-1-0-confirmed-contour-apply.md).
-- Version 1.2.0 is the current HASC-only worktree and replaces the shared
+- Version 1.2.0 replaced the shared
   multi-room comfort fields with one short parameters step per selected room.
   Each room stores its own validated temperature, humidity, and strategy using
   the existing contour registry and Android contour v2 shapes, so no persisted
@@ -47,6 +47,20 @@ Last updated: 2026-07-19.
   separate confirmed 1.1 apply path is unchanged, including unsupported
   humidity. See the
   [1.2.0 room-parameters decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-2-0-room-parameters.md).
+- Version 1.3.0 is the current HASC-only worktree. Every contour room now has
+  exact `day` and `night` comfort bundles and an approved active profile.
+  Existing v1 contour storage is migrated once to storage v2 by copying the
+  former targets into both profiles with `day` active, so installation or
+  migration changes no effective target and sends no command. The ordinary
+  Russian options flow separately configures both profiles, selects one
+  profile for all rooms, and then reuses the existing explicit apply preview
+  and confirmation. Configuring or selecting a profile only atomically saves
+  HASC state; only the apply step may call the existing `hausman-climate`
+  executor. Ordinary contour editing updates the active bundle and preserves
+  the inactive bundle. Public contour contract v3 exposes active/day/night
+  comfort values without private bindings. Automatic time switching is not
+  part of 1.3.0 and is the next layer. See the
+  [1.3.0 profile decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-3-0-day-night-profiles.md).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after
   its 153 tests, disposable Core 2026.6.4/2026.7.0 checks, and final Kimi
   review passed. This source push did not create a tag, release, HACS
@@ -184,7 +198,7 @@ Last updated: 2026-07-19.
   `disabled`. No physical command or canary was attempted. The
   implementation decision is recorded in
   [the 0.5.4 preflight note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-4-canary-preflight.md).
-- Version 0.5.5 is the current HASC-only worktree. It exposes the canonical
+- Version 0.5.5 exposed the canonical
   saved-room preflight through one local-admin-only POST route and adds
   explicit checked/generated/valid-until freshness timestamps. Expired state
   blocks readiness independently of saved evidence. Two installed JSON
@@ -277,7 +291,7 @@ Last updated: 2026-07-19.
   Commit, publication, and HACS installation completed; the owner has not yet
   confirmed the post-install Home Assistant restart. See the
   [0.5.10 settings-menu note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-10-simple-settings-menu.md).
-- Version 0.6.0 is the current HASC-only worktree and starts moving climate
+- Version 0.6.0 started moving climate
   policy into HASC. A validated one-room policy stores temperature and humidity
   targets. A pure decision engine uses fresh transitional Climate API state,
   fixed ±0.5 °C/±5% deadbands, registered device kinds, and availability to
@@ -1274,16 +1288,15 @@ test-only changes do not need a new HACS version.
 
 ## Next decision gate
 
-HASC now has the two observation modes, nine aggregate sensors, guarded local
-count-only path, the opt-in virtual `input_boolean` canary, and the local 0.5.0
-climate facade. The climate domain and one-room rollout are explicitly chosen;
-the remaining gate is operational rather than architectural: complete staged
-verification and Kimi review, push the source, install it only when separately
-authorized, configure the real registry in `disabled`, pass shadow against the
-current Climate API, and request explicit permission for one live room canary.
-Android migration follows only after that backend canary is observed. Public
-HACS catalog listing, generic proxy, other physical domains, general device
-execution, and unsupervised live deployment remain out of scope.
+After the staged 1.3.0 verification and release, the next product layer is a
+simple schedule that switches the already saved `day` and `night` profiles.
+It must not create a second climate algorithm: schedule decisions select a
+profile in HASC, while the existing explicit apply boundary and
+`hausman-climate` executor remain authoritative. The Android screen can then
+consume contour contract v3 for profile display and selection. Temporary manual
+overrides, a readable decision journal, and further contour types follow on the
+same general contour model. Generic proxying, arbitrary device execution, and
+unsupervised live deployment remain out of scope.
 
 The current public manual-HACS decision and its narrow implementation boundary
 are recorded in the [HACS packaging decision

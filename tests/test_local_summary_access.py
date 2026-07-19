@@ -360,10 +360,18 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         def __class_getitem__(cls, _: object) -> type:
             return cls
 
-        def __init__(self, hass: object, version: int, key: str) -> None:
+        def __init__(
+            self,
+            hass: object,
+            version: int,
+            key: str,
+            *,
+            max_readable_version: int | None = None,
+        ) -> None:
             self.hass = hass
             self.version = version
             self.key = key
+            self.max_readable_version = max_readable_version
 
         async def async_load(self) -> None:
             return None

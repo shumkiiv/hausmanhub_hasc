@@ -14,7 +14,9 @@ from ..domain.climate import (
 )
 from ..domain.contours import (
     CONTOUR_REGISTRY_VERSION,
+    ClimateComfortSettings,
     ClimateContourRoom,
+    ClimateProfile,
     ContourDefinition,
     ContourEngine,
     ContourKind,
@@ -32,7 +34,8 @@ from .climate_registry_import import (
 
 CLIMATE_CONTOUR_ID = "climate"
 CONTOUR_CONTRACT_NAME = "hausman-hasc-contours"
-CONTOUR_CONTRACT_VERSION = 2
+CONTOUR_CONTRACT_VERSION = 3
+LEGACY_CONTOUR_REGISTRY_VERSION = 1
 _ACTIVE_KINDS = frozenset(
     {
         ClimateDeviceKind.AIR_CONDITIONER,
@@ -78,9 +81,8 @@ def contour_registry_from_payload(payload: object) -> ContourRegistry:
                     {
                         "room_id",
                         "device_ids",
-                        "target_temperature",
-                        "target_humidity",
-                        "strategy",
+                        "profiles",
+                        "active_profile",
                     },
                     f"contour {index} room {room_index}",
                 )
@@ -88,9 +90,8 @@ def contour_registry_from_payload(payload: object) -> ContourRegistry:
                     climate_contour_room(
                         room_id=room.get("room_id"),
                         device_ids=room.get("device_ids"),
-                        target_temperature=room.get("target_temperature"),
-                        target_humidity=room.get("target_humidity"),
-                        strategy=room.get("strategy"),
+                        profiles=room.get("profiles"),
+                        active_profile=room.get("active_profile"),
                     )
                 )
             contours.append(
@@ -126,9 +127,7 @@ def contour_registry_to_payload(registry: ContourRegistry) -> dict[str, object]:
                     {
                         "room_id": room.room_id,
                         "device_ids": list(room.device_ids),
-                        "target_temperature": room.target_temperature,
-                        "target_humidity": room.target_humidity,
-                        "strategy": room.strategy.value,
+                        **climate_room_profiles(room),
                     }
                     for room in contour.rooms
                 ],
@@ -136,6 +135,72 @@ def contour_registry_to_payload(registry: ContourRegistry) -> dict[str, object]:
             for contour in registry.contours
         ],
     }
+
+
+def migrate_contour_registry_payload(
+    storage_version: int,
+    payload: object,
+) -> dict[str, object]:
+    """Migrate the exact HASC 1.0-1.2 room shape to day/night profiles."""
+
+    if storage_version == CONTOUR_REGISTRY_VERSION:
+        return contour_registry_to_payload(contour_registry_from_payload(payload))
+    if storage_version != LEGACY_CONTOUR_REGISTRY_VERSION:
+        raise ContourRegistryViolation("unsupported stored contour version")
+    root = _mapping(payload, "legacy contour registry")
+    _exact_keys(root, {"version", "contours"}, "legacy contour registry")
+    if root.get("version") != LEGACY_CONTOUR_REGISTRY_VERSION:
+        raise ContourRegistryViolation("legacy contour version does not match storage")
+    contours: list[ContourDefinition] = []
+    try:
+        for index, raw in enumerate(_list(root.get("contours"), "legacy contours")):
+            item = _mapping(raw, f"legacy contour {index}")
+            _exact_keys(
+                item,
+                {"id", "name", "kind", "mode", "engine", "rooms"},
+                f"legacy contour {index}",
+            )
+            rooms: list[ClimateContourRoom] = []
+            for room_index, raw_room in enumerate(
+                _list(item.get("rooms"), f"legacy contour {index} rooms")
+            ):
+                room = _mapping(
+                    raw_room,
+                    f"legacy contour {index} room {room_index}",
+                )
+                _exact_keys(
+                    room,
+                    {
+                        "room_id",
+                        "device_ids",
+                        "target_temperature",
+                        "target_humidity",
+                        "strategy",
+                    },
+                    f"legacy contour {index} room {room_index}",
+                )
+                rooms.append(
+                    climate_contour_room(
+                        room_id=room.get("room_id"),
+                        device_ids=room.get("device_ids"),
+                        target_temperature=room.get("target_temperature"),
+                        target_humidity=room.get("target_humidity"),
+                        strategy=room.get("strategy"),
+                    )
+                )
+            contours.append(
+                ContourDefinition(
+                    contour_id=item.get("id"),  # type: ignore[arg-type]
+                    name=item.get("name"),  # type: ignore[arg-type]
+                    kind=ContourKind(item.get("kind")),
+                    mode=ContourMode(item.get("mode")),
+                    engine=ContourEngine(item.get("engine")),
+                    rooms=tuple(rooms),
+                )
+            )
+        return contour_registry_to_payload(ContourRegistry(contours=tuple(contours)))
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
 
 
 def validate_contour_bindings(
@@ -182,6 +247,7 @@ def build_climate_contour_setup(
     target_humidity: object = None,
     strategy: object = None,
     room_parameters: object = None,
+    room_profiles: object = None,
 ) -> tuple[ClimateRegistry, ContourRegistry]:
     """Create one climate contour from explicit existing-engine selections.
 
@@ -211,6 +277,11 @@ def build_climate_contour_setup(
             target_humidity=target_humidity,
             strategy=strategy,
         )
+        profiles_by_room = _climate_profiles_by_room(
+            registry,
+            parameters_by_room=parameters_by_room,
+            room_profiles=room_profiles,
+        )
         assignments = tuple(
             climate_contour_room(
                 room_id=room.room_id,
@@ -219,7 +290,8 @@ def build_climate_contour_setup(
                     for device in registry.devices
                     if device.room_id == room.room_id
                 ),
-                **parameters_by_room[room.room_id],
+                profiles=profiles_by_room[room.room_id]["profiles"],
+                active_profile=profiles_by_room[room.room_id]["active_profile"],
             )
             for room in registry.rooms
         )
@@ -300,6 +372,158 @@ def _climate_parameters_by_room(
     return {
         room_id: climate_room_parameters(raw[room_id])
         for room_id in room_ids
+    }
+
+
+def climate_room_profiles(room: ClimateContourRoom) -> dict[str, object]:
+    """Return one room's exact public day/night profile payload."""
+
+    if not isinstance(room, ClimateContourRoom):
+        raise ContourRegistryViolation("climate contour room must be validated")
+    return {
+        "profiles": {
+            ClimateProfile.DAY.value: _comfort_payload(room.day_profile),
+            ClimateProfile.NIGHT.value: _comfort_payload(room.night_profile),
+        },
+        "active_profile": room.active_profile.value,
+    }
+
+
+def with_climate_room_profiles(
+    registry: ContourRegistry,
+    room_profiles: object,
+) -> ContourRegistry:
+    """Replace all room profiles atomically without changing their devices."""
+
+    contour = registry.contour(CLIMATE_CONTOUR_ID)
+    if contour is None:
+        raise ContourRegistryViolation("climate contour is not configured")
+    raw = _mapping(room_profiles, "climate room profiles")
+    if set(raw) != {room.room_id for room in contour.rooms}:
+        raise ContourRegistryViolation(
+            "climate room profiles must exactly match contour rooms"
+        )
+    try:
+        rooms = tuple(
+            _room_with_profile_payload(room, raw[room.room_id])
+            for room in contour.rooms
+        )
+        updated = replace(contour, rooms=rooms)
+        return ContourRegistry(
+            contours=tuple(
+                updated if item.contour_id == CLIMATE_CONTOUR_ID else item
+                for item in registry.contours
+            )
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
+def with_active_climate_profile(
+    registry: ContourRegistry,
+    profile: object,
+) -> ContourRegistry:
+    """Select the same day or night profile for every climate room."""
+
+    contour = registry.contour(CLIMATE_CONTOUR_ID)
+    if contour is None:
+        raise ContourRegistryViolation("climate contour is not configured")
+    try:
+        selected = ClimateProfile(profile)
+        updated = replace(
+            contour,
+            rooms=tuple(
+                replace(room, active_profile=selected) for room in contour.rooms
+            ),
+        )
+        return ContourRegistry(
+            contours=tuple(
+                updated if item.contour_id == CLIMATE_CONTOUR_ID else item
+                for item in registry.contours
+            )
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
+def _climate_profiles_by_room(
+    registry: ClimateRegistry,
+    *,
+    parameters_by_room: Mapping[str, dict[str, object]],
+    room_profiles: object,
+) -> dict[str, dict[str, object]]:
+    room_ids = {room.room_id for room in registry.rooms}
+    if room_profiles is None:
+        saved: Mapping[str, Any] = {}
+    else:
+        saved = _mapping(room_profiles, "saved climate room profiles")
+        if not set(saved).issubset(room_ids):
+            raise ContourRegistryViolation(
+                "saved climate profiles reference an unselected room"
+            )
+    result: dict[str, dict[str, object]] = {}
+    for room_id in room_ids:
+        active = parameters_by_room[room_id]
+        prior = saved.get(room_id)
+        if prior is None:
+            result[room_id] = {
+                "profiles": {
+                    ClimateProfile.DAY.value: dict(active),
+                    ClimateProfile.NIGHT.value: dict(active),
+                },
+                "active_profile": ClimateProfile.DAY.value,
+            }
+            continue
+        normalized = climate_room_profiles(
+            _room_with_profile_payload(
+                climate_contour_room(
+                    room_id=room_id,
+                    device_ids=("device",),
+                    target_temperature=active["target_temperature"],
+                    target_humidity=active["target_humidity"],
+                    strategy=active["strategy"],
+                ),
+                prior,
+            )
+        )
+        selected = str(normalized["active_profile"])
+        raw_profiles = normalized["profiles"]
+        if not isinstance(raw_profiles, dict):
+            raise ContourRegistryViolation("normalized climate profiles are invalid")
+        profiles = dict(raw_profiles)
+        profiles[selected] = dict(active)
+        normalized["profiles"] = profiles
+        result[room_id] = normalized
+    return result
+
+
+def _room_with_profile_payload(
+    room: ClimateContourRoom,
+    payload: object,
+) -> ClimateContourRoom:
+    raw = _mapping(payload, "climate room profile bundle")
+    _exact_keys(raw, {"profiles", "active_profile"}, "climate room profile bundle")
+    return climate_contour_room(
+        room_id=room.room_id,
+        device_ids=room.device_ids,
+        profiles=raw.get("profiles"),
+        active_profile=raw.get("active_profile"),
+    )
+
+
+def _comfort_payload(settings: ClimateComfortSettings) -> dict[str, object]:
+    return {
+        "target_temperature": settings.target_temperature,
+        "target_humidity": settings.target_humidity,
+        "strategy": settings.strategy.value,
+    }
+
+
+def _public_comfort_payload(settings: ClimateComfortSettings) -> dict[str, object]:
+    return {
+        "temperature": settings.target_temperature,
+        "humidity": settings.target_humidity,
+        "strategy": settings.strategy.value,
     }
 
 
@@ -501,6 +725,15 @@ def _room_status(
             "temperature": assignment.target_temperature,
             "humidity": assignment.target_humidity,
             "strategy": assignment.strategy.value,
+        },
+        "comfort_profiles": {
+            "active": assignment.active_profile.value,
+            ClimateProfile.DAY.value: _public_comfort_payload(
+                assignment.day_profile
+            ),
+            ClimateProfile.NIGHT.value: _public_comfort_payload(
+                assignment.night_profile
+            ),
         },
         "device_count": len(assignment.device_ids),
         "engine_mode": None if imported_room is None else imported_room.mode,

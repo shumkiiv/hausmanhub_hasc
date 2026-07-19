@@ -10,6 +10,7 @@ from .application.contours import (
     ContourRegistryViolation,
     contour_registry_from_payload,
     contour_registry_to_payload,
+    migrate_contour_registry_payload,
 )
 from .domain.contours import CONTOUR_REGISTRY_VERSION, ContourRegistry
 
@@ -21,14 +22,28 @@ class ContourStorageError(RuntimeError):
     """Persisted contour data is damaged or unavailable."""
 
 
+class _MigratingContourStore(Store[dict[str, object]]):
+    """Let Home Assistant rewrite the exact legacy contour payload once."""
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,
+        old_data: object,
+    ) -> dict[str, object]:
+        del old_minor_version
+        return migrate_contour_registry_payload(old_major_version, old_data)
+
+
 class HomeAssistantContourStore:
     """Persist one complete contour registry per HASC config entry."""
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
-        self._store: Store[dict[str, object]] = Store(
+        self._store: Store[dict[str, object]] = _MigratingContourStore(
             hass,
             CONTOUR_REGISTRY_VERSION,
             f"hausman_hub.contours.{entry_id}",
+            max_readable_version=CONTOUR_REGISTRY_VERSION,
         )
 
     async def async_load(self) -> ContourRegistry:

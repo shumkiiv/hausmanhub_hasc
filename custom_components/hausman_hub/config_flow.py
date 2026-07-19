@@ -61,11 +61,14 @@ from .application.contours import (
     ContourRegistryViolation,
     build_climate_contour_setup,
     climate_room_parameters,
+    climate_room_profiles,
     contour_registry_from_payload,
     contour_registry_to_payload,
     contour_snapshot,
     validate_contour_bindings,
+    with_active_climate_profile,
     with_climate_contour_mode,
+    with_climate_room_profiles,
 )
 from .application.contour_apply import ContourApplyViolation
 from .const import DOMAIN, ENTRY_TITLE, ENTRY_UNIQUE_ID
@@ -97,6 +100,7 @@ from .domain.native_climate import (
 from .domain.contours import (
     CLIMATE_TARGET_HUMIDITY_DEFAULT,
     CLIMATE_TARGET_TEMPERATURE_DEFAULT,
+    ClimateProfile,
     ClimateStrategy,
     ContourMode,
 )
@@ -117,6 +121,9 @@ CONTOUR_CONFIRM_FIELD = "confirm_contour_save"
 CONTOUR_STATUS_CLOSE_FIELD = "close_contour_status"
 CONTOUR_APPLY_CONFIRM_FIELD = "confirm_contour_apply"
 CONTOUR_APPLY_RESULT_CLOSE_FIELD = "close_contour_apply_result"
+CONTOUR_PROFILE_FIELD = "contour_profile"
+CONTOUR_PROFILE_CONFIRM_FIELD = "confirm_profile_save"
+CONTOUR_PROFILE_SELECT_CONFIRM_FIELD = "confirm_profile_select"
 CLIMATE_REGISTRY_JSON_FIELD = "climate_registry_json"
 CLIMATE_REGISTRY_CONFIRM_FIELD = "confirm_registry_save"
 CLIMATE_REGISTRY_ACTION_FIELD = "climate_registry_action"
@@ -224,6 +231,11 @@ _RUSSIAN_CONTOUR_STRATEGY_LABELS = {
     "soft": "мягко и тихо",
     "normal": "обычно",
     "aggressive": "быстрее достичь цели",
+}
+_RUSSIAN_CLIMATE_PROFILE_LABELS = {
+    ClimateProfile.DAY.value: "День",
+    ClimateProfile.NIGHT.value: "Ночь",
+    "mixed": "разный по комнатам",
 }
 _RUSSIAN_CONTOUR_REASON_LABELS = {
     "room_state_unavailable": "нет состояния комнаты",
@@ -375,11 +387,19 @@ CONTOUR_ACTION_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
             "configure_climate",
+            "configure_profiles",
+            "select_profile",
             "apply_climate",
             "view_status",
             "disable_climate",
         ],
         translation_key="contour_action",
+    )
+)
+CONTOUR_PROFILE_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[value.value for value in ClimateProfile],
+        translation_key="contour_profile",
     )
 )
 CONTOUR_MODE_SELECTOR = SelectSelector(
@@ -588,6 +608,23 @@ def _contour_confirm_schema() -> vol.Schema:
         {
             vol.Required(CONTOUR_CONFIRM_FIELD, default=False): StrictBooleanSelector()
         }
+    )
+
+
+def _contour_profile_select_schema(default: str) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONTOUR_PROFILE_FIELD,
+                default=default,
+            ): CONTOUR_PROFILE_SELECTOR
+        }
+    )
+
+
+def _contour_profile_confirm_schema(field: str) -> vol.Schema:
+    return vol.Schema(
+        {vol.Required(field, default=False): StrictBooleanSelector()}
     )
 
 
@@ -1151,6 +1188,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _contour_saved_name: str | None = None
     _contour_saved_mode: str | None = None
     _contour_saved_room_parameters: dict[str, dict[str, object]] | None = None
+    _contour_saved_room_profiles: dict[str, dict[str, object]] | None = None
     _contour_saved_source_ids: tuple[str, ...] = ()
     _contour_name_draft: str | None = None
     _contour_mode_draft: str | None = None
@@ -1162,8 +1200,16 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _contour_definition_draft: Mapping[str, object] | None = None
     _contour_preview: Mapping[str, Any] | None = None
     _contour_apply_preview: Mapping[str, Any] | None = None
+    _contour_apply_active_profile: str | None = None
     _contour_apply_request_id: str | None = None
     _contour_apply_receipt: Mapping[str, Any] | None = None
+    _profile_contours_draft: Any | None = None
+    _profile_room_ids_draft: tuple[str, ...] = ()
+    _profile_room_names_draft: dict[str, str] | None = None
+    _profile_room_index: int = 0
+    _profile_phase: str = ClimateProfile.DAY.value
+    _profile_settings_draft: dict[str, dict[str, object]] | None = None
+    _profile_selection_draft: str | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Show one short choice instead of mixing unrelated settings."""
@@ -1223,14 +1269,35 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             action = user_input.get(CONTOUR_ACTION_FIELD)
             if action == "configure_climate":
                 return await self._async_begin_climate_contour(runtime)
+            if action == "configure_profiles":
+                return await self._async_begin_climate_profiles(runtime)
+            if action == "select_profile":
+                return await self._async_begin_profile_selection(runtime)
             if action == "apply_climate":
                 try:
                     preview = await runtime.async_contour_apply_preview()
+                    contour_registry = contour_registry_from_payload(
+                        await runtime.async_contour_registry_payload()
+                    )
                 except ContourApplyViolation:
                     errors["base"] = "contour_apply_not_ready"
                 except Exception:
                     errors["base"] = "contour_apply_unavailable"
                 else:
+                    climate_contour = contour_registry.contour("climate")
+                    active_profiles = (
+                        {
+                            room.active_profile.value
+                            for room in climate_contour.rooms
+                        }
+                        if climate_contour is not None
+                        else set()
+                    )
+                    self._contour_apply_active_profile = (
+                        next(iter(active_profiles))
+                        if len(active_profiles) == 1
+                        else "mixed" if active_profiles else None
+                    )
                     self._contour_apply_preview = preview
                     self._contour_apply_request_id = (
                         f"ha-options-{secrets.token_hex(16)}"
@@ -1353,6 +1420,306 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             errors=errors,
             description_placeholders=self._contour_apply_result_placeholders(),
         )
+
+    async def _async_begin_climate_profiles(self, runtime: Any) -> FlowResult:
+        """Load the saved contour before editing day and night values."""
+
+        try:
+            contours, contour, room_names = await self._async_profile_contour(
+                runtime
+            )
+        except Exception:
+            return self.async_show_form(
+                step_id="contours",
+                data_schema=_contour_action_schema(),
+                errors={"base": "contour_not_configured"},
+            )
+        self._profile_contours_draft = contours
+        self._profile_room_ids_draft = tuple(
+            room.room_id for room in contour.rooms
+        )
+        self._profile_room_names_draft = room_names
+        self._profile_room_index = 0
+        self._profile_phase = ClimateProfile.DAY.value
+        self._profile_settings_draft = {
+            room.room_id: climate_room_profiles(room) for room in contour.rooms
+        }
+        self._profile_selection_draft = None
+        return await self.async_step_climate_profiles_room()
+
+    async def async_step_climate_profiles_room(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Collect one short day or night form for one contour room."""
+
+        settings = self._profile_settings_draft
+        names = self._profile_room_names_draft or {}
+        if (
+            self._profile_contours_draft is None
+            or settings is None
+            or not self._profile_room_ids_draft
+            or not 0 <= self._profile_room_index < len(self._profile_room_ids_draft)
+            or self._profile_phase
+            not in {ClimateProfile.DAY.value, ClimateProfile.NIGHT.value}
+        ):
+            return await self.async_step_contours()
+        room_id = self._profile_room_ids_draft[self._profile_room_index]
+        room_bundle = settings.get(room_id)
+        if not isinstance(room_bundle, Mapping):
+            return await self.async_step_contours()
+        raw_profiles = (
+            room_bundle.get("profiles")
+        )
+        profiles = raw_profiles if isinstance(raw_profiles, Mapping) else {}
+        raw_current = profiles.get(self._profile_phase)
+        current = raw_current if isinstance(raw_current, Mapping) else {}
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                if set(user_input) != {
+                    CONTOUR_TARGET_TEMPERATURE_FIELD,
+                    CONTOUR_TARGET_HUMIDITY_FIELD,
+                    CONTOUR_STRATEGY_FIELD,
+                }:
+                    raise ContourRegistryViolation(
+                        "profile form has unsupported fields"
+                    )
+                normalized = climate_room_parameters(
+                    {
+                        "target_temperature": user_input.get(
+                            CONTOUR_TARGET_TEMPERATURE_FIELD
+                        ),
+                        "target_humidity": user_input.get(
+                            CONTOUR_TARGET_HUMIDITY_FIELD
+                        ),
+                        "strategy": user_input.get(CONTOUR_STRATEGY_FIELD),
+                    }
+                )
+            except ContourRegistryViolation:
+                errors["base"] = "invalid_contour_room_parameters"
+            else:
+                updated_profiles = dict(profiles)
+                updated_profiles[self._profile_phase] = normalized
+                settings[room_id] = {
+                    "profiles": updated_profiles,
+                    "active_profile": room_bundle.get("active_profile"),
+                }
+                if self._profile_phase == ClimateProfile.DAY.value:
+                    self._profile_phase = ClimateProfile.NIGHT.value
+                    return await self.async_step_climate_profiles_room()
+                if self._profile_room_index + 1 < len(
+                    self._profile_room_ids_draft
+                ):
+                    self._profile_room_index += 1
+                    self._profile_phase = ClimateProfile.DAY.value
+                    return await self.async_step_climate_profiles_room()
+                try:
+                    self._profile_contours_draft = with_climate_room_profiles(
+                        self._profile_contours_draft,
+                        settings,
+                    )
+                except ContourRegistryViolation:
+                    errors["base"] = "invalid_contour_profiles"
+                else:
+                    return await self.async_step_climate_profiles_confirm()
+        return self.async_show_form(
+            step_id="climate_profiles_room",
+            data_schema=_climate_contour_room_schema(
+                temperature_default=float(
+                    current.get(
+                        "target_temperature",
+                        CLIMATE_TARGET_TEMPERATURE_DEFAULT,
+                    )
+                ),
+                humidity_default=int(
+                    current.get(
+                        "target_humidity",
+                        CLIMATE_TARGET_HUMIDITY_DEFAULT,
+                    )
+                ),
+                strategy_default=str(
+                    current.get("strategy", ClimateStrategy.NORMAL.value)
+                ),
+            ),
+            errors=errors,
+            description_placeholders={
+                "room_name": names.get(room_id, room_id),
+                "room_number": str(self._profile_room_index + 1),
+                "room_count": str(len(self._profile_room_ids_draft)),
+                "profile_name": (
+                    "День"
+                    if self._profile_phase == ClimateProfile.DAY.value
+                    else "Ночь"
+                ),
+            },
+        )
+
+    async def async_step_climate_profiles_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Save profile values only after one explicit review."""
+
+        runtime = self._climate_runtime()
+        contours = self._profile_contours_draft
+        if runtime is None or contours is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (
+                set(user_input) != {CONTOUR_PROFILE_CONFIRM_FIELD}
+                or user_input.get(CONTOUR_PROFILE_CONFIRM_FIELD) is not True
+            ):
+                errors[CONTOUR_PROFILE_CONFIRM_FIELD] = (
+                    "contour_profile_confirmation_required"
+                )
+            else:
+                try:
+                    await runtime.async_replace_contours(
+                        contour_registry_to_payload(contours)
+                    )
+                except Exception:
+                    errors["base"] = "contour_save_failed"
+                else:
+                    return self.async_create_entry(
+                        title="",
+                        data=_merged_safe_options(
+                            self.config_entry.data,
+                            self.config_entry.options,
+                            {},
+                        ),
+                    )
+        return self.async_show_form(
+            step_id="climate_profiles_confirm",
+            data_schema=_contour_profile_confirm_schema(
+                CONTOUR_PROFILE_CONFIRM_FIELD
+            ),
+            errors=errors,
+            description_placeholders=self._profile_preview_placeholders(contours),
+        )
+
+    async def _async_begin_profile_selection(self, runtime: Any) -> FlowResult:
+        """Load saved profiles before selecting which set becomes active."""
+
+        try:
+            contours, contour, room_names = await self._async_profile_contour(
+                runtime
+            )
+        except Exception:
+            return self.async_show_form(
+                step_id="contours",
+                data_schema=_contour_action_schema(),
+                errors={"base": "contour_not_configured"},
+            )
+        self._profile_contours_draft = contours
+        self._profile_room_names_draft = room_names
+        active = {room.active_profile.value for room in contour.rooms}
+        self._profile_selection_draft = (
+            next(iter(active))
+            if len(active) == 1
+            else ClimateProfile.DAY.value
+        )
+        return await self.async_step_climate_profile_select()
+
+    async def async_step_climate_profile_select(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Select day or night without applying commands yet."""
+
+        contours = self._profile_contours_draft
+        if contours is None or self._profile_selection_draft is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                if set(user_input) != {CONTOUR_PROFILE_FIELD}:
+                    raise ContourRegistryViolation(
+                        "profile selection has unsupported fields"
+                    )
+                selected = ClimateProfile(user_input.get(CONTOUR_PROFILE_FIELD))
+                contours = with_active_climate_profile(contours, selected.value)
+            except (ContourRegistryViolation, TypeError, ValueError):
+                errors[CONTOUR_PROFILE_FIELD] = "invalid_contour_profile"
+            else:
+                self._profile_contours_draft = contours
+                self._profile_selection_draft = selected.value
+                return await self.async_step_climate_profile_select_confirm()
+        return self.async_show_form(
+            step_id="climate_profile_select",
+            data_schema=_contour_profile_select_schema(
+                self._profile_selection_draft
+            ),
+            errors=errors,
+        )
+
+    async def async_step_climate_profile_select_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Persist profile selection while keeping command application separate."""
+
+        runtime = self._climate_runtime()
+        contours = self._profile_contours_draft
+        if runtime is None or contours is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (
+                set(user_input) != {CONTOUR_PROFILE_SELECT_CONFIRM_FIELD}
+                or user_input.get(CONTOUR_PROFILE_SELECT_CONFIRM_FIELD) is not True
+            ):
+                errors[CONTOUR_PROFILE_SELECT_CONFIRM_FIELD] = (
+                    "contour_profile_selection_confirmation_required"
+                )
+            else:
+                try:
+                    await runtime.async_replace_contours(
+                        contour_registry_to_payload(contours)
+                    )
+                except Exception:
+                    errors["base"] = "contour_save_failed"
+                else:
+                    return self.async_create_entry(
+                        title="",
+                        data=_merged_safe_options(
+                            self.config_entry.data,
+                            self.config_entry.options,
+                            {},
+                        ),
+                    )
+        return self.async_show_form(
+            step_id="climate_profile_select_confirm",
+            data_schema=_contour_profile_confirm_schema(
+                CONTOUR_PROFILE_SELECT_CONFIRM_FIELD
+            ),
+            errors=errors,
+            description_placeholders=self._profile_preview_placeholders(contours),
+        )
+
+    async def _async_profile_contour(
+        self,
+        runtime: Any,
+    ) -> tuple[Any, Any, dict[str, str]]:
+        """Return one fully bound saved climate contour for profile forms."""
+
+        from .application.climate_registry import registry_from_payload
+
+        climate_registry = registry_from_payload(
+            await runtime.async_registry_payload()
+        )
+        contours = contour_registry_from_payload(
+            await runtime.async_contour_registry_payload()
+        )
+        validate_contour_bindings(contours, climate_registry)
+        contour = contours.contour("climate")
+        if contour is None:
+            raise ContourRegistryViolation("climate contour is not configured")
+        room_names = {
+            room.room_id: room.name for room in climate_registry.rooms
+        }
+        return contours, contour, room_names
 
     async def _async_begin_climate_contour(self, runtime: Any) -> FlowResult:
         """Reuse a configured engine or ask for its one-time local address."""
@@ -1638,6 +2005,16 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                         name=self._contour_name_draft,
                         mode=self._contour_mode_draft,
                         room_parameters=parameters,
+                        room_profiles=(
+                            {
+                                room_id: profile
+                                for room_id, profile in (
+                                    self._contour_saved_room_profiles or {}
+                                ).items()
+                                if room_id in parameters
+                            }
+                            or None
+                        ),
                     )
                     preview = contour_snapshot(contours, registry, snapshot)
                 except ContourRegistryViolation:
@@ -2656,6 +3033,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self._contour_saved_name = None
         self._contour_saved_mode = None
         self._contour_saved_room_parameters = None
+        self._contour_saved_room_profiles = None
         self._contour_saved_source_ids = ()
         self._contour_name_draft = None
         self._contour_mode_draft = None
@@ -2691,6 +3069,10 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 }
                 for room in contour.rooms
             }
+            profiles = {
+                room.room_id: climate_room_profiles(room)
+                for room in contour.rooms
+            }
             source_ids: list[str] = []
             for assignment in contour.rooms:
                 for device_id in assignment.device_ids:
@@ -2705,6 +3087,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self._contour_saved_name = contour.name
         self._contour_saved_mode = contour.mode.value
         self._contour_saved_room_parameters = parameters
+        self._contour_saved_room_profiles = profiles
         self._contour_saved_source_ids = tuple(source_ids)
 
     def _contour_room_defaults(
@@ -2768,9 +3151,15 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             )
         )
         room_settings: list[str] = []
+        active_profiles: set[str] = set()
         for room in rooms:
             if not isinstance(room, Mapping):
                 continue
+            raw_profiles = room.get("comfort_profiles")
+            profiles = raw_profiles if isinstance(raw_profiles, Mapping) else {}
+            active = profiles.get("active")
+            if active in {ClimateProfile.DAY.value, ClimateProfile.NIGHT.value}:
+                active_profiles.add(active)
             raw_targets = room.get("targets")
             targets = raw_targets if isinstance(raw_targets, Mapping) else {}
             room_settings.append(
@@ -2813,8 +3202,58 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 execution_values.get("automatic_active")
             ),
             "algorithm": "существующий климатический контур",
+            "active_profile": _RUSSIAN_CLIMATE_PROFILE_LABELS.get(
+                next(iter(active_profiles))
+                if len(active_profiles) == 1
+                else "mixed" if active_profiles else "",
+                "не выбран",
+            ),
             "reasons": reason_text or "нет",
             "room_settings": "; ".join(room_settings) or "нет",
+        }
+
+    def _profile_preview_placeholders(self, contours: Any) -> dict[str, str]:
+        """Render both comfort sets without private bindings or commands."""
+
+        contour = contours.contour("climate")
+        if contour is None:
+            return {"active_profile": "не выбран", "profile_settings": "нет"}
+        names = self._profile_room_names_draft or {}
+        active_profiles = {room.active_profile.value for room in contour.rooms}
+        active = (
+            next(iter(active_profiles))
+            if len(active_profiles) == 1
+            else "mixed"
+        )
+        lines: list[str] = []
+        for room in contour.rooms:
+            lines.append(
+                (
+                    "{name}: день {day_temperature:g} °C, {day_humidity} %, "
+                    "{day_strategy}; ночь {night_temperature:g} °C, "
+                    "{night_humidity} %, {night_strategy}"
+                ).format(
+                    name=names.get(room.room_id, room.room_id),
+                    day_temperature=room.day_profile.target_temperature,
+                    day_humidity=room.day_profile.target_humidity,
+                    day_strategy=_RUSSIAN_CONTOUR_STRATEGY_LABELS.get(
+                        room.day_profile.strategy.value,
+                        "неизвестно",
+                    ),
+                    night_temperature=room.night_profile.target_temperature,
+                    night_humidity=room.night_profile.target_humidity,
+                    night_strategy=_RUSSIAN_CONTOUR_STRATEGY_LABELS.get(
+                        room.night_profile.strategy.value,
+                        "неизвестно",
+                    ),
+                )
+            )
+        return {
+            "active_profile": _RUSSIAN_CLIMATE_PROFILE_LABELS.get(
+                active,
+                "не выбран",
+            ),
+            "profile_settings": "; ".join(lines) or "нет",
         }
 
     def _contour_apply_preview_placeholders(self) -> dict[str, str]:
@@ -2824,6 +3263,10 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         raw_changes = payload.get("changes")
         changes = raw_changes if isinstance(raw_changes, Mapping) else {}
         return {
+            "active_profile": _RUSSIAN_CLIMATE_PROFILE_LABELS.get(
+                self._contour_apply_active_profile or "",
+                "не выбран",
+            ),
             "room_count": str(payload.get("room_count", 0)),
             "command_count": str(payload.get("command_count", 0)),
             "temperature_count": str(changes.get("temperature", 0)),

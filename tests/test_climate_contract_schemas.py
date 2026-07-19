@@ -62,6 +62,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v4/home.json": "v4/climate-home.schema.json",
             "hasc_contours_v1/contours.json": "v1/contours.schema.json",
             "hasc_contours_v2/contours.json": "v2/contours.schema.json",
+            "hasc_contours_v3/contours.json": "v3/contours.schema.json",
             "hasc_contour_apply_v1/request.json": "v1/contour-apply-request.schema.json",
             "hasc_contour_apply_v1/preview.json": "v1/contour-apply-preview.schema.json",
             "hasc_contour_apply_v1/receipt.json": "v1/contour-apply-receipt.schema.json",
@@ -137,7 +138,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             contour_climate_registry,
             snapshot,
         )
-        validator("v2/contours.schema.json").validate(generated_contours)
+        validator("v3/contours.schema.json").validate(generated_contours)
         contour_json = json.dumps(generated_contours, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("synthetic-ac-source-living", contour_json)
         self.assertNotIn("entity_id", contour_json)

@@ -38,9 +38,9 @@
       },
       "contours": {
         "title": "HASC: automatic contours",
-        "description": "Climate is the first universal HASC contour. Select rooms and devices, choose comfort parameters, and HASC connects them to the existing proven climate algorithm.",
+        "description": "Climate is the first universal HASC contour. Select rooms and devices, configure Day and Night profiles, and separately apply values to the existing proven climate algorithm.",
         "data": {"contour_action": "Climate contour action"},
-        "data_description": {"contour_action": "Create the contour first. Apply then sends temperature, strategy, and automatic mode to the existing engine only after separate confirmation. Status is read-only."}
+        "data_description": {"contour_action": "Order: 1) create the contour, 2) configure Day and Night, 3) select the active profile, 4) apply it separately. Only the last confirmed action sends commands."}
       },
       "climate_contour_source": {
         "title": "Connect the existing climate algorithm",
@@ -79,18 +79,47 @@
       },
       "climate_contour_confirm": {
         "title": "Review the climate contour",
-        "description": "Contour: {name}. Mode: {mode}. Rooms: {room_count}; devices: {device_count}. Room settings: {room_settings}. Algorithm: {algorithm}. Current status: {status}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
+        "description": "Contour: {name}. Mode: {mode}. Active profile: {active_profile}. Rooms: {room_count}; devices: {device_count}. Active-profile settings: {room_settings}. Algorithm: {algorithm}. Current status: {status}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
         "data": {"confirm_contour_save": "Save selected rooms, devices, and parameters"},
         "data_description": {"confirm_contour_save": "HASC saves the configuration and enables continuous reads from the existing engine without sending climate commands."}
       },
+      "climate_profiles_room": {
+        "title": "{profile_name}: {room_name}",
+        "description": "Room {room_number} of {room_count}. Choose temperature, humidity, and strategy for the {profile_name} profile. This step sends no device commands.",
+        "data": {
+          "contour_target_temperature": "Comfort temperature, °C",
+          "contour_target_humidity": "Comfort humidity, %",
+          "contour_strategy": "Temperature strategy"
+        },
+        "data_description": {
+          "contour_target_temperature": "Temperature for this profile and room only.",
+          "contour_target_humidity": "Humidity is stored in the profile but is not yet sent to the existing engine.",
+          "contour_strategy": "Soft is quieter, normal is balanced, and aggressive reaches the target faster."
+        }
+      },
+      "climate_profiles_confirm": {
+        "title": "Review Day and Night profiles",
+        "description": "Current profile: {active_profile}. Room settings: {profile_settings}. Saving sends no climate commands.",
+        "data": {"confirm_profile_save": "Save Day and Night settings"}
+      },
+      "climate_profile_select": {
+        "title": "Profile to use now",
+        "description": "Choose Day or Night. HASC changes only the active target set. To send it to the existing climate engine, separately choose Apply active profile and enable automation after saving.",
+        "data": {"contour_profile": "Active profile"}
+      },
+      "climate_profile_select_confirm": {
+        "title": "Review selected profile",
+        "description": "Selected profile: {active_profile}. Room settings: {profile_settings}. This step sends no commands.",
+        "data": {"confirm_profile_select": "Save selected profile"}
+      },
       "contour_status": {
         "title": "Climate contour status",
-        "description": "Contour: {name}. Mode: {mode}. Status: {status}. Rooms: {room_count}; devices: {device_count}. Algorithm: {algorithm}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
+        "description": "Contour: {name}. Mode: {mode}. Active profile: {active_profile}. Status: {status}. Active-profile settings: {room_settings}. Rooms: {room_count}; devices: {device_count}. Algorithm: {algorithm}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
         "data": {"close_contour_status": "Close status"}
       },
       "climate_contour_apply_confirm": {
-        "title": "Apply climate contour settings",
-        "description": "Rooms: {room_count}. Commands: {command_count}. Temperature changes: {temperature_count}; strategy changes: {strategy_count}; automatic-mode changes: {automatic_count}. Commands are sent to the existing engine in that order. Its proven algorithm may then start or stop devices. Humidity is not changed by this action.",
+        "title": "Apply active profile",
+        "description": "Active profile: {active_profile}. Rooms: {room_count}. Commands: {command_count}. Temperature changes: {temperature_count}; strategy changes: {strategy_count}; automatic-mode changes: {automatic_count}. Commands are sent to the existing engine in that order. Its proven algorithm may then start or stop devices. Humidity is not changed by this action.",
         "data": {"confirm_contour_apply": "Apply these settings to the existing climate engine"},
         "data_description": {"confirm_contour_apply": "Confirm only when the selected devices may run automatically. Retrying the same request never submits commands twice."}
       },
@@ -295,7 +324,7 @@
     "error": {
       "unsafe_settings_section": "Choose Automatic contours, General information, or Advanced settings.",
       "unsafe_advanced_action": "Choose one available advanced tool.",
-      "invalid_contour_action": "Choose create, apply settings, status, or disable for the climate contour.",
+      "invalid_contour_action": "Choose contour setup, profile setup, apply, status, or disable.",
       "contour_status_unavailable": "The climate contour status is unavailable.",
       "contour_not_configured": "The climate contour has not been configured yet.",
       "contour_save_failed": "The contour could not be saved safely. The previous configuration remains in place.",
@@ -309,6 +338,10 @@
       "invalid_contour_name": "Enter a non-empty contour name of at most 120 characters without leading or trailing spaces.",
       "invalid_contour_mode": "Choose observe or automatic operation.",
       "invalid_contour_room_parameters": "Check this room's temperature, humidity, and strategy.",
+      "invalid_contour_profiles": "Check the Day and Night settings for every room.",
+      "invalid_contour_profile": "Choose the Day or Night profile.",
+      "contour_profile_confirmation_required": "Confirm saving the Day and Night settings.",
+      "contour_profile_selection_confirmation_required": "Confirm the active profile selection.",
       "invalid_contour_setup": "Check rooms, devices, temperature, humidity, and strategy. Every room needs a controllable device.",
       "contour_confirmation_required": "Confirm saving the climate contour.",
       "contour_status_close_required": "Enable this checkbox to close the status screen.",
@@ -389,10 +422,18 @@
     },
     "contour_action": {
       "options": {
-        "configure_climate": "Create or edit climate contour",
-        "apply_climate": "Apply settings and enable automatic operation",
+        "configure_climate": "Configure contour rooms and devices",
+        "configure_profiles": "Configure Day and Night profiles",
+        "select_profile": "Make Day or Night active",
+        "apply_climate": "Apply active profile and enable automation",
         "view_status": "View climate contour status",
         "disable_climate": "Disable only the HASC climate contour"
+      }
+    },
+    "contour_profile": {
+      "options": {
+        "day": "Day",
+        "night": "Night"
       }
     },
     "contour_mode": {

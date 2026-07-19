@@ -1090,6 +1090,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("climate_contour_confirm", preview["step_id"])
         self.assertEqual("да", preview["description_placeholders"]["automatic"])
+        self.assertEqual("День", preview["description_placeholders"]["active_profile"])
         self.assertIn(
             "Living room: 25 °C, 45 %, обычно",
             preview["description_placeholders"]["room_settings"],
@@ -1136,11 +1137,86 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("45", room_defaults["contour_target_humidity"])
         self.assertEqual("normal", room_defaults["contour_strategy"])
 
+        profile_flow = self.config_flow.HausmanHubOptionsFlow()
+        profile_flow.config_entry = FakeConfigEntry(
+            options_flow.config_entry.data,
+            dict(saved["data"]),
+        )
+        profile_flow.hass = options_flow.hass
+        day_profile = await profile_flow.async_step_contours(
+            {"contour_action": "configure_profiles"}
+        )
+        self.assertEqual("climate_profiles_room", day_profile["step_id"])
+        self.assertEqual("День", day_profile["description_placeholders"]["profile_name"])
+        night_profile = await profile_flow.async_step_climate_profiles_room(
+            {
+                "contour_target_temperature": "24.5",
+                "contour_target_humidity": "45",
+                "contour_strategy": "normal",
+            }
+        )
+        self.assertEqual("climate_profiles_room", night_profile["step_id"])
+        self.assertEqual(
+            "Ночь",
+            night_profile["description_placeholders"]["profile_name"],
+        )
+        profiles_review = await profile_flow.async_step_climate_profiles_room(
+            {
+                "contour_target_temperature": "22.0",
+                "contour_target_humidity": "40",
+                "contour_strategy": "soft",
+            }
+        )
+        self.assertEqual("climate_profiles_confirm", profiles_review["step_id"])
+        self.assertIn(
+            "день 24.5 °C, 45 %, обычно; ночь 22 °C, 40 %, мягко и тихо",
+            profiles_review["description_placeholders"]["profile_settings"],
+        )
+        profiles_saved = await profile_flow.async_step_climate_profiles_confirm(
+            {"confirm_profile_save": True}
+        )
+        self.assertEqual("create_entry", profiles_saved["type"])
+        self.assertEqual([], bridge.executed)
+
+        select_flow = self.config_flow.HausmanHubOptionsFlow()
+        select_flow.config_entry = FakeConfigEntry(
+            options_flow.config_entry.data,
+            dict(saved["data"]),
+        )
+        select_flow.hass = options_flow.hass
+        select_profile = await select_flow.async_step_contours(
+            {"contour_action": "select_profile"}
+        )
+        self.assertEqual("climate_profile_select", select_profile["step_id"])
+        select_review = await select_flow.async_step_climate_profile_select(
+            {"contour_profile": "night"}
+        )
+        self.assertEqual(
+            "climate_profile_select_confirm",
+            select_review["step_id"],
+        )
+        self.assertEqual(
+            "Ночь",
+            select_review["description_placeholders"]["active_profile"],
+        )
+        selected = await select_flow.async_step_climate_profile_select_confirm(
+            {"confirm_profile_select": True}
+        )
+        self.assertEqual("create_entry", selected["type"])
+        room_policy = contour_store.registry.contours[0].rooms[0]
+        self.assertEqual("night", room_policy.active_profile.value)
+        self.assertEqual(22.0, room_policy.target_temperature)
+        self.assertEqual([], bridge.executed)
+
         apply_form = await options_flow.async_step_contours(
             {"contour_action": "apply_climate"}
         )
         self.assertEqual("climate_contour_apply_confirm", apply_form["step_id"])
-        self.assertEqual("3", apply_form["description_placeholders"]["command_count"])
+        self.assertEqual(
+            "Ночь",
+            apply_form["description_placeholders"]["active_profile"],
+        )
+        self.assertEqual("2", apply_form["description_placeholders"]["command_count"])
         refused = await options_flow.async_step_climate_contour_apply_confirm(
             {"confirm_contour_apply": False}
         )
@@ -1156,7 +1232,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             "настройки подтверждены двигателем",
             result["description_placeholders"]["status"],
         )
-        self.assertEqual(3, len(bridge.executed))
+        self.assertEqual(2, len(bridge.executed))
         closed = await options_flow.async_step_climate_contour_apply_result(
             {"close_contour_apply_result": True}
         )
@@ -1170,7 +1246,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("disabled", disabled["data"]["climate_bridge_mode"])
         self.assertNotIn("climate_bridge_target", disabled["data"])
         self.assertEqual("disabled", contour_store.registry.contours[0].mode.value)
-        self.assertEqual(3, len(bridge.executed))
+        self.assertEqual(2, len(bridge.executed))
 
     async def test_contour_wizard_collects_each_room_parameters_separately(
         self,
@@ -1228,6 +1304,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
 
         placeholders = options_flow._contour_preview_placeholders()
+        self.assertEqual("День", placeholders["active_profile"])
         self.assertIn(
             "Living room: 25 °C, 45 %, обычно",
             placeholders["room_settings"],
@@ -1239,9 +1316,18 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         draft = options_flow._contour_definition_draft
         rooms = draft["contours"][0]["rooms"]  # type: ignore[index]
         by_room = {room["room_id"]: room for room in rooms}
-        self.assertEqual(25.0, by_room["living"]["target_temperature"])
-        self.assertEqual(23.5, by_room["kids"]["target_temperature"])
-        self.assertEqual("soft", by_room["kids"]["strategy"])
+        self.assertEqual(
+            25.0,
+            by_room["living"]["profiles"]["day"]["target_temperature"],
+        )
+        self.assertEqual(
+            23.5,
+            by_room["kids"]["profiles"]["day"]["target_temperature"],
+        )
+        self.assertEqual(
+            "soft",
+            by_room["kids"]["profiles"]["day"]["strategy"],
+        )
 
     async def test_options_reject_unsafe_canary_values(self) -> None:
         """No missing target, other entity domain, or truth-like arm value passes."""
