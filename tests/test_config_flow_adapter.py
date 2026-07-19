@@ -9,6 +9,7 @@ home. A real Core 2026.6 runtime check remains a separate Python 3.14 task.
 from __future__ import annotations
 
 import importlib
+from datetime import datetime
 from pathlib import Path
 import sys
 from types import ModuleType, SimpleNamespace
@@ -26,6 +27,8 @@ FAKE_MODULE_NAMES = (
     "homeassistant.data_entry_flow",
     "homeassistant.helpers",
     "homeassistant.helpers.selector",
+    "homeassistant.util",
+    "homeassistant.util.dt",
 )
 
 
@@ -224,10 +227,16 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     selector.TextSelectorType = FakeTextSelectorType  # type: ignore[attr-defined]
     selector.TimeSelector = FakeTimeSelector  # type: ignore[attr-defined]
 
+    util = ModuleType("homeassistant.util")
+    dt = ModuleType("homeassistant.util.dt")
+    dt.now = lambda: datetime(2026, 7, 19, 12, 0)  # type: ignore[attr-defined]
+
     homeassistant.config_entries = config_entries  # type: ignore[attr-defined]
     homeassistant.core = core  # type: ignore[attr-defined]
     homeassistant.helpers = helpers  # type: ignore[attr-defined]
+    homeassistant.util = util  # type: ignore[attr-defined]
     helpers.selector = selector  # type: ignore[attr-defined]
+    util.dt = dt  # type: ignore[attr-defined]
 
     return {
         "voluptuous": voluptuous,
@@ -237,6 +246,8 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.data_entry_flow": data_entry_flow,
         "homeassistant.helpers": helpers,
         "homeassistant.helpers.selector": selector,
+        "homeassistant.util": util,
+        "homeassistant.util.dt": dt,
     }
 
 
@@ -1297,6 +1308,61 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("07:00", contour_store.registry.contours[0].schedule.day_start)
         self.assertEqual([], bridge.executed[2:])
 
+        await runtime.async_run_climate_schedule(datetime(2026, 7, 19, 12, 0))
+        temporary_flow = self.config_flow.HausmanHubOptionsFlow()
+        temporary_flow.config_entry = schedule_flow.config_entry
+        temporary_flow.hass = options_flow.hass
+        room_choice = await temporary_flow.async_step_contours(
+            {"contour_action": "temporary_temperature"}
+        )
+        self.assertEqual("temporary_temperature_room", room_choice["step_id"])
+        temperature_form = await temporary_flow.async_step_temporary_temperature_room(
+            {"temporary_temperature_room": "living"}
+        )
+        self.assertEqual("temporary_temperature", temperature_form["step_id"])
+        self.assertEqual(
+            "Living room",
+            temperature_form["description_placeholders"]["room_name"],
+        )
+        temporary_result = await temporary_flow.async_step_temporary_temperature(
+            {
+                "temporary_temperature": 23.5,
+                "confirm_temporary_temperature": True,
+            }
+        )
+        self.assertEqual("temporary_temperature_result", temporary_result["step_id"])
+        self.assertEqual(
+            "23.5",
+            temporary_result["description_placeholders"]["current_temperature"],
+        )
+        room_policy = contour_store.registry.contours[0].rooms[0]
+        self.assertEqual(23.5, room_policy.target_temperature)
+        self.assertEqual(24.5, room_policy.profile_settings.target_temperature)
+        await temporary_flow.async_step_temporary_temperature_result(
+            {"close_temporary_temperature_result": True}
+        )
+
+        return_flow = self.config_flow.HausmanHubOptionsFlow()
+        return_flow.config_entry = schedule_flow.config_entry
+        return_flow.hass = options_flow.hass
+        return_room = await return_flow.async_step_contours(
+            {"contour_action": "return_to_schedule"}
+        )
+        self.assertEqual("temporary_temperature_room", return_room["step_id"])
+        return_form = await return_flow.async_step_temporary_temperature_room(
+            {"temporary_temperature_room": "living"}
+        )
+        self.assertEqual("temporary_temperature_clear", return_form["step_id"])
+        return_result = await return_flow.async_step_temporary_temperature_clear(
+            {"confirm_temporary_temperature_clear": True}
+        )
+        self.assertEqual("temporary_temperature_result", return_result["step_id"])
+        self.assertEqual(
+            "24.5",
+            return_result["description_placeholders"]["current_temperature"],
+        )
+        self.assertIsNone(contour_store.registry.contours[0].rooms[0].temporary_override)
+
         blocked_manual_flow = self.config_flow.HausmanHubOptionsFlow()
         blocked_manual_flow.config_entry = schedule_flow.config_entry
         blocked_manual_flow.hass = options_flow.hass
@@ -1313,7 +1379,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("disabled", disabled["data"]["climate_bridge_mode"])
         self.assertNotIn("climate_bridge_target", disabled["data"])
         self.assertEqual("disabled", contour_store.registry.contours[0].mode.value)
-        self.assertEqual(2, len(bridge.executed))
+        self.assertEqual(6, len(bridge.executed))
 
     async def test_contour_wizard_collects_each_room_parameters_separately(
         self,

@@ -19,7 +19,7 @@ from typing import Any
 
 from ..domain.climate import ClimateRegistry
 from ..domain.climate_bridge import ClimateBridgeMode
-from ..domain.contours import ContourDefinition, ContourMode
+from ..domain.contours import ClimateContourRoom, ContourDefinition, ContourMode
 from .climate_commands import (
     ClimateCommandPlan,
     ClimateCommandViolation,
@@ -284,6 +284,8 @@ def build_contour_apply_plan(
     contour: ContourDefinition,
     registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot,
+    *,
+    room_ids: tuple[str, ...] | None = None,
 ) -> ContourApplyPlan:
     """Build supported changes from saved public settings and fresh state."""
 
@@ -296,12 +298,13 @@ def build_contour_apply_plan(
     if not isinstance(snapshot, ClimateImportSnapshot) or not snapshot.runtime_fresh:
         raise ContourApplyViolation("climate engine state is stale")
 
+    assignments = _selected_assignments(contour, room_ids)
     commands: list[ClimateCommandPlan] = []
     rooms: list[ContourApplyRoomExpectation] = []
     temperature_changes = 0
     strategy_changes = 0
     automatic_mode_changes = 0
-    for assignment in contour.rooms:
+    for assignment in assignments:
         imported_room = snapshot.room(assignment.room_id)
         if imported_room is None:
             raise ContourApplyViolation("contour room state is unavailable")
@@ -376,7 +379,7 @@ def build_contour_apply_plan(
         raise ContourApplyViolation("contour apply has too many commands")
     return ContourApplyPlan(
         contour_id=contour.contour_id,
-        fingerprint=_contour_fingerprint(contour),
+        fingerprint=_contour_fingerprint(contour, room_ids=room_ids),
         rooms=tuple(rooms),
         commands=tuple(commands),
         temperature_changes=temperature_changes,
@@ -404,12 +407,16 @@ def confirmed_contour_room_count(
     return count
 
 
-def contour_fingerprint(contour: ContourDefinition) -> str:
+def contour_fingerprint(
+    contour: ContourDefinition,
+    *,
+    room_ids: tuple[str, ...] | None = None,
+) -> str:
     """Expose the deterministic desired-state fingerprint only internally."""
 
     if not isinstance(contour, ContourDefinition):
         raise ContourApplyViolation("contour definition is unavailable")
-    return _contour_fingerprint(contour)
+    return _contour_fingerprint(contour, room_ids=room_ids)
 
 
 def _configuration_command(
@@ -431,11 +438,39 @@ def _configuration_command(
     return replace(plan, execute=True)
 
 
-def _contour_fingerprint(contour: ContourDefinition) -> str:
+def _selected_assignments(
+    contour: ContourDefinition,
+    room_ids: tuple[str, ...] | None,
+) -> tuple[ClimateContourRoom, ...]:
+    if room_ids is None:
+        return contour.rooms
+    if (
+        not isinstance(room_ids, tuple)
+        or not room_ids
+        or any(not isinstance(room_id, str) for room_id in room_ids)
+        or len(room_ids) != len(set(room_ids))
+    ):
+        raise ContourApplyViolation("contour apply room scope is invalid")
+    requested = set(room_ids)
+    assignments = tuple(
+        room for room in contour.rooms if room.room_id in requested
+    )
+    if {room.room_id for room in assignments} != requested:
+        raise ContourApplyViolation("contour apply room is not configured")
+    return assignments
+
+
+def _contour_fingerprint(
+    contour: ContourDefinition,
+    *,
+    room_ids: tuple[str, ...] | None = None,
+) -> str:
+    assignments = _selected_assignments(contour, room_ids)
     canonical = json.dumps(
         {
             "id": contour.contour_id,
             "mode": contour.mode.value,
+            "scope": [room.room_id for room in assignments],
             "rooms": [
                 {
                     "id": room.room_id,
@@ -444,7 +479,7 @@ def _contour_fingerprint(contour: ContourDefinition) -> str:
                     "humidity": room.target_humidity,
                     "strategy": room.strategy.value,
                 }
-                for room in contour.rooms
+                for room in assignments
             ],
         },
         ensure_ascii=True,

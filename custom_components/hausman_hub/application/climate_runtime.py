@@ -36,12 +36,15 @@ from .climate_registry import (
 )
 from .contours import (
     CLIMATE_CONTOUR_ID,
+    ContourRegistryViolation,
     contour_registry_from_payload,
     contour_registry_to_payload,
     contour_snapshot,
     validate_contour_bindings,
     with_active_climate_profile,
     with_applied_climate_schedule_profile,
+    with_climate_temporary_temperature,
+    without_climate_temporary_temperature,
 )
 from .contour_apply import (
     ContourApplyReceipt,
@@ -52,6 +55,11 @@ from .contour_apply import (
     confirmed_contour_room_count,
     contour_fingerprint,
     parse_contour_apply_request,
+)
+from .contour_override import (
+    TemporaryTemperatureAction,
+    TemporaryTemperatureViolation,
+    parse_temporary_temperature_request,
 )
 
 
@@ -315,7 +323,14 @@ class ClimateRuntime:
                 return None
             if self._contour_store is None:
                 raise ClimateRuntimeUnavailable("contour storage is unavailable")
-            updated = with_active_climate_profile(self._contours, selected.value)
+            updated = with_active_climate_profile(
+                self._contours,
+                selected.value,
+                clear_temporary=(
+                    contour.schedule.last_applied_profile is not None
+                    and contour.schedule.last_applied_profile is not selected
+                ),
+            )
             updated = with_applied_climate_schedule_profile(updated, selected)
             await self._contour_store.async_save(updated)
             self._contours = updated
@@ -328,10 +343,93 @@ class ClimateRuntime:
                 CLIMATE_CONTOUR_ID,
             )
 
+    async def async_temporary_temperature(
+        self,
+        payload: object,
+        now: datetime,
+    ) -> ContourApplyReceipt:
+        """Apply one room temperature until the next saved schedule boundary."""
+
+        request = parse_temporary_temperature_request(payload)
+        if not isinstance(now, datetime):
+            raise TemporaryTemperatureViolation(
+                "temporary temperature needs local datetime"
+            )
+        async with self._lock:
+            self._require_contour_apply_client()
+            contour = self._climate_contour()
+            selected = contour.schedule.profile_at(hour=now.hour, minute=now.minute)
+            if (
+                contour.mode is not ContourMode.AUTOMATIC
+                or not contour.schedule.enabled
+                or contour.schedule.last_applied_profile is not selected
+                or any(room.active_profile is not selected for room in contour.rooms)
+            ):
+                raise ContourApplyViolation(
+                    "climate schedule is not ready for a temporary temperature"
+                )
+            if self._contour_store is None:
+                raise ClimateRuntimeUnavailable("contour storage is unavailable")
+            try:
+                if request.action is TemporaryTemperatureAction.SET:
+                    updated = with_climate_temporary_temperature(
+                        self._contours,
+                        room_id=request.room_id,
+                        target_temperature=request.target_temperature,
+                    )
+                else:
+                    updated = without_climate_temporary_temperature(
+                        self._contours,
+                        room_id=request.room_id,
+                    )
+            except ContourRegistryViolation as error:
+                raise ContourApplyViolation(str(error)) from error
+            updated_contour = updated.contour(CLIMATE_CONTOUR_ID)
+            if updated_contour is None:
+                raise TemporaryTemperatureViolation(
+                    "climate contour is not configured"
+                )
+            room_scope = (request.room_id,)
+            fingerprint = contour_fingerprint(
+                updated_contour,
+                room_ids=room_scope,
+            )
+            if (
+                self._contour_applications.existing(
+                    request.request_id,
+                    fingerprint,
+                )
+                is not None
+            ):
+                return await self._async_apply_contour_unlocked(
+                    request.request_id,
+                    CLIMATE_CONTOUR_ID,
+                    room_ids=room_scope,
+                )
+            snapshot = await self._async_refresh_unlocked(persist_evidence=False)
+            build_contour_apply_plan(
+                updated_contour,
+                self._registry,
+                snapshot,
+                room_ids=room_scope,
+            )
+            # Reserve the desired temporary state in durable storage before the
+            # first POST. A lost response therefore cannot trigger an automatic
+            # retry; only another explicit user request may try again.
+            await self._contour_store.async_save(updated)
+            self._contours = updated
+            return await self._async_apply_contour_unlocked(
+                request.request_id,
+                CLIMATE_CONTOUR_ID,
+                room_ids=room_scope,
+            )
+
     async def _async_apply_contour_unlocked(
         self,
         request_id: str,
         contour_id: str,
+        *,
+        room_ids: tuple[str, ...] | None = None,
     ) -> ContourApplyReceipt:
         """Apply one already validated request while the runtime lock is held."""
 
@@ -339,7 +437,7 @@ class ClimateRuntime:
         contour = self._climate_contour()
         if contour.contour_id != contour_id:
             raise ContourApplyViolation("climate contour is not configured")
-        fingerprint = contour_fingerprint(contour)
+        fingerprint = contour_fingerprint(contour, room_ids=room_ids)
         prior = self._contour_applications.existing(request_id, fingerprint)
         if prior is not None:
             if prior.receipt.status is ContourApplyStatus.PENDING:
@@ -368,7 +466,12 @@ class ClimateRuntime:
             return prior.receipt
 
         snapshot = await self._async_refresh_unlocked(persist_evidence=False)
-        plan = build_contour_apply_plan(contour, self._registry, snapshot)
+        plan = build_contour_apply_plan(
+            contour,
+            self._registry,
+            snapshot,
+            room_ids=room_ids,
+        )
         record = self._contour_applications.begin(request_id, plan)
         if not plan.commands:
             return record.receipt

@@ -562,6 +562,42 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 )
             ).status,
         )
+        temporary_path = "/api/hausman_hub/v1/contours/temporary-temperature"
+        temporary_view = views[temporary_path]
+        temporary_payload = {
+            "request_id": "disabled-temporary-1",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "set",
+            "target_temperature": 23.5,
+            "confirm": True,
+        }
+        self.assertEqual(
+            503,
+            asyncio.run(
+                temporary_view.post(
+                    FakeJsonRequest(
+                        "127.0.0.1",
+                        tablet,
+                        temporary_path,
+                        temporary_payload,
+                    )
+                )
+            ).status,
+        )
+        self.assertEqual(
+            403,
+            asyncio.run(
+                temporary_view.post(
+                    FakeJsonRequest(
+                        "127.0.0.1",
+                        admin,
+                        temporary_path,
+                        temporary_payload,
+                    )
+                )
+            ).status,
+        )
 
         apply_preview_path = "/api/hausman_hub/v1/contours/apply-preview"
         apply_preview = views[apply_preview_path]
@@ -916,9 +952,12 @@ class LocalSummaryAccessTest(unittest.TestCase):
         from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
         from custom_components.hausman_hub.application.contours import (
             build_climate_contour_setup,
+            with_applied_climate_schedule_profile,
+            with_climate_schedule,
         )
         from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
         from custom_components.hausman_hub.domain.configuration import SafeConfiguration
+        from custom_components.hausman_hub.domain.contours import ClimateProfile
         from tests.test_climate_import import source_payload
 
         source = source_payload()
@@ -932,6 +971,16 @@ class LocalSummaryAccessTest(unittest.TestCase):
             target_temperature=25.0,
             target_humidity=45,
             strategy="normal",
+        )
+        contours = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        contours = with_applied_climate_schedule_profile(
+            contours,
+            ClimateProfile.DAY,
         )
         source["rooms"][0]["mode"] = "manual"
         source["rooms"][0]["targets"]["temperature"] = 26
@@ -983,7 +1032,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             registry_store=Store(),
             contour_store=ContourStore(),
             bridge_client=bridge,
-            operation_id_factory=lambda: "4" * 32,
+            operation_id_factory=iter(("4" * 32, "5" * 32)).__next__,
             now_ms=lambda: 1784280005000,
         )
         asyncio.run(runtime.async_start())
@@ -1023,6 +1072,65 @@ class LocalSummaryAccessTest(unittest.TestCase):
         serialized = json.dumps(first.payload, sort_keys=True)
         self.assertNotIn("synthetic-ac-source-living", serialized)
         self.assertNotIn("backend_payload", serialized)
+
+        temporary_path = "/api/hausman_hub/v1/contours/temporary-temperature"
+        invalid_temporary = asyncio.run(
+            views[temporary_path].post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    tablet,
+                    temporary_path,
+                    {
+                        "request_id": "tablet-invalid-temperature-1",
+                        "contour_id": "climate",
+                        "room_id": "living",
+                        "action": "set",
+                        "target_temperature": 23.2,
+                        "confirm": True,
+                    },
+                )
+            )
+        )
+        unknown_room = asyncio.run(
+            views[temporary_path].post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    tablet,
+                    temporary_path,
+                    {
+                        "request_id": "tablet-unknown-room-1",
+                        "contour_id": "climate",
+                        "room_id": "unknown",
+                        "action": "set",
+                        "target_temperature": 23.5,
+                        "confirm": True,
+                    },
+                )
+            )
+        )
+        self.assertEqual(400, invalid_temporary.status)
+        self.assertEqual(409, unknown_room.status)
+        temporary_response = asyncio.run(
+            views[temporary_path].post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    tablet,
+                    temporary_path,
+                    {
+                        "request_id": "tablet-temporary-temperature-1",
+                        "contour_id": "climate",
+                        "room_id": "living",
+                        "action": "set",
+                        "target_temperature": 23.5,
+                        "confirm": True,
+                    },
+                )
+            )
+        )
+        self.assertEqual(200, temporary_response.status)
+        self.assertEqual("confirmed", temporary_response.payload["status"])
+        self.assertEqual(1, temporary_response.payload["room_count"])
+        self.assertEqual(4, len(bridge.executed))
 
     def test_view_rejects_admin_mixed_group_system_and_public_requests(self) -> None:
         rejected_requests = (
@@ -1177,7 +1285,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(13, len(self.hass.http.views))
+        self.assertEqual(14, len(self.hass.http.views))
         self.assertEqual(
             1,
             sum(
@@ -1466,13 +1574,14 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual(12, len(closed_hass.http.views))
+        self.assertEqual(13, len(closed_hass.http.views))
         self.assertEqual(
             {
                 "/api/hausman_hub/v1/home",
                 "/api/hausman_hub/v1/contours",
                 "/api/hausman_hub/v1/contours/apply-preview",
                 "/api/hausman_hub/v1/contours/apply",
+                "/api/hausman_hub/v1/contours/temporary-temperature",
                 "/api/hausman_hub/v1/actions",
                 "/api/hausman_hub/v1/admin/climate-import",
                 "/api/hausman_hub/v1/admin/climate-registry",

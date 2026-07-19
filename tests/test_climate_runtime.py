@@ -15,6 +15,7 @@ from custom_components.hausman_hub.application.climate_evidence import (
     ClimateShadowEvidence,
 )
 from custom_components.hausman_hub.application.climate_registry import registry_from_payload
+from custom_components.hausman_hub.application.contour_apply import ContourApplyViolation
 from custom_components.hausman_hub.application.climate_runtime import (
     ClimateRuntime,
     ClimateRuntimeUnavailable,
@@ -22,6 +23,8 @@ from custom_components.hausman_hub.application.climate_runtime import (
 from custom_components.hausman_hub.application.contours import (
     build_climate_contour_setup,
     contour_registry_to_payload,
+    with_active_climate_profile,
+    with_applied_climate_schedule_profile,
     with_climate_room_profiles,
     with_climate_schedule,
 )
@@ -33,7 +36,7 @@ from custom_components.hausman_hub.domain.climate_bridge import (
 )
 from custom_components.hausman_hub.domain.configuration import SafeConfiguration
 from custom_components.hausman_hub.domain.native_climate import native_climate_policy
-from custom_components.hausman_hub.domain.contours import ContourRegistry
+from custom_components.hausman_hub.domain.contours import ClimateProfile, ContourRegistry
 from tests.test_climate_import import (
     complete_registry_payload,
     registry_payload,
@@ -297,6 +300,18 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         result = await runtime.async_run_climate_schedule(
             datetime(2026, 7, 19, 23, 0)
         )
+        with self.assertRaisesRegex(ContourApplyViolation, "schedule is not ready"):
+            await runtime.async_temporary_temperature(
+                {
+                    "request_id": "temporary-without-schedule",
+                    "contour_id": "climate",
+                    "room_id": "living",
+                    "action": "set",
+                    "target_temperature": 23.5,
+                    "confirm": True,
+                },
+                datetime(2026, 7, 19, 23, 0),
+            )
 
         self.assertIsNone(result)
         self.assertEqual([], bridge.executed)
@@ -347,6 +362,235 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             ).schedule.last_applied_profile.value,
         )
         self.assertEqual(3, len(bridge.executed))
+
+    async def test_temporary_temperature_applies_one_room_and_returns_to_schedule(
+        self,
+    ) -> None:
+        bridge = ReflectingContourBridge()
+        bridge.payload["rooms"][0]["mode"] = "auto"  # type: ignore[index]
+        bridge.payload["rooms"][0]["targets"]["temperature"] = 25  # type: ignore[index]
+        bridge.payload["rooms"][0]["targets"]["targetStrategy"] = "normal"  # type: ignore[index]
+        bridge.snapshot = import_climate_state(bridge.payload)
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        contours = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        contours = with_active_climate_profile(contours, "day")
+        contours = with_applied_climate_schedule_profile(
+            contours,
+            ClimateProfile.DAY,
+        )
+        contour_store = MemoryContourStore(contours)
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=contour_store,
+            bridge_client=bridge,
+            operation_id_factory=iter(("4" * 32, "5" * 32)).__next__,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+
+        changed = await runtime.async_temporary_temperature(
+            {
+                "request_id": "temporary-living-1",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.5,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 0),
+        )
+        public = await runtime.async_contours_snapshot()
+
+        self.assertEqual("confirmed", changed.status.value)
+        self.assertEqual(1, changed.room_count)
+        self.assertEqual(1, changed.command_count)
+        room = contour_store.registry.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertEqual(23.5, room.target_temperature)
+        self.assertEqual(25.0, room.profile_settings.target_temperature)
+        self.assertTrue(
+            public["contours"][0]["rooms"][0]["temporary_temperature"][  # type: ignore[index]
+                "active"
+            ]
+        )
+
+        restored = await runtime.async_temporary_temperature(
+            {
+                "request_id": "temporary-living-clear-1",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "clear",
+                "target_temperature": None,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 5),
+        )
+
+        self.assertEqual("confirmed", restored.status.value)
+        self.assertEqual(1, restored.command_count)
+        room = contour_store.registry.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertIsNone(room.temporary_override)
+        self.assertEqual(25.0, room.target_temperature)
+        self.assertEqual(
+            ["set_room_target", "set_room_target"],
+            [plan.action for plan in bridge.executed],
+        )
+
+    async def test_next_schedule_period_clears_temporary_temperature(self) -> None:
+        bridge = ReflectingContourBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        contours = with_climate_room_profiles(
+            contours,
+            {
+                "living": {
+                    "profiles": {
+                        "day": {
+                            "target_temperature": 25.0,
+                            "target_humidity": 45,
+                            "strategy": "normal",
+                        },
+                        "night": {
+                            "target_temperature": 22.0,
+                            "target_humidity": 40,
+                            "strategy": "soft",
+                        },
+                    },
+                    "active_profile": "day",
+                }
+            },
+        )
+        contours = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        contours = with_applied_climate_schedule_profile(
+            contours,
+            ClimateProfile.DAY,
+        )
+        contour_store = MemoryContourStore(contours)
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=contour_store,
+            bridge_client=bridge,
+            operation_id_factory=iter(("6" * 32, "7" * 32)).__next__,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        await runtime.async_temporary_temperature(
+            {
+                "request_id": "temporary-before-night",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.5,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 22, 59),
+        )
+
+        receipt = await runtime.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 0)
+        )
+
+        self.assertEqual("confirmed", receipt.status.value)  # type: ignore[union-attr]
+        room = contour_store.registry.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertIsNone(room.temporary_override)
+        self.assertEqual("night", room.active_profile.value)
+        self.assertEqual(22.0, room.target_temperature)
+
+    async def test_ambiguous_temporary_command_is_persisted_and_never_reposted(
+        self,
+    ) -> None:
+        bridge = AmbiguousBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        contours = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        contours = with_applied_climate_schedule_profile(
+            contours,
+            ClimateProfile.DAY,
+        )
+        contour_store = MemoryContourStore(contours)
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=contour_store,
+            bridge_client=bridge,
+            operation_id_factory=lambda: "8" * 32,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        request = {
+            "request_id": "temporary-ambiguous",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "set",
+            "target_temperature": 23.5,
+            "confirm": True,
+        }
+
+        first = await runtime.async_temporary_temperature(
+            request,
+            datetime(2026, 7, 19, 12, 0),
+        )
+        second = await runtime.async_temporary_temperature(
+            request,
+            datetime(2026, 7, 19, 12, 1),
+        )
+        conflicting = {**request, "target_temperature": 24.0}
+        with self.assertRaisesRegex(ContourApplyViolation, "already used"):
+            await runtime.async_temporary_temperature(
+                conflicting,
+                datetime(2026, 7, 19, 12, 2),
+            )
+
+        self.assertEqual("unavailable", first.status.value)
+        self.assertEqual(first, second)
+        self.assertEqual(1, len(bridge.executed))
+        room = contour_store.registry.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertEqual(23.5, room.target_temperature)
+        self.assertEqual(25.0, room.profile_settings.target_temperature)
 
     async def test_contour_apply_posts_three_typed_changes_and_confirms_state(
         self,

@@ -56,6 +56,7 @@ CONTRACT_PATHS = tuple(
         "contour-apply-receipt.schema.json",
         "contour-apply-request.schema.json",
         "contours.schema.json",
+        "temporary-temperature-request.schema.json",
     )
 ) + (
     INTEGRATION_DIRECTORY / "contracts" / "v2" / "climate-home.schema.json",
@@ -64,6 +65,7 @@ CONTRACT_PATHS = tuple(
     INTEGRATION_DIRECTORY / "contracts" / "v3" / "contours.schema.json",
     INTEGRATION_DIRECTORY / "contracts" / "v4" / "climate-home.schema.json",
     INTEGRATION_DIRECTORY / "contracts" / "v4" / "contours.schema.json",
+    INTEGRATION_DIRECTORY / "contracts" / "v5" / "contours.schema.json",
 )
 REQUIRED_PACKAGE_PATHS = (
     HACS_METADATA_PATH,
@@ -85,6 +87,7 @@ REQUIRED_PACKAGE_PATHS = (
     INTEGRATION_DIRECTORY / "application/climate_registry_import.py",
     INTEGRATION_DIRECTORY / "application/climate_runtime.py",
     INTEGRATION_DIRECTORY / "application/contour_apply.py",
+    INTEGRATION_DIRECTORY / "application/contour_override.py",
     INTEGRATION_DIRECTORY / "application/contours.py",
     INTEGRATION_DIRECTORY / "domain/control.py",
     INTEGRATION_DIRECTORY / "domain/climate.py",

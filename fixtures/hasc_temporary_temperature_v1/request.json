@@ -1,0 +1,8 @@
+{
+  "request_id": "tablet-temp-001",
+  "contour_id": "climate",
+  "room_id": "living",
+  "action": "set",
+  "target_temperature": 23.5,
+  "confirm": true
+}

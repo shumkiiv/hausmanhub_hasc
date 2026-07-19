@@ -7,10 +7,12 @@ from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_add
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.util import dt as dt_util
 
 from .application.climate_canary_preflight import ClimateCanaryPreflightViolation
 from .application.climate_commands import ClimateCommandViolation
 from .application.contour_apply import ContourApplyViolation
+from .application.contour_override import TemporaryTemperatureViolation
 from .application.climate_evidence import ClimateEvidenceViolation
 from .application.climate_registry import ClimateRegistryViolation
 from .application.climate_runtime import ClimateRuntime, ClimateRuntimeUnavailable
@@ -26,6 +28,9 @@ HOME_PATH = "/api/hausman_hub/v1/home"
 CONTOURS_PATH = "/api/hausman_hub/v1/contours"
 CONTOUR_APPLY_PREVIEW_PATH = "/api/hausman_hub/v1/contours/apply-preview"
 CONTOUR_APPLY_PATH = "/api/hausman_hub/v1/contours/apply"
+TEMPORARY_TEMPERATURE_PATH = (
+    "/api/hausman_hub/v1/contours/temporary-temperature"
+)
 ACTION_PATH = "/api/hausman_hub/v1/actions"
 ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
@@ -56,6 +61,7 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ContoursView(hass),
             ContourApplyPreviewView(hass),
             ContourApplyView(hass),
+            TemporaryTemperatureView(hass),
             ClimateActionView(hass),
             ClimateAdminImportView(hass),
             ClimateAdminRegistryView(hass),
@@ -202,6 +208,45 @@ class ContourApplyView(_ClimateView):
             return self.json_message(
                 "The climate contour application is invalid.",
                 HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(receipt.as_payload(), headers=NO_STORE_HEADERS)
+
+
+class TemporaryTemperatureView(_ClimateView):
+    """Set or clear one room temperature until the next schedule boundary."""
+
+    url = TEMPORARY_TEMPERATURE_PATH
+    name = "api:hausman_hub:temporary_temperature"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, TEMPORARY_TEMPERATURE_PATH):
+            return _not_found(self)
+        if not _is_local_tablet_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+            receipt = await runtime.async_temporary_temperature(
+                payload,
+                dt_util.now(),
+            )
+        except TemporaryTemperatureViolation:
+            return self.json_message(
+                "The temporary climate temperature request is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ContourApplyViolation:
+            return self.json_message(
+                "The temporary climate temperature is not ready.",
+                HTTPStatus.CONFLICT,
                 headers=NO_STORE_HEADERS,
             )
         except ClimateRuntimeUnavailable:

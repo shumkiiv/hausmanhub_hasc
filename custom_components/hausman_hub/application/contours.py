@@ -13,11 +13,16 @@ from ..domain.climate import (
     ClimateRegistry,
 )
 from ..domain.contours import (
+    CLIMATE_TARGET_TEMPERATURE_MAXIMUM,
+    CLIMATE_TARGET_TEMPERATURE_MINIMUM,
+    CLIMATE_TARGET_TEMPERATURE_STEP,
     CONTOUR_REGISTRY_VERSION,
     ClimateComfortSettings,
     ClimateContourRoom,
     ClimateProfile,
     ClimateSchedule,
+    ClimateStrategy,
+    ClimateTemporaryOverride,
     ContourDefinition,
     ContourEngine,
     ContourKind,
@@ -25,6 +30,7 @@ from ..domain.contours import (
     ContourRegistry,
     ContourViolation,
     climate_contour_room,
+    climate_target_temperature,
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_registry_import import (
@@ -35,9 +41,10 @@ from .climate_registry_import import (
 
 CLIMATE_CONTOUR_ID = "climate"
 CONTOUR_CONTRACT_NAME = "hausman-hasc-contours"
-CONTOUR_CONTRACT_VERSION = 4
+CONTOUR_CONTRACT_VERSION = 5
 LEGACY_CONTOUR_REGISTRY_VERSION = 1
 PROFILE_CONTOUR_REGISTRY_VERSION = 2
+SCHEDULE_CONTOUR_REGISTRY_VERSION = 3
 _ACTIVE_KINDS = frozenset(
     {
         ClimateDeviceKind.AIR_CONDITIONER,
@@ -89,6 +96,7 @@ def contour_registry_from_payload(payload: object) -> ContourRegistry:
                         "device_ids",
                         "profiles",
                         "active_profile",
+                        "temporary_override",
                     },
                     f"contour {index} room {room_index}",
                 )
@@ -98,6 +106,7 @@ def contour_registry_from_payload(payload: object) -> ContourRegistry:
                         device_ids=room.get("device_ids"),
                         profiles=room.get("profiles"),
                         active_profile=room.get("active_profile"),
+                        temporary_override=room.get("temporary_override"),
                     )
                 )
             contours.append(
@@ -136,6 +145,7 @@ def contour_registry_to_payload(registry: ContourRegistry) -> dict[str, object]:
                         "room_id": room.room_id,
                         "device_ids": list(room.device_ids),
                         **climate_room_profiles(room),
+                        "temporary_override": _temporary_override_payload(room),
                     }
                     for room in contour.rooms
                 ],
@@ -156,6 +166,7 @@ def migrate_contour_registry_payload(
     if storage_version not in {
         LEGACY_CONTOUR_REGISTRY_VERSION,
         PROFILE_CONTOUR_REGISTRY_VERSION,
+        SCHEDULE_CONTOUR_REGISTRY_VERSION,
     }:
         raise ContourRegistryViolation("unsupported stored contour version")
     root = _mapping(payload, "older contour registry")
@@ -166,11 +177,10 @@ def migrate_contour_registry_payload(
     try:
         for index, raw in enumerate(_list(root.get("contours"), "older contours")):
             item = _mapping(raw, f"older contour {index}")
-            _exact_keys(
-                item,
-                {"id", "name", "kind", "mode", "engine", "rooms"},
-                f"older contour {index}",
-            )
+            item_keys = {"id", "name", "kind", "mode", "engine", "rooms"}
+            if storage_version == SCHEDULE_CONTOUR_REGISTRY_VERSION:
+                item_keys.add("schedule")
+            _exact_keys(item, item_keys, f"older contour {index}")
             rooms: list[ClimateContourRoom] = []
             for room_index, raw_room in enumerate(
                 _list(item.get("rooms"), f"older contour {index} rooms")
@@ -214,6 +224,14 @@ def migrate_contour_registry_payload(
                             active_profile=room.get("active_profile"),
                         )
                     )
+            schedule = (
+                _climate_schedule_from_payload(
+                    item.get("schedule"),
+                    f"older contour {index} schedule",
+                )
+                if storage_version == SCHEDULE_CONTOUR_REGISTRY_VERSION
+                else ClimateSchedule()
+            )
             contours.append(
                 ContourDefinition(
                     contour_id=item.get("id"),  # type: ignore[arg-type]
@@ -222,7 +240,7 @@ def migrate_contour_registry_payload(
                     mode=ContourMode(item.get("mode")),
                     engine=ContourEngine(item.get("engine")),
                     rooms=tuple(rooms),
-                    schedule=ClimateSchedule(),
+                    schedule=schedule,
                 )
             )
         return contour_registry_to_payload(ContourRegistry(contours=tuple(contours)))
@@ -448,7 +466,10 @@ def with_climate_room_profiles(
             _room_with_profile_payload(room, raw[room.room_id])
             for room in contour.rooms
         )
-        updated = replace(contour, rooms=rooms)
+        schedule = contour.schedule
+        if schedule.enabled:
+            schedule = replace(schedule, last_applied_profile=None)
+        updated = replace(contour, rooms=rooms, schedule=schedule)
         return ContourRegistry(
             contours=tuple(
                 updated if item.contour_id == CLIMATE_CONTOUR_ID else item
@@ -462,6 +483,8 @@ def with_climate_room_profiles(
 def with_active_climate_profile(
     registry: ContourRegistry,
     profile: object,
+    *,
+    clear_temporary: bool = True,
 ) -> ContourRegistry:
     """Select the same day or night profile for every climate room."""
 
@@ -470,10 +493,21 @@ def with_active_climate_profile(
         raise ContourRegistryViolation("climate contour is not configured")
     try:
         selected = ClimateProfile(profile)
+        if type(clear_temporary) is not bool:
+            raise ContourRegistryViolation(
+                "temporary temperature reset flag is invalid"
+            )
         updated = replace(
             contour,
             rooms=tuple(
-                replace(room, active_profile=selected) for room in contour.rooms
+                replace(
+                    room,
+                    active_profile=selected,
+                    temporary_override=(
+                        None if clear_temporary else room.temporary_override
+                    ),
+                )
+                for room in contour.rooms
             ),
         )
         return ContourRegistry(
@@ -513,7 +547,14 @@ def with_climate_schedule(
             night_start=night_start,  # type: ignore[arg-type]
             last_applied_profile=selected_profile,
         )
-        updated = replace(contour, schedule=schedule)
+        rooms = (
+            contour.rooms
+            if selected_profile is not None
+            else tuple(
+                replace(room, temporary_override=None) for room in contour.rooms
+            )
+        )
+        updated = replace(contour, schedule=schedule, rooms=rooms)
         return ContourRegistry(
             contours=tuple(
                 updated if item.contour_id == CLIMATE_CONTOUR_ID else item
@@ -574,6 +615,94 @@ def with_applied_climate_schedule_profile(
     try:
         schedule = replace(contour.schedule, last_applied_profile=profile)
         updated = replace(contour, schedule=schedule)
+        return ContourRegistry(
+            contours=tuple(
+                updated if item.contour_id == CLIMATE_CONTOUR_ID else item
+                for item in registry.contours
+            )
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
+def with_climate_temporary_temperature(
+    registry: ContourRegistry,
+    *,
+    room_id: object,
+    target_temperature: object,
+) -> ContourRegistry:
+    """Set one room temperature without changing its saved day/night profile."""
+
+    contour = registry.contour(CLIMATE_CONTOUR_ID)
+    if (
+        contour is None
+        or contour.mode is not ContourMode.AUTOMATIC
+        or not contour.schedule.enabled
+    ):
+        raise ContourRegistryViolation(
+            "temporary temperature requires an automatic climate schedule"
+        )
+    if not isinstance(room_id, str):
+        raise ContourRegistryViolation("temporary temperature room is invalid")
+    try:
+        override = ClimateTemporaryOverride(
+            target_temperature=climate_target_temperature(target_temperature),
+        )
+        found = False
+        rooms: list[ClimateContourRoom] = []
+        for room in contour.rooms:
+            if room.room_id == room_id:
+                found = True
+                rooms.append(replace(room, temporary_override=override))
+            else:
+                rooms.append(room)
+        if not found:
+            raise ContourRegistryViolation("temporary temperature room is unknown")
+        updated = replace(contour, rooms=tuple(rooms))
+        return ContourRegistry(
+            contours=tuple(
+                updated if item.contour_id == CLIMATE_CONTOUR_ID else item
+                for item in registry.contours
+            )
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
+def without_climate_temporary_temperature(
+    registry: ContourRegistry,
+    *,
+    room_id: object,
+) -> ContourRegistry:
+    """Return one room to its saved active profile before the next boundary."""
+
+    contour = registry.contour(CLIMATE_CONTOUR_ID)
+    if (
+        contour is None
+        or contour.mode is not ContourMode.AUTOMATIC
+        or not contour.schedule.enabled
+    ):
+        raise ContourRegistryViolation(
+            "temporary temperature requires an automatic climate schedule"
+        )
+    if not isinstance(room_id, str):
+        raise ContourRegistryViolation("temporary temperature room is invalid")
+    found = False
+    active = False
+    rooms: list[ClimateContourRoom] = []
+    for room in contour.rooms:
+        if room.room_id == room_id:
+            found = True
+            active = room.temporary_override is not None
+            rooms.append(replace(room, temporary_override=None))
+        else:
+            rooms.append(room)
+    if not found:
+        raise ContourRegistryViolation("temporary temperature room is unknown")
+    if not active:
+        raise ContourRegistryViolation("temporary temperature is not active")
+    try:
+        updated = replace(contour, rooms=tuple(rooms))
         return ContourRegistry(
             contours=tuple(
                 updated if item.contour_id == CLIMATE_CONTOUR_ID else item
@@ -646,7 +775,17 @@ def _room_with_profile_payload(
         device_ids=room.device_ids,
         profiles=raw.get("profiles"),
         active_profile=raw.get("active_profile"),
+        temporary_override=_temporary_override_payload(room),
     )
+
+
+def _temporary_override_payload(
+    room: ClimateContourRoom,
+) -> dict[str, object] | None:
+    override = room.temporary_override
+    if override is None:
+        return None
+    return {"target_temperature": override.target_temperature}
 
 
 def _comfort_payload(settings: ClimateComfortSettings) -> dict[str, object]:
@@ -683,7 +822,14 @@ def with_climate_contour_mode(
                 day_start=schedule.day_start,
                 night_start=schedule.night_start,
             )
-        updated = replace(contour, mode=selected_mode, schedule=schedule)
+        rooms = (
+            contour.rooms
+            if selected_mode is ContourMode.AUTOMATIC
+            else tuple(
+                replace(room, temporary_override=None) for room in contour.rooms
+            )
+        )
+        updated = replace(contour, mode=selected_mode, schedule=schedule, rooms=rooms)
         return ContourRegistry(
             contours=tuple(
                 updated if item.contour_id == CLIMATE_CONTOUR_ID else item
@@ -728,8 +874,32 @@ def _contour_status(
     *,
     settings_apply_enabled: bool,
 ) -> dict[str, object]:
+    schedule_profile = contour.schedule.last_applied_profile
+    schedule_ready = (
+        contour.mode is ContourMode.AUTOMATIC
+        and contour.schedule.enabled
+        and schedule_profile is not None
+        and all(room.active_profile is schedule_profile for room in contour.rooms)
+    )
+    temporary_temperature_available_by_room = {
+        room.room_id: (
+            schedule_ready
+            and settings_apply_enabled
+            and snapshot is not None
+            and snapshot.runtime_fresh
+            and _room_settings_apply_available(room, climate_registry, snapshot)
+        )
+        for room in contour.rooms
+    }
     room_results = [
-        _room_status(room, climate_registry, snapshot)
+        _room_status(
+            room,
+            climate_registry,
+            snapshot,
+            temporary_temperature_available=(
+                temporary_temperature_available_by_room[room.room_id]
+            ),
+        )
         for room in contour.rooms
     ]
     reasons = list(
@@ -796,6 +966,13 @@ def _contour_status(
                     "humidity": False,
                 },
             },
+            "temporary_temperature": {
+                "available": any(temporary_temperature_available_by_room.values()),
+                "requires_confirmation": True,
+                "minimum": CLIMATE_TARGET_TEMPERATURE_MINIMUM,
+                "maximum": CLIMATE_TARGET_TEMPERATURE_MAXIMUM,
+                "step": CLIMATE_TARGET_TEMPERATURE_STEP,
+            },
         },
         "reasons": reasons,
     }
@@ -805,6 +982,8 @@ def _room_status(
     assignment: ClimateContourRoom,
     climate_registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot | None,
+    *,
+    temporary_temperature_available: bool,
 ) -> dict[str, object]:
     room = climate_registry.room(assignment.room_id)
     imported_room = None if snapshot is None else snapshot.room(assignment.room_id)
@@ -884,6 +1063,20 @@ def _room_status(
             ClimateProfile.NIGHT.value: _public_comfort_payload(
                 assignment.night_profile
             ),
+        },
+        "temporary_temperature": {
+            "active": assignment.temporary_override is not None,
+            "temperature": (
+                None
+                if assignment.temporary_override is None
+                else assignment.temporary_override.target_temperature
+            ),
+            "ends": (
+                None
+                if assignment.temporary_override is None
+                else "next_schedule_change"
+            ),
+            "available": temporary_temperature_available,
         },
         "device_count": len(assignment.device_ids),
         "engine_mode": None if imported_room is None else imported_room.mode,

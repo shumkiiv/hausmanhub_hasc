@@ -19,15 +19,18 @@ from custom_components.hausman_hub.application.contours import (
     migrate_contour_registry_payload,
     validate_contour_bindings,
     with_active_climate_profile,
+    with_applied_climate_schedule_profile,
     with_climate_contour_mode,
     with_climate_room_profiles,
     with_climate_schedule,
+    with_climate_temporary_temperature,
+    without_climate_temporary_temperature,
 )
 from custom_components.hausman_hub.domain.climate import (
     ClimateControlOwner,
     ClimateControlScope,
 )
-from custom_components.hausman_hub.domain.contours import ContourMode
+from custom_components.hausman_hub.domain.contours import ClimateProfile, ContourMode
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,7 +96,7 @@ class ContoursTest(unittest.TestCase):
         result = contour_snapshot(contours, climate_registry, source_snapshot())
 
         contour = result["contours"][0]  # type: ignore[index]
-        self.assertEqual(4, result["contract"]["version"])  # type: ignore[index]
+        self.assertEqual(5, result["contract"]["version"])  # type: ignore[index]
         self.assertEqual("hausman-climate", contour["engine"]["name"])
         self.assertTrue(contour["execution"]["automatic_active"])
         self.assertFalse(contour["execution"]["hasc_direct_commands"])
@@ -164,9 +167,10 @@ class ContoursTest(unittest.TestCase):
 
         migrated = migrate_contour_registry_payload(1, legacy)
         room = migrated["contours"][0]["rooms"][0]  # type: ignore[index]
-        self.assertEqual(3, migrated["version"])
+        self.assertEqual(4, migrated["version"])
         self.assertEqual("day", room["active_profile"])
         self.assertEqual(room["profiles"]["day"], room["profiles"]["night"])
+        self.assertIsNone(room["temporary_override"])
         self.assertEqual(
             contour_registry_from_payload(migrated),
             contour_registry_from_payload(
@@ -184,6 +188,9 @@ class ContoursTest(unittest.TestCase):
         profile_payload = contour_registry_to_payload(contours)
         profile_payload["version"] = 2
         profile_payload["contours"][0].pop("schedule")  # type: ignore[index]
+        profile_payload["contours"][0]["rooms"][0].pop(  # type: ignore[index]
+            "temporary_override"
+        )
 
         migrated = migrate_contour_registry_payload(2, profile_payload)
 
@@ -197,7 +204,42 @@ class ContoursTest(unittest.TestCase):
             },
             schedule,
         )
-        self.assertEqual(3, migrated["version"])
+        self.assertEqual(4, migrated["version"])
+        self.assertIsNone(
+            migrated["contours"][0]["rooms"][0]["temporary_override"]  # type: ignore[index]
+        )
+
+    def test_schedule_registry_migration_preserves_schedule_and_adds_override(
+        self,
+    ) -> None:
+        _, contours = setup()
+        scheduled = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="06:30",
+            night_start="22:45",
+        )
+        payload = contour_registry_to_payload(scheduled)
+        payload["version"] = 3
+        payload["contours"][0]["rooms"][0].pop(  # type: ignore[index]
+            "temporary_override"
+        )
+
+        migrated = migrate_contour_registry_payload(3, payload)
+
+        self.assertEqual(4, migrated["version"])
+        self.assertEqual(
+            {
+                "enabled": True,
+                "day_start": "06:30",
+                "night_start": "22:45",
+                "last_applied_profile": None,
+            },
+            migrated["contours"][0]["schedule"],  # type: ignore[index]
+        )
+        self.assertIsNone(
+            migrated["contours"][0]["rooms"][0]["temporary_override"]  # type: ignore[index]
+        )
 
     def test_schedule_selects_day_and_night_across_midnight(self) -> None:
         climate_registry, contours = setup()
@@ -234,6 +276,115 @@ class ContoursTest(unittest.TestCase):
                     day_start=day_start,
                     night_start=night_start,
                 )
+
+    def test_temporary_temperature_changes_only_effective_target(self) -> None:
+        climate_registry, contours = setup()
+        scheduled = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        scheduled = with_active_climate_profile(scheduled, "day")
+        scheduled_contour = scheduled.contour("climate")
+        # Mark the current period as applied, just as the runtime scheduler does.
+        scheduled = with_applied_climate_schedule_profile(
+            scheduled,
+            scheduled_contour.rooms[0].active_profile,  # type: ignore[union-attr]
+        )
+        changed = with_climate_temporary_temperature(
+            scheduled,
+            room_id="living",
+            target_temperature=23.5,
+        )
+
+        room = changed.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertEqual(23.5, room.target_temperature)
+        self.assertEqual(25.0, room.profile_settings.target_temperature)
+        public = contour_snapshot(
+            changed,
+            climate_registry,
+            source_snapshot(),
+            settings_apply_enabled=True,
+        )
+        public_room = public["contours"][0]["rooms"][0]  # type: ignore[index]
+        self.assertEqual(23.5, public_room["targets"]["temperature"])
+        self.assertEqual(25.0, public_room["comfort_profiles"]["day"]["temperature"])
+        self.assertEqual(
+            {
+                "active": True,
+                "temperature": 23.5,
+                "ends": "next_schedule_change",
+                "available": True,
+            },
+            public_room["temporary_temperature"],
+        )
+
+        reconfigured = with_climate_room_profiles(
+            changed,
+            {
+                "living": {
+                    "profiles": {
+                        "day": {
+                            "target_temperature": 24.0,
+                            "target_humidity": 45,
+                            "strategy": "normal",
+                        },
+                        "night": {
+                            "target_temperature": 22.0,
+                            "target_humidity": 40,
+                            "strategy": "soft",
+                        },
+                    },
+                    "active_profile": "day",
+                }
+            },
+        )
+        self.assertEqual(
+            23.5,
+            reconfigured.contour("climate").rooms[0].target_temperature,  # type: ignore[union-attr]
+        )
+        rearmed = with_active_climate_profile(
+            reconfigured,
+            "day",
+            clear_temporary=False,
+        )
+        rearmed = with_applied_climate_schedule_profile(
+            rearmed,
+            ClimateProfile.DAY,
+        )
+        self.assertEqual(
+            23.5,
+            rearmed.contour("climate").rooms[0].target_temperature,  # type: ignore[union-attr]
+        )
+
+        restored = without_climate_temporary_temperature(
+            rearmed,
+            room_id="living",
+        )
+        restored_room = restored.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertEqual(24.0, restored_room.target_temperature)
+        self.assertIsNone(restored_room.temporary_override)
+
+    def test_schedule_profile_change_clears_temporary_temperature(self) -> None:
+        _, contours = setup()
+        scheduled = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        changed = with_climate_temporary_temperature(
+            scheduled,
+            room_id="living",
+            target_temperature=23.5,
+        )
+
+        switched = with_active_climate_profile(changed, "night")
+
+        room = switched.contour("climate").rooms[0]  # type: ignore[union-attr]
+        self.assertIsNone(room.temporary_override)
+        self.assertEqual(room.night_profile.target_temperature, room.target_temperature)
 
     def test_contour_edit_updates_active_profile_and_keeps_inactive_profile(self) -> None:
         _, contours = setup()

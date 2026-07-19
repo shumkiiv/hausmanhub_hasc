@@ -60,7 +60,7 @@ Last updated: 2026-07-19.
   the inactive bundle. Public contour contract v3 exposes active/day/night
   comfort values without private bindings. See the
   [1.3.0 profile decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-3-0-day-night-profiles.md).
-- Version 1.4.0 is the current HASC-only worktree. The first options page and
+- Version 1.4.0 established the first options page and
   ordinary climate workflow use plain Russian labels, with `strings.json` and
   the English-locale fallback intentionally mirroring Russian so a locale
   mismatch cannot produce a half-English UI. The visible sections are
@@ -76,6 +76,20 @@ Last updated: 2026-07-19.
   migrates v1/v2 with a disabled 07:00/23:00 schedule. Tablet contour contract
   v4 exposes only enabled/day/night times. See the
   [1.4.0 schedule decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-4-0-russian-schedule.md).
+- Version 1.5.0 is the verified HASC-only release candidate. One room may receive a
+  temporary 18–28 °C target in 0.5 °C steps while an automatic schedule is
+  armed for the current local-time period. The override is stored separately
+  from the saved day/night bundles, persists before the first POST, and is
+  applied only through the existing typed `hausman-climate` executor for the
+  selected room. It clears on the next day/night transition or through a
+  separate confirmed early-return action. Ambiguous command results are never
+  automatically reposted. Storage v4 migrates v1–v3 with no override; public
+  contour contract v5 and the strict local tablet temporary-temperature route
+  expose no private bindings. See the
+  [1.5.0 temporary-temperature decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-5-0-temporary-temperature.md).
+- The 1.5.0 release candidate passed 289 local tests, isolated Home Assistant
+  2026.6.4 and 2026.7.0 checks, and a final read-only Kimi review with no
+  significant findings (session `ses_084f948c2ffee4C3vSqj22zKaT`).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after
   its 153 tests, disposable Core 2026.6.4/2026.7.0 checks, and final Kimi
   review passed. This source push did not create a tag, release, HACS
@@ -1303,12 +1317,11 @@ test-only changes do not need a new HACS version.
 
 ## Next decision gate
 
-After the staged 1.4.0 verification and release, the next product layer is a
-temporary manual override that lasts until the next saved schedule boundary.
-It must keep the existing typed `hausman-climate` executor authoritative and
-must make the remaining duration clear. The Android screen can then consume
-contour contract v4 for profile and schedule display. A readable decision
-journal and further contour types follow on the same general contour model.
+After the staged 1.5.0 verification and release, the next product layer is the
+real Android climate screen consuming home contract v4 and contour contract v5:
+room state, day/night profile, schedule, temporary target, result receipt, and
+plain Russian explanations. A readable decision journal, a continuous contour
+dispatcher, and further contour types follow on the same general contour model.
 Generic proxying, arbitrary device execution, and unsupervised live deployment
 remain out of scope.
 

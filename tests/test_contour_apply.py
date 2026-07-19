@@ -13,6 +13,11 @@ from custom_components.hausman_hub.application.contour_apply import (
     confirmed_contour_room_count,
     parse_contour_apply_request,
 )
+from custom_components.hausman_hub.application.contour_override import (
+    TemporaryTemperatureAction,
+    TemporaryTemperatureViolation,
+    parse_temporary_temperature_request,
+)
 from custom_components.hausman_hub.application.contours import (
     with_climate_contour_mode,
 )
@@ -124,6 +129,54 @@ class ContourApplyTest(unittest.TestCase):
                 ContourApplyViolation
             ):
                 parse_contour_apply_request(invalid)
+
+    def test_temporary_temperature_request_is_bounded_and_explicit(self) -> None:
+        request = parse_temporary_temperature_request(
+            {
+                "request_id": "temporary-1",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.5,
+                "confirm": True,
+            }
+        )
+
+        self.assertIs(request.action, TemporaryTemperatureAction.SET)
+        self.assertEqual(23.5, request.target_temperature)
+        clear = parse_temporary_temperature_request(
+            {
+                "request_id": "temporary-clear-1",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "clear",
+                "target_temperature": None,
+                "confirm": True,
+            }
+        )
+        self.assertIs(clear.action, TemporaryTemperatureAction.CLEAR)
+        self.assertIsNone(clear.target_temperature)
+
+        base = {
+            "request_id": "temporary-2",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "set",
+            "target_temperature": 23.5,
+            "confirm": True,
+        }
+        for invalid in (
+            {**base, "confirm": False},
+            {**base, "target_temperature": 23.2},
+            {**base, "target_temperature": 29.0},
+            {**base, "duration": 60},
+            {**base, "action": "raw"},
+            {**base, "action": "clear"},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(
+                TemporaryTemperatureViolation
+            ):
+                parse_temporary_temperature_request(invalid)
 
 
 if __name__ == "__main__":

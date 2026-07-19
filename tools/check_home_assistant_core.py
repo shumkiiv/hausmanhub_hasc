@@ -114,6 +114,7 @@ CLIMATE_HOME_PATH = "/api/hausman_hub/v1/home"
 CONTOURS_PATH = "/api/hausman_hub/v1/contours"
 CONTOUR_APPLY_PREVIEW_PATH = "/api/hausman_hub/v1/contours/apply-preview"
 CONTOUR_APPLY_PATH = "/api/hausman_hub/v1/contours/apply"
+TEMPORARY_TEMPERATURE_PATH = "/api/hausman_hub/v1/contours/temporary-temperature"
 CLIMATE_ACTION_PATH = "/api/hausman_hub/v1/actions"
 CLIMATE_ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 CLIMATE_ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
@@ -127,6 +128,7 @@ CLIMATE_API_PATHS = (
     CONTOURS_PATH,
     CONTOUR_APPLY_PREVIEW_PATH,
     CONTOUR_APPLY_PATH,
+    TEMPORARY_TEMPERATURE_PATH,
     CLIMATE_ACTION_PATH,
     CLIMATE_ADMIN_IMPORT_PATH,
     CLIMATE_ADMIN_REGISTRY_PATH,
@@ -2285,6 +2287,7 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
         CONTOURS_PATH: {"GET", "OPTIONS"},
         CONTOUR_APPLY_PREVIEW_PATH: {"GET", "OPTIONS"},
         CONTOUR_APPLY_PATH: {"POST", "OPTIONS"},
+        TEMPORARY_TEMPERATURE_PATH: {"POST", "OPTIONS"},
         CLIMATE_ACTION_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_IMPORT_PATH: {"GET", "OPTIONS"},
         CLIMATE_ADMIN_REGISTRY_PATH: {"GET", "POST", "OPTIONS"},
@@ -2890,7 +2893,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_result(
             await disabled_contours.json(),
             {
-                "contract": {"name": "hausman-hasc-contours", "version": 4},
+                "contract": {"name": "hausman-hasc-contours", "version": 5},
                 "contours": [],
             },
             "new disabled contour registry must be empty and versioned",
@@ -2922,6 +2925,23 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             disabled_apply.status,
             HTTPStatus.SERVICE_UNAVAILABLE,
             "disabled contour apply must fail closed without a command POST",
+        )
+        disabled_temporary = await client.post(
+            TEMPORARY_TEMPERATURE_PATH,
+            headers=tablet_headers,
+            json={
+                "request_id": "disabled-core-temporary-1",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.5,
+                "confirm": True,
+            },
+        )
+        assert_result(
+            disabled_temporary.status,
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "disabled temporary temperature must fail closed without a command POST",
         )
 
         disabled_action = await client.post(

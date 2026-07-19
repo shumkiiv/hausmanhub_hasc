@@ -14,7 +14,7 @@ from enum import StrEnum
 import re
 
 
-CONTOUR_REGISTRY_VERSION = 3
+CONTOUR_REGISTRY_VERSION = 4
 MAX_CONTOURS = 32
 MAX_CONTOUR_ROOMS = 128
 MAX_CONTOUR_DEVICES = 512
@@ -133,6 +133,16 @@ class ClimateComfortSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class ClimateTemporaryOverride:
+    """One room temperature that lasts until the next schedule transition."""
+
+    target_temperature: float
+
+    def __post_init__(self) -> None:
+        _temperature(self.target_temperature)
+
+
+@dataclass(frozen=True, slots=True)
 class ClimateContourRoom:
     """One room assignment and its user-facing comfort parameters."""
 
@@ -141,6 +151,7 @@ class ClimateContourRoom:
     day_profile: ClimateComfortSettings
     night_profile: ClimateComfortSettings
     active_profile: ClimateProfile = ClimateProfile.DAY
+    temporary_override: ClimateTemporaryOverride | None = None
 
     def __post_init__(self) -> None:
         _stable_id(self.room_id, "contour room id")
@@ -157,15 +168,33 @@ class ClimateContourRoom:
             raise ContourViolation("night climate profile must be validated")
         if not isinstance(self.active_profile, ClimateProfile):
             raise ContourViolation("active climate profile must be approved")
+        if self.temporary_override is not None and not isinstance(
+            self.temporary_override,
+            ClimateTemporaryOverride,
+        ):
+            raise ContourViolation("temporary climate override must be validated")
 
     @property
-    def active_settings(self) -> ClimateComfortSettings:
-        """Return the profile whose values are applied to the climate engine."""
+    def profile_settings(self) -> ClimateComfortSettings:
+        """Return the unchanged settings saved in the active day/night profile."""
 
         return (
             self.day_profile
             if self.active_profile is ClimateProfile.DAY
             else self.night_profile
+        )
+
+    @property
+    def active_settings(self) -> ClimateComfortSettings:
+        """Return effective values, including an optional temporary temperature."""
+
+        saved = self.profile_settings
+        if self.temporary_override is None:
+            return saved
+        return ClimateComfortSettings(
+            target_temperature=self.temporary_override.target_temperature,
+            target_humidity=saved.target_humidity,
+            strategy=saved.strategy,
         )
 
     @property
@@ -218,6 +247,12 @@ class ContourDefinition:
             raise ContourViolation("climate schedule must be validated")
         if self.schedule.enabled and self.mode is not ContourMode.AUTOMATIC:
             raise ContourViolation("climate schedule requires automatic mode")
+        if any(room.temporary_override is not None for room in self.rooms) and (
+            not self.schedule.enabled or self.mode is not ContourMode.AUTOMATIC
+        ):
+            raise ContourViolation(
+                "temporary climate override requires an automatic schedule"
+            )
         _unique((room.room_id for room in self.rooms), "contour room ids")
         _unique(
             (device_id for room in self.rooms for device_id in room.device_ids),
@@ -259,6 +294,7 @@ def climate_contour_room(
     strategy: object = None,
     profiles: object = None,
     active_profile: object = None,
+    temporary_override: object = None,
 ) -> ClimateContourRoom:
     """Build one exact room policy from a form or persisted payload."""
 
@@ -302,12 +338,26 @@ def climate_contour_room(
             selected_profile = ClimateProfile(active_profile)
         except (TypeError, ValueError) as error:
             raise ContourViolation("active climate profile must be approved") from error
+    selected_override = _temporary_override_from_payload(temporary_override)
     return ClimateContourRoom(
         room_id=room_id,
         device_ids=tuple(device_ids),
         day_profile=day_profile,
         night_profile=night_profile,
         active_profile=selected_profile,
+        temporary_override=selected_override,
+    )
+
+
+def _temporary_override_from_payload(
+    payload: object,
+) -> ClimateTemporaryOverride | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, Mapping) or set(payload) != {"target_temperature"}:
+        raise ContourViolation("temporary climate override fields are invalid")
+    return ClimateTemporaryOverride(
+        target_temperature=_temperature(payload.get("target_temperature")),
     )
 
 
@@ -340,6 +390,12 @@ def _comfort_settings(
         target_humidity=_humidity(target_humidity),
         strategy=selected_strategy,
     )
+
+
+def climate_target_temperature(value: object) -> float:
+    """Validate one public climate target and return its normalized value."""
+
+    return _temperature(value)
 
 
 def _temperature(value: object) -> float:

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/temporary-temperature-request.schema.json",
+  "title": "HASC temporary temperature request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "contour_id", "room_id", "action", "target_temperature", "confirm"],
+  "properties": {
+    "request_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+    "contour_id": {"const": "climate"},
+    "room_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "action": {"enum": ["set", "clear"]},
+    "target_temperature": {"type": ["number", "null"]},
+    "confirm": {"const": true}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "set"}}},
+      "then": {
+        "properties": {
+          "target_temperature": {"type": "number", "minimum": 18, "maximum": 28, "multipleOf": 0.5}
+        }
+      },
+      "else": {
+        "properties": {
+          "target_temperature": {"type": "null"}
+        }
+      }
+    }
+  ]
+}

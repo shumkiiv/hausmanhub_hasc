@@ -31,6 +31,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
     TimeSelector,
 )
+from homeassistant.util import dt as dt_util
 
 from .application.configuration import (
     CANARY_CONTROL_ENABLED_DEFAULT,
@@ -73,6 +74,7 @@ from .application.contours import (
     with_climate_schedule,
 )
 from .application.contour_apply import ContourApplyViolation
+from .application.contour_override import TemporaryTemperatureViolation
 from .const import DOMAIN, ENTRY_TITLE, ENTRY_UNIQUE_ID
 from .domain.configuration import (
     APPROVED_MODES,
@@ -132,6 +134,11 @@ CLIMATE_SCHEDULE_ENABLED_FIELD = "climate_schedule_enabled"
 CLIMATE_DAY_START_FIELD = "climate_day_start"
 CLIMATE_NIGHT_START_FIELD = "climate_night_start"
 CLIMATE_SCHEDULE_CONFIRM_FIELD = "confirm_climate_schedule"
+TEMPORARY_TEMPERATURE_ROOM_FIELD = "temporary_temperature_room"
+TEMPORARY_TEMPERATURE_FIELD = "temporary_temperature"
+TEMPORARY_TEMPERATURE_CONFIRM_FIELD = "confirm_temporary_temperature"
+TEMPORARY_TEMPERATURE_CLEAR_CONFIRM_FIELD = "confirm_temporary_temperature_clear"
+TEMPORARY_TEMPERATURE_RESULT_CLOSE_FIELD = "close_temporary_temperature_result"
 CLIMATE_REGISTRY_JSON_FIELD = "climate_registry_json"
 CLIMATE_REGISTRY_CONFIRM_FIELD = "confirm_registry_save"
 CLIMATE_REGISTRY_ACTION_FIELD = "climate_registry_action"
@@ -405,6 +412,8 @@ CONTOUR_ACTION_SELECTOR = SelectSelector(
             "configure_climate",
             "configure_profiles",
             "configure_schedule",
+            "temporary_temperature",
+            "return_to_schedule",
             "select_profile",
             "apply_climate",
             "view_status",
@@ -669,6 +678,57 @@ def _climate_schedule_schema(
                 CLIMATE_SCHEDULE_CONFIRM_FIELD,
                 default=False,
             ): StrictBooleanSelector(),
+        }
+    )
+
+
+def _temporary_temperature_room_schema(
+    options: list[SelectOptionDict],
+    default: str,
+) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                TEMPORARY_TEMPERATURE_ROOM_FIELD,
+                default=default,
+            ): SelectSelector(SelectSelectorConfig(options=options))
+        }
+    )
+
+
+def _temporary_temperature_schema(default: float) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                TEMPORARY_TEMPERATURE_FIELD,
+                default=f"{default:.1f}",
+            ): NATIVE_TARGET_TEMPERATURE_SELECTOR,
+            vol.Required(
+                TEMPORARY_TEMPERATURE_CONFIRM_FIELD,
+                default=False,
+            ): StrictBooleanSelector(),
+        }
+    )
+
+
+def _temporary_temperature_clear_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                TEMPORARY_TEMPERATURE_CLEAR_CONFIRM_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
+        }
+    )
+
+
+def _temporary_temperature_result_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                TEMPORARY_TEMPERATURE_RESULT_CLOSE_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
         }
     )
 
@@ -1257,6 +1317,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _profile_settings_draft: dict[str, dict[str, object]] | None = None
     _profile_selection_draft: str | None = None
     _schedule_contours_draft: Any | None = None
+    _temporary_temperature_action: str | None = None
+    _temporary_temperature_rooms: dict[str, Mapping[str, Any]] | None = None
+    _temporary_temperature_room_id: str | None = None
+    _temporary_temperature_until: str | None = None
+    _temporary_temperature_request_id: str | None = None
+    _temporary_temperature_receipt: Mapping[str, Any] | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Show one short choice instead of mixing unrelated settings."""
@@ -1320,6 +1386,16 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 return await self._async_begin_climate_profiles(runtime)
             if action == "configure_schedule":
                 return await self._async_begin_climate_schedule(runtime)
+            if action == "temporary_temperature":
+                return await self._async_begin_temporary_temperature(
+                    runtime,
+                    action="set",
+                )
+            if action == "return_to_schedule":
+                return await self._async_begin_temporary_temperature(
+                    runtime,
+                    action="clear",
+                )
             if action == "select_profile":
                 return await self._async_begin_profile_selection(runtime)
             if action == "apply_climate":
@@ -1740,6 +1816,353 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             ),
             errors=errors,
         )
+
+    async def _async_begin_temporary_temperature(
+        self,
+        runtime: Any,
+        *,
+        action: str,
+    ) -> FlowResult:
+        """Load only rooms that can safely use the temporary control."""
+
+        try:
+            payload = await runtime.async_contours_snapshot()
+        except Exception:
+            return self.async_show_form(
+                step_id="contours",
+                data_schema=_contour_action_schema(),
+                errors={"base": "temporary_temperature_unavailable"},
+            )
+        raw_contours = payload.get("contours")
+        contours = raw_contours if isinstance(raw_contours, list) else []
+        contour = contours[0] if contours and isinstance(contours[0], Mapping) else {}
+        raw_rooms = contour.get("rooms") if isinstance(contour, Mapping) else None
+        rooms = raw_rooms if isinstance(raw_rooms, list) else []
+        candidates: dict[str, Mapping[str, Any]] = {}
+        for room in rooms:
+            if not isinstance(room, Mapping):
+                continue
+            room_id = room.get("id")
+            temporary = room.get("temporary_temperature")
+            temporary_values = (
+                temporary if isinstance(temporary, Mapping) else {}
+            )
+            if not isinstance(room_id, str) or temporary_values.get("available") is not True:
+                continue
+            if action == "clear" and temporary_values.get("active") is not True:
+                continue
+            candidates[room_id] = room
+        if not candidates:
+            return self.async_show_form(
+                step_id="contours",
+                data_schema=_contour_action_schema(),
+                errors={
+                    "base": (
+                        "temporary_temperature_not_active"
+                        if action == "clear"
+                        else "temporary_temperature_not_ready"
+                    )
+                },
+            )
+        self._temporary_temperature_action = action
+        self._temporary_temperature_rooms = candidates
+        self._temporary_temperature_room_id = None
+        self._temporary_temperature_until = None
+        self._temporary_temperature_request_id = None
+        self._temporary_temperature_receipt = None
+        return await self.async_step_temporary_temperature_room()
+
+    async def async_step_temporary_temperature_room(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Select one public room before showing its current temperature."""
+
+        rooms = self._temporary_temperature_rooms or {}
+        action = self._temporary_temperature_action
+        if not rooms or action not in {"set", "clear"}:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            room_id = user_input.get(TEMPORARY_TEMPERATURE_ROOM_FIELD)
+            if set(user_input) != {TEMPORARY_TEMPERATURE_ROOM_FIELD} or room_id not in rooms:
+                errors[TEMPORARY_TEMPERATURE_ROOM_FIELD] = (
+                    "invalid_temporary_temperature_room"
+                )
+            else:
+                self._temporary_temperature_room_id = str(room_id)
+                self._temporary_temperature_request_id = (
+                    f"ha-temp-{secrets.token_hex(16)}"
+                )
+                room = rooms[str(room_id)]
+                profiles = room.get("comfort_profiles")
+                profile_values = profiles if isinstance(profiles, Mapping) else {}
+                active = profile_values.get("active")
+                raw_contours = None
+                try:
+                    runtime = self._climate_runtime()
+                    snapshot = (
+                        None if runtime is None else await runtime.async_contours_snapshot()
+                    )
+                    raw_contours = (
+                        snapshot.get("contours")
+                        if isinstance(snapshot, Mapping)
+                        else None
+                    )
+                except Exception:
+                    raw_contours = None
+                contour = (
+                    raw_contours[0]
+                    if isinstance(raw_contours, list)
+                    and raw_contours
+                    and isinstance(raw_contours[0], Mapping)
+                    else {}
+                )
+                schedule = contour.get("schedule") if isinstance(contour, Mapping) else None
+                schedule_values = schedule if isinstance(schedule, Mapping) else {}
+                if active == ClimateProfile.DAY.value:
+                    self._temporary_temperature_until = (
+                        f"перехода на «Ночь» в {schedule_values.get('night_start', '—')}"
+                    )
+                else:
+                    self._temporary_temperature_until = (
+                        f"перехода на «День» в {schedule_values.get('day_start', '—')}"
+                    )
+                if action == "clear":
+                    return await self.async_step_temporary_temperature_clear()
+                return await self.async_step_temporary_temperature()
+        options = [
+            SelectOptionDict(
+                value=room_id,
+                label=str(room.get("name") or "Комната"),
+            )
+            for room_id, room in rooms.items()
+        ]
+        return self.async_show_form(
+            step_id="temporary_temperature_room",
+            data_schema=_temporary_temperature_room_schema(
+                options,
+                next(iter(rooms)),
+            ),
+            errors=errors,
+            description_placeholders={
+                "action": (
+                    "вернуть настройки расписания"
+                    if action == "clear"
+                    else "временно изменить температуру"
+                )
+            },
+        )
+
+    async def async_step_temporary_temperature(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Confirm and immediately apply one temporary room temperature."""
+
+        runtime = self._climate_runtime()
+        room = self._selected_temporary_temperature_room()
+        if runtime is None or room is None or self._temporary_temperature_request_id is None:
+            return await self.async_step_contours()
+        targets = room.get("targets")
+        target_values = targets if isinstance(targets, Mapping) else {}
+        default = target_values.get("temperature")
+        temperature_default = (
+            float(default)
+            if not isinstance(default, bool) and isinstance(default, (int, float))
+            else CLIMATE_TARGET_TEMPERATURE_DEFAULT
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            expected = {
+                TEMPORARY_TEMPERATURE_FIELD,
+                TEMPORARY_TEMPERATURE_CONFIRM_FIELD,
+            }
+            if set(user_input) != expected:
+                errors["base"] = "invalid_temporary_temperature"
+            elif user_input.get(TEMPORARY_TEMPERATURE_CONFIRM_FIELD) is not True:
+                errors[TEMPORARY_TEMPERATURE_CONFIRM_FIELD] = (
+                    "temporary_temperature_confirmation_required"
+                )
+            else:
+                try:
+                    receipt = await runtime.async_temporary_temperature(
+                        {
+                            "request_id": self._temporary_temperature_request_id,
+                            "contour_id": "climate",
+                            "room_id": self._temporary_temperature_room_id,
+                            "action": "set",
+                            "target_temperature": user_input.get(
+                                TEMPORARY_TEMPERATURE_FIELD
+                            ),
+                            "confirm": True,
+                        },
+                        dt_util.now(),
+                    )
+                except (TemporaryTemperatureViolation, ContourApplyViolation):
+                    errors["base"] = "temporary_temperature_not_ready"
+                except Exception:
+                    errors["base"] = "temporary_temperature_unavailable"
+                else:
+                    self._temporary_temperature_receipt = receipt.as_payload()
+                    await self._async_refresh_temporary_temperature_room(runtime)
+                    return await self.async_step_temporary_temperature_result()
+        return self.async_show_form(
+            step_id="temporary_temperature",
+            data_schema=_temporary_temperature_schema(temperature_default),
+            errors=errors,
+            description_placeholders=self._temporary_temperature_placeholders(room),
+        )
+
+    async def async_step_temporary_temperature_clear(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Confirm an early return to the room's active scheduled profile."""
+
+        runtime = self._climate_runtime()
+        room = self._selected_temporary_temperature_room()
+        if runtime is None or room is None or self._temporary_temperature_request_id is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (
+                set(user_input) != {TEMPORARY_TEMPERATURE_CLEAR_CONFIRM_FIELD}
+                or user_input.get(TEMPORARY_TEMPERATURE_CLEAR_CONFIRM_FIELD) is not True
+            ):
+                errors[TEMPORARY_TEMPERATURE_CLEAR_CONFIRM_FIELD] = (
+                    "temporary_temperature_clear_confirmation_required"
+                )
+            else:
+                try:
+                    receipt = await runtime.async_temporary_temperature(
+                        {
+                            "request_id": self._temporary_temperature_request_id,
+                            "contour_id": "climate",
+                            "room_id": self._temporary_temperature_room_id,
+                            "action": "clear",
+                            "target_temperature": None,
+                            "confirm": True,
+                        },
+                        dt_util.now(),
+                    )
+                except (TemporaryTemperatureViolation, ContourApplyViolation):
+                    errors["base"] = "temporary_temperature_not_ready"
+                except Exception:
+                    errors["base"] = "temporary_temperature_unavailable"
+                else:
+                    self._temporary_temperature_receipt = receipt.as_payload()
+                    await self._async_refresh_temporary_temperature_room(runtime)
+                    return await self.async_step_temporary_temperature_result()
+        return self.async_show_form(
+            step_id="temporary_temperature_clear",
+            data_schema=_temporary_temperature_clear_schema(),
+            errors=errors,
+            description_placeholders=self._temporary_temperature_placeholders(room),
+        )
+
+    async def async_step_temporary_temperature_result(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Show the physical application result without claiming more than observed."""
+
+        room = self._selected_temporary_temperature_room()
+        receipt = self._temporary_temperature_receipt
+        if room is None or receipt is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (
+                set(user_input) != {TEMPORARY_TEMPERATURE_RESULT_CLOSE_FIELD}
+                or user_input.get(TEMPORARY_TEMPERATURE_RESULT_CLOSE_FIELD) is not True
+            ):
+                errors[TEMPORARY_TEMPERATURE_RESULT_CLOSE_FIELD] = (
+                    "temporary_temperature_result_close_required"
+                )
+            else:
+                return self.async_create_entry(
+                    title="",
+                    data=_merged_safe_options(
+                        self.config_entry.data,
+                        self.config_entry.options,
+                        {},
+                    ),
+                )
+        placeholders = self._temporary_temperature_placeholders(room)
+        placeholders["status"] = _RUSSIAN_CONTOUR_APPLY_STATUS_LABELS.get(
+            receipt.get("status"),
+            "результат неизвестен",
+        )
+        placeholders["action"] = (
+            "возврат к расписанию"
+            if self._temporary_temperature_action == "clear"
+            else "временная температура"
+        )
+        return self.async_show_form(
+            step_id="temporary_temperature_result",
+            data_schema=_temporary_temperature_result_schema(),
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    def _selected_temporary_temperature_room(self) -> Mapping[str, Any] | None:
+        rooms = self._temporary_temperature_rooms or {}
+        room_id = self._temporary_temperature_room_id
+        return rooms.get(room_id) if room_id is not None else None
+
+    async def _async_refresh_temporary_temperature_room(self, runtime: Any) -> None:
+        """Refresh only the public room shown by the result step."""
+
+        room_id = self._temporary_temperature_room_id
+        if room_id is None:
+            return
+        try:
+            snapshot = await runtime.async_contours_snapshot()
+        except Exception:
+            return
+        raw_contours = (
+            snapshot.get("contours") if isinstance(snapshot, Mapping) else None
+        )
+        contour = (
+            raw_contours[0]
+            if isinstance(raw_contours, list)
+            and raw_contours
+            and isinstance(raw_contours[0], Mapping)
+            else None
+        )
+        if contour is None:
+            return
+        rooms = contour.get("rooms")
+        if not isinstance(rooms, list):
+            return
+        selected = next(
+            (
+                room
+                for room in rooms
+                if isinstance(room, Mapping) and room.get("id") == room_id
+            ),
+            None,
+        )
+        if selected is not None and self._temporary_temperature_rooms is not None:
+            self._temporary_temperature_rooms[room_id] = selected
+
+    def _temporary_temperature_placeholders(
+        self,
+        room: Mapping[str, Any],
+    ) -> dict[str, str]:
+        targets = room.get("targets")
+        target_values = targets if isinstance(targets, Mapping) else {}
+        temporary = room.get("temporary_temperature")
+        temporary_values = temporary if isinstance(temporary, Mapping) else {}
+        current_target = temporary_values.get("temperature")
+        if current_target is None:
+            current_target = target_values.get("temperature")
+        return {
+            "room_name": str(room.get("name") or "Комната"),
+            "current_temperature": _display_measurement(current_target, ""),
+            "until": self._temporary_temperature_until or "следующего переключения",
+        }
 
     async def _async_begin_profile_selection(self, runtime: Any) -> FlowResult:
         """Load saved profiles before selecting which set becomes active."""

@@ -134,6 +134,39 @@
           "confirm_climate_schedule": "Это постоянное разрешение. Текущие настройки могут быть применены в течение минуты; отдельное подтверждение при каждом следующем переключении не запрашивается."
         }
       },
+      "temporary_temperature_room": {
+        "title": "Выберите комнату",
+        "description": "Нужно {action}. Выберите одну комнату.",
+        "data": {
+          "temporary_temperature_room": "Комната"
+        }
+      },
+      "temporary_temperature": {
+        "title": "Временная температура: «{room_name}»",
+        "description": "Сейчас задано {current_temperature} °C. Новая температура будет действовать до {until}, затем HASC вернёт сохранённые настройки расписания. После подтверждения команда отправится сразу.",
+        "data": {
+          "temporary_temperature": "Временная температура, °C",
+          "confirm_temporary_temperature": "Применить эту температуру сейчас"
+        },
+        "data_description": {
+          "temporary_temperature": "Допустимо от 18 до 28 °C с шагом 0,5 °C. Дневные и ночные настройки не изменятся.",
+          "confirm_temporary_temperature": "Подключённая система климата может сразу включить или выключить устройства комнаты."
+        }
+      },
+      "temporary_temperature_clear": {
+        "title": "Вернуть расписание: «{room_name}»",
+        "description": "Сейчас временно задано {current_temperature} °C до {until}. После подтверждения HASC отменит временное значение и сразу вернёт температуру активного профиля.",
+        "data": {
+          "confirm_temporary_temperature_clear": "Вернуть температуру по расписанию сейчас"
+        }
+      },
+      "temporary_temperature_result": {
+        "title": "Результат изменения температуры",
+        "description": "Комната: {room_name}. Действие: {action}. Результат: {status}. Теперь задано {current_temperature} °C. Этот режим действует до {until}.",
+        "data": {
+          "close_temporary_temperature_result": "Закрыть результат"
+        }
+      },
       "climate_profile_select": {
         "title": "Что использовать сейчас",
         "description": "Выберите «День» или «Ночь». HASC только выберет сохранённые настройки. Для передачи устройствам затем нажмите «Сразу применить выбранные настройки».",
@@ -390,6 +423,14 @@
       "climate_schedule_confirmation_required": "Подтвердите сохранение расписания и автоматическое применение настроек.",
       "schedule_requires_automatic_climate": "Сначала настройте климат в режиме управления, затем включайте расписание.",
       "schedule_controls_profile": "Сейчас профиль выбирает расписание. Чтобы выбирать «День» или «Ночь» вручную, сначала выключите расписание.",
+      "invalid_temporary_temperature_room": "Выберите одну из доступных комнат.",
+      "invalid_temporary_temperature": "Выберите температуру от 18 до 28 °C с шагом 0,5 °C.",
+      "temporary_temperature_confirmation_required": "Подтвердите немедленное применение временной температуры.",
+      "temporary_temperature_clear_confirmation_required": "Подтвердите возврат к температуре по расписанию.",
+      "temporary_temperature_result_close_required": "Включите этот флажок, чтобы закрыть результат.",
+      "temporary_temperature_not_ready": "Временное изменение пока недоступно. Включите расписание, дождитесь применения текущего профиля и проверьте доступность комнаты.",
+      "temporary_temperature_not_active": "Сейчас нет временной температуры, которую можно отменить.",
+      "temporary_temperature_unavailable": "Не удалось безопасно изменить температуру. Неопределённая команда автоматически не повторяется.",
       "invalid_contour_setup": "Проверьте комнаты, устройства, температуру, влажность и характер работы. В каждой комнате нужно хотя бы одно управляемое устройство.",
       "contour_confirmation_required": "Подтвердите сохранение настроек климата.",
       "contour_status_close_required": "Включите этот флажок, чтобы закрыть состояние.",
@@ -473,6 +514,8 @@
         "configure_climate": "Выбрать комнаты и климатические устройства",
         "configure_profiles": "Задать настройки для дня и ночи",
         "configure_schedule": "Настроить автоматическое расписание",
+        "temporary_temperature": "Временно изменить температуру в комнате",
+        "return_to_schedule": "Вернуть температуру по расписанию сейчас",
         "select_profile": "Вручную выбрать «День» или «Ночь»",
         "apply_climate": "Сразу применить выбранные настройки",
         "view_status": "Проверить, что сейчас работает",
