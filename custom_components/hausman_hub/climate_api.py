@@ -10,6 +10,7 @@ from homeassistant.components.http import HomeAssistantView
 
 from .application.climate_canary_preflight import ClimateCanaryPreflightViolation
 from .application.climate_commands import ClimateCommandViolation
+from .application.contour_apply import ContourApplyViolation
 from .application.climate_evidence import ClimateEvidenceViolation
 from .application.climate_registry import ClimateRegistryViolation
 from .application.climate_runtime import ClimateRuntime, ClimateRuntimeUnavailable
@@ -23,6 +24,8 @@ DATA_CLIMATE_RUNTIME = "climate_runtime"
 DATA_CLIMATE_VIEWS = "climate_views"
 HOME_PATH = "/api/hausman_hub/v1/home"
 CONTOURS_PATH = "/api/hausman_hub/v1/contours"
+CONTOUR_APPLY_PREVIEW_PATH = "/api/hausman_hub/v1/contours/apply-preview"
+CONTOUR_APPLY_PATH = "/api/hausman_hub/v1/contours/apply"
 ACTION_PATH = "/api/hausman_hub/v1/actions"
 ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
@@ -51,6 +54,8 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
         views = (
             ClimateHomeView(hass),
             ContoursView(hass),
+            ContourApplyPreviewView(hass),
+            ContourApplyView(hass),
             ClimateActionView(hass),
             ClimateAdminImportView(hass),
             ClimateAdminRegistryView(hass),
@@ -147,6 +152,63 @@ class ContoursView(_ClimateView):
         except Exception:
             return self._unavailable()
         return self.json(payload, headers=NO_STORE_HEADERS)
+
+
+class ContourApplyPreviewView(_ClimateView):
+    """Describe exact saved-contour changes before tablet confirmation."""
+
+    url = CONTOUR_APPLY_PREVIEW_PATH
+    name = "api:hausman_hub:contour_apply_preview"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, CONTOUR_APPLY_PREVIEW_PATH):
+            return _not_found(self)
+        if not _is_local_tablet_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await runtime.async_contour_apply_preview()
+        except ContourApplyViolation:
+            return self.json_message(
+                "The climate contour cannot be applied.",
+                HTTPStatus.CONFLICT,
+                headers=NO_STORE_HEADERS,
+            )
+        except Exception:
+            return self._unavailable()
+        return self.json(payload, headers=NO_STORE_HEADERS)
+
+
+class ContourApplyView(_ClimateView):
+    """Apply only saved contour settings after explicit tablet confirmation."""
+
+    url = CONTOUR_APPLY_PATH
+    name = "api:hausman_hub:contour_apply"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, CONTOUR_APPLY_PATH):
+            return _not_found(self)
+        if not _is_local_tablet_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+            receipt = await runtime.async_apply_contour(payload)
+        except ContourApplyViolation:
+            return self.json_message(
+                "The climate contour application is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(receipt.as_payload(), headers=NO_STORE_HEADERS)
 
 
 class ClimateActionView(_ClimateView):

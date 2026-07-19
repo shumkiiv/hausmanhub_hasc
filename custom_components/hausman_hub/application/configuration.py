@@ -91,7 +91,10 @@ def create_options(
         # selection must not survive in saved options.
         climate_bridge_target_value = None
         climate_canary_room_id_value = None
-    elif climate_bridge_mode_value == ClimateBridgeMode.SHADOW.value:
+    elif climate_bridge_mode_value in {
+        ClimateBridgeMode.SHADOW.value,
+        ClimateBridgeMode.MANAGED.value,
+    }:
         climate_canary_room_id_value = None
     if native_climate_mode_value == NativeClimateMode.DISABLED.value:
         # Preview rollback must also remove the selected room and its targets.
@@ -284,7 +287,9 @@ def _configuration_for(
                     "climate canary room must be a stable lowercase id"
                 ) from error
         elif climate_canary_room_id_value is not None:
-            raise ConfigurationViolation("shadow climate bridge must not retain a canary room")
+            raise ConfigurationViolation(
+                "non-canary climate bridge must not retain a canary room"
+            )
 
     try:
         native_policy = native_climate_policy(

@@ -87,6 +87,10 @@ def plan_climate_command(
         raise ClimateCommandViolation("climate bridge mode must be approved")
     if bridge_mode is ClimateBridgeMode.DISABLED:
         raise ClimateCommandViolation("climate commands are disabled")
+    if bridge_mode is ClimateBridgeMode.MANAGED:
+        raise ClimateCommandViolation(
+            "managed contour accepts only saved contour settings"
+        )
     payload = _mapping(request, "climate action")
     action = payload.get("action")
     if action in ROOM_ACTIONS:

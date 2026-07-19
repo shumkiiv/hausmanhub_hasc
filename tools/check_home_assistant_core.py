@@ -105,6 +105,8 @@ SUMMARY_UPDATE_INTERVAL_MINUTES = {
 LOCAL_SUMMARY_PATH = "/api/hausman_hub/local-summary"
 CLIMATE_HOME_PATH = "/api/hausman_hub/v1/home"
 CONTOURS_PATH = "/api/hausman_hub/v1/contours"
+CONTOUR_APPLY_PREVIEW_PATH = "/api/hausman_hub/v1/contours/apply-preview"
+CONTOUR_APPLY_PATH = "/api/hausman_hub/v1/contours/apply"
 CLIMATE_ACTION_PATH = "/api/hausman_hub/v1/actions"
 CLIMATE_ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 CLIMATE_ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
@@ -116,6 +118,8 @@ CLIMATE_OPERATION_PATH = "/api/hausman_hub/v1/operations"
 CLIMATE_API_PATHS = (
     CLIMATE_HOME_PATH,
     CONTOURS_PATH,
+    CONTOUR_APPLY_PREVIEW_PATH,
+    CONTOUR_APPLY_PATH,
     CLIMATE_ACTION_PATH,
     CLIMATE_ADMIN_IMPORT_PATH,
     CLIMATE_ADMIN_REGISTRY_PATH,
@@ -1081,7 +1085,7 @@ def assert_climate_connection_form(options_form: dict[str, Any]) -> None:
         raise RuntimeError("climate bridge mode must use a native select selector")
     assert_result(
         climate_select.get("options"),
-        ["disabled", "shadow", "canary"],
+        ["disabled", "shadow", "canary", "managed"],
         "climate bridge selector must expose only translated fixed stages",
     )
 
@@ -2272,6 +2276,8 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
     expected_methods = {
         CLIMATE_HOME_PATH: {"GET", "OPTIONS"},
         CONTOURS_PATH: {"GET", "OPTIONS"},
+        CONTOUR_APPLY_PREVIEW_PATH: {"GET", "OPTIONS"},
+        CONTOUR_APPLY_PATH: {"POST", "OPTIONS"},
         CLIMATE_ACTION_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_IMPORT_PATH: {"GET", "OPTIONS"},
         CLIMATE_ADMIN_REGISTRY_PATH: {"GET", "POST", "OPTIONS"},
@@ -2877,7 +2883,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_result(
             await disabled_contours.json(),
             {
-                "contract": {"name": "hausman-hasc-contours", "version": 1},
+                "contract": {"name": "hausman-hasc-contours", "version": 2},
                 "contours": [],
             },
             "new disabled contour registry must be empty and versioned",
@@ -2885,6 +2891,30 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_local_summary_response_is_not_stored(
             disabled_contours,
             "disabled contours response",
+        )
+
+        disabled_apply_preview = await client.get(
+            CONTOUR_APPLY_PREVIEW_PATH,
+            headers=tablet_headers,
+        )
+        assert_result(
+            disabled_apply_preview.status,
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "disabled contour apply preview must fail closed",
+        )
+        disabled_apply = await client.post(
+            CONTOUR_APPLY_PATH,
+            headers=tablet_headers,
+            json={
+                "request_id": "disabled-core-apply-1",
+                "contour_id": "climate",
+                "confirm": True,
+            },
+        )
+        assert_result(
+            disabled_apply.status,
+            HTTPStatus.SERVICE_UNAVAILABLE,
+            "disabled contour apply must fail closed without a command POST",
         )
 
         disabled_action = await client.post(

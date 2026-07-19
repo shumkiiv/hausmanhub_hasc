@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/contour-apply-preview.schema.json",
+  "title": "HASC contour apply preview v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "contour_id", "status", "ready", "room_count", "command_count", "changes", "requires_confirmation", "parameters", "limitations"],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "hausman-hasc-contour-apply-preview"},
+        "version": {"const": 1}
+      }
+    },
+    "contour_id": {"const": "climate"},
+    "status": {"enum": ["ready", "in_sync"]},
+    "ready": {"const": true},
+    "room_count": {"type": "integer", "minimum": 1, "maximum": 128},
+    "command_count": {"type": "integer", "minimum": 0, "maximum": 384},
+    "changes": {"$ref": "#/$defs/changes"},
+    "requires_confirmation": {"const": true},
+    "parameters": {"$ref": "#/$defs/parameters"},
+    "limitations": {
+      "type": "array",
+      "const": ["room_humidity_command_not_supported"]
+    }
+  },
+  "$defs": {
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperature", "strategy", "automatic_mode"],
+      "properties": {
+        "temperature": {"type": "integer", "minimum": 0, "maximum": 128},
+        "strategy": {"type": "integer", "minimum": 0, "maximum": 128},
+        "automatic_mode": {"type": "integer", "minimum": 0, "maximum": 128}
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperature", "strategy", "automatic_mode", "humidity"],
+      "properties": {
+        "temperature": {"const": true},
+        "strategy": {"const": true},
+        "automatic_mode": {"const": true},
+        "humidity": {"const": false}
+      }
+    }
+  }
+}

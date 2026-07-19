@@ -418,7 +418,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(expected_mode_default, bridge_mode_field.default)
         self.assertIsInstance(bridge_mode_selector, FakeSelectSelector)
         self.assertEqual(
-            ["disabled", "shadow", "canary"],
+            ["disabled", "shadow", "canary", "managed"],
             bridge_mode_selector.config.options,
         )
 
@@ -978,12 +978,24 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         class Bridge:
             def __init__(self) -> None:
                 self.executed = []
+                self.payload = source_payload()
 
             async def async_fetch_state(self):
-                return import_climate_state(source_payload())
+                return import_climate_state(self.payload)
 
             async def async_execute(self, plan):
                 self.executed.append(plan)
+                room = self.payload["rooms"][0]
+                if plan.action == "set_room_target_strategy":
+                    room["targets"]["targetStrategy"] = plan.backend_payload[
+                        "targetStrategy"
+                    ]
+                elif plan.action == "set_room_target":
+                    room["targets"]["temperature"] = plan.backend_payload[
+                        "targetTemperature"
+                    ]
+                elif plan.action == "set_room_mode":
+                    room["mode"] = plan.backend_payload["mode"]
 
         climate_store = ClimateStore()
         contour_store = ContourStore()
@@ -992,7 +1004,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             entry_id="entry",
             configuration=SafeConfiguration(
                 mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.SHADOW,
+                climate_bridge_mode=ClimateBridgeMode.MANAGED,
                 climate_bridge_target=climate_bridge_target(
                     "http://127.0.0.1:1880"
                 ),
@@ -1007,7 +1019,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
             {
                 "mode": "shadow",
-                "climate_bridge_mode": "shadow",
+                "climate_bridge_mode": "managed",
                 "climate_bridge_target": "http://127.0.0.1:1880",
             },
         )
@@ -1067,13 +1079,42 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual("create_entry", saved["type"])
-        self.assertEqual("shadow", saved["data"]["climate_bridge_mode"])
+        self.assertEqual("managed", saved["data"]["climate_bridge_mode"])
         self.assertEqual(1, len(contour_store.registry.contours))
         self.assertEqual(1, len(climate_store.registry.rooms))
         self.assertEqual(1, len(climate_store.registry.devices))
         self.assertEqual([], bridge.executed)
 
         options_flow.config_entry.options = dict(saved["data"])
+        bridge.payload["rooms"][0]["mode"] = "manual"
+        bridge.payload["rooms"][0]["targets"]["temperature"] = 26
+        bridge.payload["rooms"][0]["targets"]["targetStrategy"] = "soft"
+        apply_form = await options_flow.async_step_contours(
+            {"contour_action": "apply_climate"}
+        )
+        self.assertEqual("climate_contour_apply_confirm", apply_form["step_id"])
+        self.assertEqual("3", apply_form["description_placeholders"]["command_count"])
+        refused = await options_flow.async_step_climate_contour_apply_confirm(
+            {"confirm_contour_apply": False}
+        )
+        self.assertEqual(
+            {"confirm_contour_apply": "contour_apply_confirmation_required"},
+            refused["errors"],
+        )
+        result = await options_flow.async_step_climate_contour_apply_confirm(
+            {"confirm_contour_apply": True}
+        )
+        self.assertEqual("climate_contour_apply_result", result["step_id"])
+        self.assertEqual(
+            "настройки подтверждены двигателем",
+            result["description_placeholders"]["status"],
+        )
+        self.assertEqual(3, len(bridge.executed))
+        closed = await options_flow.async_step_climate_contour_apply_result(
+            {"close_contour_apply_result": True}
+        )
+        self.assertEqual("create_entry", closed["type"])
+
         disabled = await options_flow.async_step_contours(
             {"contour_action": "disable_climate"}
         )
@@ -1082,7 +1123,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("disabled", disabled["data"]["climate_bridge_mode"])
         self.assertNotIn("climate_bridge_target", disabled["data"])
         self.assertEqual("disabled", contour_store.registry.contours[0].mode.value)
-        self.assertEqual([], bridge.executed)
+        self.assertEqual(3, len(bridge.executed))
 
     async def test_options_reject_unsafe_canary_values(self) -> None:
         """No missing target, other entity domain, or truth-like arm value passes."""

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/contour-apply-receipt.schema.json",
+  "title": "HASC contour apply receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "operation_id", "request_id", "contour_id", "status", "room_count", "command_count", "accepted_count", "confirmed_room_count", "changes", "reasons", "created_at", "updated_at"],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "hausman-hasc-contour-apply-receipt"},
+        "version": {"const": 1}
+      }
+    },
+    "operation_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "request_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+    "contour_id": {"const": "climate"},
+    "status": {"enum": ["pending", "confirmed", "partial", "rejected", "unavailable"]},
+    "room_count": {"type": "integer", "minimum": 1, "maximum": 128},
+    "command_count": {"type": "integer", "minimum": 0, "maximum": 384},
+    "accepted_count": {"type": "integer", "minimum": 0, "maximum": 384},
+    "confirmed_room_count": {"type": "integer", "minimum": 0, "maximum": 128},
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperature", "strategy", "automatic_mode"],
+      "properties": {
+        "temperature": {"type": "integer", "minimum": 0, "maximum": 128},
+        "strategy": {"type": "integer", "minimum": 0, "maximum": 128},
+        "automatic_mode": {"type": "integer", "minimum": 0, "maximum": 128}
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["already_in_sync", "engine_rejected", "command_result_unavailable", "verification_unavailable", "state_not_confirmed"]
+      }
+    },
+    "created_at": {"type": "integer", "minimum": 0},
+    "updated_at": {"type": "integer", "minimum": 0}
+  }
+}

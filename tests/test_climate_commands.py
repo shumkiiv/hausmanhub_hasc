@@ -91,6 +91,15 @@ class ClimateCommandsTest(unittest.TestCase):
                 import_climate_state(source_payload()),
                 bridge_mode=ClimateBridgeMode.DISABLED,
             )
+        with self.assertRaisesRegex(ClimateCommandViolation, "saved contour"):
+            plan(
+                {
+                    "action": "set_room_target",
+                    "room_id": "living",
+                    "target_temperature": 24.5,
+                },
+                mode=ClimateBridgeMode.MANAGED,
+            )
         with self.assertRaisesRegex(ClimateCommandViolation, "unsupported"):
             plan({"action": "call_service", "service": "homeassistant.restart"})
         with self.assertRaisesRegex(ClimateCommandViolation, "fixed fields"):

@@ -40,7 +40,7 @@
         "title": "HASC: automatic contours",
         "description": "Climate is the first universal HASC contour. Select rooms and devices, choose comfort parameters, and HASC connects them to the existing proven climate algorithm.",
         "data": {"contour_action": "Climate contour action"},
-        "data_description": {"contour_action": "Configure creates or replaces the climate contour. Status is read-only. Disable affects only the HASC contour and sends no command to the existing engine."}
+        "data_description": {"contour_action": "Create the contour first. Apply then sends temperature, strategy, and automatic mode to the existing engine only after separate confirmation. Status is read-only."}
       },
       "climate_contour_source": {
         "title": "Connect the existing climate algorithm",
@@ -61,11 +61,11 @@
           "contour_strategy": "Temperature strategy"
         },
         "data_description": {
-          "contour_mode": "Observe shows the algorithm without HASC commands. Automatic expects the selected rooms to be under the existing engine's automatic authority.",
+          "contour_mode": "Observe only shows the algorithm. Automatic allows a separate confirmed application of temperature, strategy, and automatic mode to the existing engine.",
           "contour_rooms": "Multiple rooms can be selected.",
           "contour_devices": "Only devices already understood by the existing climate engine are shown. Private identifiers remain hidden.",
-          "contour_target_temperature": "In 1.0 this is one desired value for all selected rooms. Choose the engine's current value or HASC will report a mismatch.",
-          "contour_target_humidity": "In 1.0 this is one desired value for all selected rooms. If the engine reports no humidity target, HASC still checks the remaining conditions.",
+          "contour_target_temperature": "This is currently one value for all selected rooms. It can be applied to the existing engine as a separate next action.",
+          "contour_target_humidity": "This is currently one desired value for all rooms. The existing engine has no shared room-humidity command, so HASC displays it without claiming to apply it.",
           "contour_strategy": "Soft is quieter, normal is balanced, and aggressive reaches the target faster."
         }
       },
@@ -79,6 +79,17 @@
         "title": "Climate contour status",
         "description": "Contour: {name}. Mode: {mode}. Status: {status}. Rooms: {room_count}; devices: {device_count}. Algorithm: {algorithm}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
         "data": {"close_contour_status": "Close status"}
+      },
+      "climate_contour_apply_confirm": {
+        "title": "Apply climate contour settings",
+        "description": "Rooms: {room_count}. Commands: {command_count}. Temperature changes: {temperature_count}; strategy changes: {strategy_count}; automatic-mode changes: {automatic_count}. Commands are sent to the existing engine in that order. Its proven algorithm may then start or stop devices. Humidity is not changed by this action.",
+        "data": {"confirm_contour_apply": "Apply these settings to the existing climate engine"},
+        "data_description": {"confirm_contour_apply": "Confirm only when the selected devices may run automatically. Retrying the same request never submits commands twice."}
+      },
+      "climate_contour_apply_result": {
+        "title": "Climate contour application result",
+        "description": "Result: {status}. Accepted commands: {accepted_count} of {command_count}. Confirmed rooms: {confirmed_room_count} of {room_count}. Details: {reasons}.",
+        "data": {"close_contour_apply_result": "Close result"}
       },
       "general_settings": {
         "title": "HASC: general information",
@@ -276,7 +287,7 @@
     "error": {
       "unsafe_settings_section": "Choose Automatic contours, General information, or Advanced settings.",
       "unsafe_advanced_action": "Choose one available advanced tool.",
-      "invalid_contour_action": "Choose configure, status, or disable for the climate contour.",
+      "invalid_contour_action": "Choose create, apply settings, status, or disable for the climate contour.",
       "contour_status_unavailable": "The climate contour status is unavailable.",
       "contour_not_configured": "The climate contour has not been configured yet.",
       "contour_save_failed": "The contour could not be saved safely. The previous configuration remains in place.",
@@ -289,12 +300,16 @@
       "invalid_contour_setup": "Check rooms, devices, temperature, humidity, and strategy. Every room needs a controllable device.",
       "contour_confirmation_required": "Confirm saving the climate contour.",
       "contour_status_close_required": "Enable this checkbox to close the status screen.",
+      "contour_apply_not_ready": "Settings cannot be applied. Save an automatic contour first and select one available existing-engine air conditioner in every room.",
+      "contour_apply_unavailable": "The application could not be prepared or completed safely. Unconfirmed commands are never resubmitted.",
+      "contour_apply_confirmation_required": "Confirm applying settings to the existing climate engine.",
+      "contour_apply_result_close_required": "Enable this checkbox to close the result.",
       "unsafe_mode": "Only read-only and comparison-without-changes modes are allowed.",
       "unsafe_local_summary_setting": "The optional local page can only be turned on or off.",
       "unsafe_summary_update_interval": "Choose only 5, 15, or 30 minutes for the nine-count refresh.",
       "unsafe_canary_control_setting": "The control canary can only be armed or disarmed.",
       "unsafe_canary_control_target": "An armed control canary requires exactly one input_boolean helper.",
-      "unsafe_climate_bridge_mode": "Choose disabled, shadow, or canary for the climate bridge.",
+      "unsafe_climate_bridge_mode": "Choose disabled, check-only, normal managed contour, or one-room trial control.",
       "unsafe_climate_bridge_target": "Use one private literal HTTP(S) origin without a path or credentials.",
       "unsafe_climate_canary_room": "Canary mode requires one stable lowercase room ID.",
       "unsafe_native_climate_mode": "Choose disabled or decision preview for the built-in climate controller.",
@@ -335,7 +350,8 @@
       "options": {
         "disabled": "Do not connect the climate controller",
         "shadow": "Connect for checks only — no commands",
-        "canary": "One-room trial control — after verification"
+        "canary": "One-room trial control — after verification",
+        "managed": "Normal HASC automatic-contour operation"
       }
     },
     "native_climate_mode": {
@@ -362,6 +378,7 @@
     "contour_action": {
       "options": {
         "configure_climate": "Create or edit climate contour",
+        "apply_climate": "Apply settings and enable automatic operation",
         "view_status": "View climate contour status",
         "disable_climate": "Disable only the HASC climate contour"
       }

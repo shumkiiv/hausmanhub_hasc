@@ -45,6 +45,7 @@ class ImportedClimateRoom:
     humidity: float | None
     target_temperature: float | None
     target_humidity: float | None
+    target_strategy: str | None
     mode: str | None
     authority_eligible: bool
 
@@ -145,6 +146,13 @@ def _rooms(
                 target_humidity=_target_value(
                     controls.get("targetHumidity"),
                     targets.get("humidity", room.get("targetHumidity")),
+                ),
+                target_strategy=_target_strategy(
+                    controls.get("targetStrategy"),
+                    targets.get(
+                        "targetStrategy",
+                        targets.get("coolingProfile", room.get("targetStrategy")),
+                    ),
                 ),
                 mode=_room_mode(room),
                 authority_eligible=authority.get(room_id, False),
@@ -289,6 +297,26 @@ def _target_value(control: object, fallback: object) -> float | None:
             if value is not None:
                 return value
     return _number(fallback)
+
+
+def _target_strategy(control: object, fallback: object) -> str | None:
+    """Read only the three strategies already supported by climate-core."""
+
+    if isinstance(control, Mapping):
+        for key in ("value", "target", "current"):
+            value = control.get(key)
+            if isinstance(value, str) and value in {
+                "soft",
+                "normal",
+                "aggressive",
+            }:
+                return value
+    return (
+        fallback
+        if isinstance(fallback, str)
+        and fallback in {"soft", "normal", "aggressive"}
+        else None
+    )
 
 
 def _mapping(value: object, label: str) -> Mapping[str, Any]:

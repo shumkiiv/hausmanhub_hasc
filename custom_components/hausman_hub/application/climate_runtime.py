@@ -10,7 +10,7 @@ from typing import Protocol
 from ..domain.climate import ClimateRegistry
 from ..domain.climate_bridge import ClimateBridgeMode
 from ..domain.configuration import SafeConfiguration
-from ..domain.contours import ContourRegistry
+from ..domain.contours import ContourDefinition, ContourRegistry
 from ..domain.native_climate import NativeClimatePolicy, preview_native_climate
 from .android_climate import admin_climate_import_snapshot, android_climate_snapshot
 from .climate_canary_preflight import climate_canary_preflight
@@ -34,10 +34,21 @@ from .climate_registry import (
     registry_to_payload,
 )
 from .contours import (
+    CLIMATE_CONTOUR_ID,
     contour_registry_from_payload,
     contour_registry_to_payload,
     contour_snapshot,
     validate_contour_bindings,
+)
+from .contour_apply import (
+    ContourApplyReceipt,
+    ContourApplyStatus,
+    ContourApplyViolation,
+    _ContourApplyLedger,
+    build_contour_apply_plan,
+    confirmed_contour_room_count,
+    contour_fingerprint,
+    parse_contour_apply_request,
 )
 
 
@@ -113,6 +124,10 @@ class ClimateRuntime:
         self._contours = ContourRegistry()
         self._lock = asyncio.Lock()
         self._operations = _ClimateOperationLedger(
+            operation_id_factory=operation_id_factory,
+            now_ms=self._now_ms,
+        )
+        self._contour_applications = _ContourApplyLedger(
             operation_id_factory=operation_id_factory,
             now_ms=self._now_ms,
         )
@@ -241,7 +256,130 @@ class ClimateRuntime:
                     )
                 except ClimateRuntimeUnavailable:
                     snapshot = None
-            return contour_snapshot(self._contours, self._registry, snapshot)
+            return contour_snapshot(
+                self._contours,
+                self._registry,
+                snapshot,
+                settings_apply_enabled=(
+                    self.configuration.climate_bridge_mode
+                    is ClimateBridgeMode.MANAGED
+                ),
+            )
+
+    async def async_contour_apply_preview(self) -> dict[str, object]:
+        """Preview supported saved-contour changes without posting commands."""
+
+        async with self._lock:
+            self._require_contour_apply_client()
+            contour = self._climate_contour()
+            snapshot = await self._async_refresh_unlocked(persist_evidence=False)
+            return build_contour_apply_plan(
+                contour,
+                self._registry,
+                snapshot,
+            ).preview_payload()
+
+    async def async_apply_contour(self, payload: object) -> ContourApplyReceipt:
+        """Idempotently apply three supported settings after explicit consent."""
+
+        request_id, contour_id = parse_contour_apply_request(payload)
+        async with self._lock:
+            client = self._require_contour_apply_client()
+            contour = self._climate_contour()
+            if contour.contour_id != contour_id:
+                raise ContourApplyViolation("climate contour is not configured")
+            fingerprint = contour_fingerprint(contour)
+            prior = self._contour_applications.existing(request_id, fingerprint)
+            if prior is not None:
+                if prior.receipt.status is ContourApplyStatus.PENDING:
+                    try:
+                        snapshot = await self._async_refresh_unlocked(
+                            persist_evidence=False
+                        )
+                    except ClimateRuntimeUnavailable:
+                        return prior.receipt
+                    confirmed = confirmed_contour_room_count(prior.plan, snapshot)
+                    prior = self._contour_applications.update(
+                        request_id,
+                        status=(
+                            ContourApplyStatus.CONFIRMED
+                            if confirmed == len(prior.plan.rooms)
+                            else ContourApplyStatus.PENDING
+                        ),
+                        accepted_count=prior.receipt.accepted_count,
+                        confirmed_room_count=confirmed,
+                        reasons=(
+                            ()
+                            if confirmed == len(prior.plan.rooms)
+                            else ("state_not_confirmed",)
+                        ),
+                    )
+                return prior.receipt
+
+            snapshot = await self._async_refresh_unlocked(persist_evidence=False)
+            plan = build_contour_apply_plan(contour, self._registry, snapshot)
+            record = self._contour_applications.begin(request_id, plan)
+            if not plan.commands:
+                return record.receipt
+
+            accepted_count = 0
+            for command in plan.commands:
+                try:
+                    await client.async_execute(command)
+                except ClimateCommandRejected:
+                    return self._contour_applications.update(
+                        request_id,
+                        status=(
+                            ContourApplyStatus.PARTIAL
+                            if accepted_count
+                            else ContourApplyStatus.REJECTED
+                        ),
+                        accepted_count=accepted_count,
+                        confirmed_room_count=0,
+                        reasons=("engine_rejected",),
+                    ).receipt
+                except Exception:
+                    # The current POST may have reached the engine. Reserve the
+                    # request forever in this runtime and never resubmit it.
+                    return self._contour_applications.update(
+                        request_id,
+                        status=(
+                            ContourApplyStatus.PARTIAL
+                            if accepted_count
+                            else ContourApplyStatus.UNAVAILABLE
+                        ),
+                        accepted_count=accepted_count,
+                        confirmed_room_count=0,
+                        reasons=("command_result_unavailable",),
+                    ).receipt
+                accepted_count += 1
+
+            try:
+                observed = await self._async_refresh_unlocked(persist_evidence=False)
+            except ClimateRuntimeUnavailable:
+                return self._contour_applications.update(
+                    request_id,
+                    status=ContourApplyStatus.PENDING,
+                    accepted_count=accepted_count,
+                    confirmed_room_count=0,
+                    reasons=("verification_unavailable",),
+                ).receipt
+            confirmed = confirmed_contour_room_count(plan, observed)
+            return self._contour_applications.update(
+                request_id,
+                status=(
+                    ContourApplyStatus.CONFIRMED
+                    if confirmed == len(plan.rooms)
+                    else ContourApplyStatus.PENDING
+                ),
+                accepted_count=accepted_count,
+                confirmed_room_count=confirmed,
+                reasons=(
+                    ()
+                    if confirmed == len(plan.rooms)
+                    else ("state_not_confirmed",)
+                ),
+            ).receipt
 
     async def async_native_climate_preview(
         self,
@@ -691,6 +829,21 @@ class ClimateRuntime:
         ):
             raise ClimateRuntimeUnavailable("climate bridge is disabled")
         return self._bridge_client
+
+    def _require_contour_apply_client(self) -> ClimateBridgeClient:
+        """Keep contour application separate from the legacy canary path."""
+
+        if self.configuration.climate_bridge_mode is not ClimateBridgeMode.MANAGED:
+            raise ClimateRuntimeUnavailable(
+                "contour settings require the normal existing-engine connection"
+            )
+        return self._require_client()
+
+    def _climate_contour(self) -> ContourDefinition:
+        contour = self._contours.contour(CLIMATE_CONTOUR_ID)
+        if contour is None:
+            raise ContourApplyViolation("climate contour is not configured")
+        return contour
 
     def _readiness_payload(
         self,

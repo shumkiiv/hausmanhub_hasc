@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import json
+import secrets
 from typing import Any
 
 import voluptuous as vol
@@ -64,6 +65,7 @@ from .application.contours import (
     contour_snapshot,
     with_climate_contour_mode,
 )
+from .application.contour_apply import ContourApplyViolation
 from .const import DOMAIN, ENTRY_TITLE, ENTRY_UNIQUE_ID
 from .domain.configuration import (
     APPROVED_MODES,
@@ -111,6 +113,8 @@ CONTOUR_TARGET_HUMIDITY_FIELD = "contour_target_humidity"
 CONTOUR_STRATEGY_FIELD = "contour_strategy"
 CONTOUR_CONFIRM_FIELD = "confirm_contour_save"
 CONTOUR_STATUS_CLOSE_FIELD = "close_contour_status"
+CONTOUR_APPLY_CONFIRM_FIELD = "confirm_contour_apply"
+CONTOUR_APPLY_RESULT_CLOSE_FIELD = "close_contour_apply_result"
 CLIMATE_REGISTRY_JSON_FIELD = "climate_registry_json"
 CLIMATE_REGISTRY_CONFIRM_FIELD = "confirm_registry_save"
 CLIMATE_REGISTRY_ACTION_FIELD = "climate_registry_action"
@@ -222,6 +226,22 @@ _RUSSIAN_CONTOUR_REASON_LABELS = {
     "authority_not_ready": "двигатель не подтвердил готовность управления",
     "target_temperature_differs": "температура в двигателе отличается от настройки HASC",
     "target_humidity_differs": "влажность в двигателе отличается от настройки HASC",
+    "target_strategy_unavailable": "двигатель не сообщил текущую стратегию",
+    "target_strategy_differs": "стратегия двигателя отличается от настройки HASC",
+}
+_RUSSIAN_CONTOUR_APPLY_STATUS_LABELS = {
+    "pending": "команды приняты, подтверждение состояния ещё ожидается",
+    "confirmed": "настройки подтверждены двигателем",
+    "partial": "применена только часть настроек",
+    "rejected": "двигатель отклонил настройку",
+    "unavailable": "результат команды не удалось проверить",
+}
+_RUSSIAN_CONTOUR_APPLY_REASON_LABELS = {
+    "already_in_sync": "настройки уже совпадали, команды не потребовались",
+    "engine_rejected": "двигатель отклонил одну из команд",
+    "command_result_unavailable": "ответ на одну из команд потерян; повторная отправка заблокирована",
+    "verification_unavailable": "после команд не удалось перечитать состояние",
+    "state_not_confirmed": "двигатель ещё не показал все новые значения",
 }
 
 
@@ -346,7 +366,12 @@ ADVANCED_SETTINGS_ACTION_SELECTOR = SelectSelector(
 )
 CONTOUR_ACTION_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=["configure_climate", "view_status", "disable_climate"],
+        options=[
+            "configure_climate",
+            "apply_climate",
+            "view_status",
+            "disable_climate",
+        ],
         translation_key="contour_action",
     )
 )
@@ -553,6 +578,28 @@ def _contour_status_schema() -> vol.Schema:
         {
             vol.Required(
                 CONTOUR_STATUS_CLOSE_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
+        }
+    )
+
+
+def _contour_apply_confirm_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONTOUR_APPLY_CONFIRM_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
+        }
+    )
+
+
+def _contour_apply_result_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONTOUR_APPLY_RESULT_CLOSE_FIELD,
                 default=False,
             ): StrictBooleanSelector()
         }
@@ -1086,6 +1133,9 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _contour_registry_draft: Mapping[str, object] | None = None
     _contour_definition_draft: Mapping[str, object] | None = None
     _contour_preview: Mapping[str, Any] | None = None
+    _contour_apply_preview: Mapping[str, Any] | None = None
+    _contour_apply_request_id: str | None = None
+    _contour_apply_receipt: Mapping[str, Any] | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Show one short choice instead of mixing unrelated settings."""
@@ -1145,7 +1195,21 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             action = user_input.get(CONTOUR_ACTION_FIELD)
             if action == "configure_climate":
                 return await self._async_begin_climate_contour(runtime)
-            if action == "view_status":
+            if action == "apply_climate":
+                try:
+                    preview = await runtime.async_contour_apply_preview()
+                except ContourApplyViolation:
+                    errors["base"] = "contour_apply_not_ready"
+                except Exception:
+                    errors["base"] = "contour_apply_unavailable"
+                else:
+                    self._contour_apply_preview = preview
+                    self._contour_apply_request_id = (
+                        f"ha-options-{secrets.token_hex(16)}"
+                    )
+                    self._contour_apply_receipt = None
+                    return await self.async_step_climate_contour_apply_confirm()
+            elif action == "view_status":
                 try:
                     payload = await runtime.async_contours_snapshot()
                 except Exception:
@@ -1190,6 +1254,76 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             step_id="contours",
             data_schema=_contour_action_schema(),
             errors=errors,
+        )
+
+    async def async_step_climate_contour_apply_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Require explicit consent before changing existing-engine settings."""
+
+        runtime = self._climate_runtime()
+        if (
+            runtime is None
+            or self._contour_apply_preview is None
+            or self._contour_apply_request_id is None
+        ):
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get(CONTOUR_APPLY_CONFIRM_FIELD) is not True:
+                errors[CONTOUR_APPLY_CONFIRM_FIELD] = (
+                    "contour_apply_confirmation_required"
+                )
+            else:
+                try:
+                    receipt = await runtime.async_apply_contour(
+                        {
+                            "request_id": self._contour_apply_request_id,
+                            "contour_id": "climate",
+                            "confirm": True,
+                        }
+                    )
+                except ContourApplyViolation:
+                    errors["base"] = "contour_apply_not_ready"
+                except Exception:
+                    errors["base"] = "contour_apply_unavailable"
+                else:
+                    self._contour_apply_receipt = receipt.as_payload()
+                    return await self.async_step_climate_contour_apply_result()
+        return self.async_show_form(
+            step_id="climate_contour_apply_confirm",
+            data_schema=_contour_apply_confirm_schema(),
+            errors=errors,
+            description_placeholders=self._contour_apply_preview_placeholders(),
+        )
+
+    async def async_step_climate_contour_apply_result(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Show an honest accepted/confirmed/partial result before closing."""
+
+        if self._contour_apply_receipt is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get(CONTOUR_APPLY_RESULT_CLOSE_FIELD) is not True:
+                errors[CONTOUR_APPLY_RESULT_CLOSE_FIELD] = (
+                    "contour_apply_result_close_required"
+                )
+            else:
+                options = _merged_safe_options(
+                    self.config_entry.data,
+                    self.config_entry.options,
+                    {},
+                )
+                return self.async_create_entry(title="", data=options)
+        return self.async_show_form(
+            step_id="climate_contour_apply_result",
+            data_schema=_contour_apply_result_schema(),
+            errors=errors,
+            description_placeholders=self._contour_apply_result_placeholders(),
         )
 
     async def _async_begin_climate_contour(self, runtime: Any) -> FlowResult:
@@ -1380,7 +1514,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                         self.config_entry.data,
                         self.config_entry.options,
                         {
-                            CLIMATE_BRIDGE_MODE_FIELD: ClimateBridgeMode.SHADOW.value,
+                            CLIMATE_BRIDGE_MODE_FIELD: ClimateBridgeMode.MANAGED.value,
                             CLIMATE_BRIDGE_TARGET_FIELD: self._contour_source_target,
                             CLIMATE_CANARY_ROOM_ID_FIELD: None,
                             NATIVE_CLIMATE_MODE_FIELD: NativeClimateMode.DISABLED.value,
@@ -1562,6 +1696,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         if mode not in {
             ClimateBridgeMode.SHADOW.value,
             ClimateBridgeMode.CANARY.value,
+            ClimateBridgeMode.MANAGED.value,
         }:
             return await self.async_step_init()
         _, target_default, room_default = _safe_climate_bridge_defaults(
@@ -2414,6 +2549,48 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 execution_values.get("automatic_active")
             ),
             "algorithm": "существующий климатический контур",
+            "reasons": reason_text or "нет",
+        }
+
+    def _contour_apply_preview_placeholders(self) -> dict[str, str]:
+        """Explain exact command counts without exposing engine identifiers."""
+
+        payload = self._contour_apply_preview or {}
+        raw_changes = payload.get("changes")
+        changes = raw_changes if isinstance(raw_changes, Mapping) else {}
+        return {
+            "room_count": str(payload.get("room_count", 0)),
+            "command_count": str(payload.get("command_count", 0)),
+            "temperature_count": str(changes.get("temperature", 0)),
+            "strategy_count": str(changes.get("strategy", 0)),
+            "automatic_count": str(changes.get("automatic_mode", 0)),
+        }
+
+    def _contour_apply_result_placeholders(self) -> dict[str, str]:
+        """Render one bounded application receipt in plain Russian."""
+
+        payload = self._contour_apply_receipt or {}
+        raw_reasons = payload.get("reasons")
+        reasons = raw_reasons if isinstance(raw_reasons, list) else []
+        reason_text = "; ".join(
+            dict.fromkeys(
+                _RUSSIAN_CONTOUR_APPLY_REASON_LABELS.get(
+                    value,
+                    "неизвестная причина",
+                )
+                for value in reasons
+                if isinstance(value, str)
+            )
+        )
+        return {
+            "status": _RUSSIAN_CONTOUR_APPLY_STATUS_LABELS.get(
+                payload.get("status"),
+                "неизвестно",
+            ),
+            "command_count": str(payload.get("command_count", 0)),
+            "accepted_count": str(payload.get("accepted_count", 0)),
+            "room_count": str(payload.get("room_count", 0)),
+            "confirmed_room_count": str(payload.get("confirmed_room_count", 0)),
             "reasons": reason_text or "нет",
         }
 

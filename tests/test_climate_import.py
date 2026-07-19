@@ -103,6 +103,7 @@ class ClimateImportTest(unittest.TestCase):
         self.assertEqual(2, len(snapshot.rooms))
         self.assertEqual(2, len(snapshot.devices))
         self.assertTrue(snapshot.room("living").authority_eligible)
+        self.assertEqual("normal", snapshot.room("living").target_strategy)
         self.assertFalse(snapshot.room("kids").authority_eligible)
         self.assertEqual(
             (ClimateDeviceKind.AIR_CONDITIONER,),
@@ -121,6 +122,14 @@ class ClimateImportTest(unittest.TestCase):
 
         self.assertFalse(snapshot.runtime_fresh)
         self.assertEqual(2, len(snapshot.rooms))
+
+    def test_unknown_or_structured_strategy_is_treated_as_unavailable(self) -> None:
+        for value in ("turbo", {"value": ["normal"]}, ["normal"]):
+            with self.subTest(value=value):
+                payload = source_payload()
+                payload["rooms"][0]["targets"]["targetStrategy"] = value  # type: ignore[index]
+                snapshot = import_climate_state(payload)
+                self.assertIsNone(snapshot.room("living").target_strategy)
 
     def test_import_rejects_wrong_contract_duplicates_and_unknown_commands(self) -> None:
         wrong_contract = source_payload()

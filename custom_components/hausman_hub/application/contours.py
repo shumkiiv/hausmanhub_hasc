@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from ..domain.climate import (
+    ClimateControlOwner,
     ClimateControlScope,
     ClimateDeviceKind,
     ClimateRegistry,
@@ -32,7 +33,7 @@ from .climate_registry_import import (
 
 CLIMATE_CONTOUR_ID = "climate"
 CONTOUR_CONTRACT_NAME = "hausman-hasc-contours"
-CONTOUR_CONTRACT_VERSION = 1
+CONTOUR_CONTRACT_VERSION = 2
 _ACTIVE_KINDS = frozenset(
     {
         ClimateDeviceKind.AIR_CONDITIONER,
@@ -252,6 +253,8 @@ def contour_snapshot(
     contours: ContourRegistry,
     climate_registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot | None,
+    *,
+    settings_apply_enabled: bool = False,
 ) -> dict[str, object]:
     """Project public contour status without private source or entity ids."""
 
@@ -262,7 +265,12 @@ def contour_snapshot(
             "version": CONTOUR_CONTRACT_VERSION,
         },
         "contours": [
-            _contour_status(contour, climate_registry, snapshot)
+            _contour_status(
+                contour,
+                climate_registry,
+                snapshot,
+                settings_apply_enabled=settings_apply_enabled,
+            )
             for contour in contours.contours
         ],
     }
@@ -272,6 +280,8 @@ def _contour_status(
     contour: ContourDefinition,
     climate_registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot | None,
+    *,
+    settings_apply_enabled: bool,
 ) -> dict[str, object]:
     room_results = [
         _room_status(room, climate_registry, snapshot)
@@ -301,6 +311,16 @@ def _contour_status(
         status = "attention"
     else:
         status = "ready"
+    settings_apply_available = (
+        settings_apply_enabled
+        and contour.mode is ContourMode.AUTOMATIC
+        and snapshot is not None
+        and snapshot.runtime_fresh
+        and all(
+            _room_settings_apply_available(room, climate_registry, snapshot)
+            for room in contour.rooms
+        )
+    )
     return {
         "id": contour.contour_id,
         "name": contour.name,
@@ -316,6 +336,16 @@ def _contour_status(
             "owner": contour.engine.value,
             "automatic_active": automatic_active,
             "hasc_direct_commands": False,
+            "settings_apply": {
+                "available": settings_apply_available,
+                "requires_confirmation": True,
+                "parameters": {
+                    "temperature": True,
+                    "strategy": True,
+                    "automatic_mode": True,
+                    "humidity": False,
+                },
+            },
         },
         "reasons": reasons,
     }
@@ -359,10 +389,19 @@ def _room_status(
         None if imported_room is None else imported_room.target_humidity,
         assignment.target_humidity,
     )
+    strategy_matches = (
+        imported_room is not None
+        and imported_room.target_strategy is not None
+        and imported_room.target_strategy == assignment.strategy.value
+    )
     if imported_room is not None and not temperature_matches:
         reasons.append("target_temperature_differs")
     if imported_room is not None and humidity_matches is False:
         reasons.append("target_humidity_differs")
+    if imported_room is not None and imported_room.target_strategy is None:
+        reasons.append("target_strategy_unavailable")
+    elif imported_room is not None and not strategy_matches:
+        reasons.append("target_strategy_differs")
     available = (
         imported_room is not None
         and snapshot is not None
@@ -371,7 +410,7 @@ def _room_status(
     )
     targets_in_sync = temperature_matches and (
         humidity_matches is True or humidity_matches is None
-    )
+    ) and strategy_matches
     return {
         "id": assignment.room_id,
         "name": None if room is None else room.name,
@@ -389,6 +428,9 @@ def _room_status(
         },
         "device_count": len(assignment.device_ids),
         "engine_mode": None if imported_room is None else imported_room.mode,
+        "engine_strategy": (
+            None if imported_room is None else imported_room.target_strategy
+        ),
         "authority_ready": authority_ready,
         "targets_in_sync": targets_in_sync,
         "automatic_active": (
@@ -396,6 +438,37 @@ def _room_status(
         ),
         "reasons": reasons,
     }
+
+
+def _room_settings_apply_available(
+    assignment: ClimateContourRoom,
+    climate_registry: ClimateRegistry,
+    snapshot: ClimateImportSnapshot,
+) -> bool:
+    """Mirror the typed room-command capability gate without exposing bindings."""
+
+    room = snapshot.room(assignment.room_id)
+    if room is None:
+        return False
+    controlled_air_conditioners = []
+    for device_id in assignment.device_ids:
+        device = climate_registry.device(device_id)
+        imported = None if device is None else snapshot.device(device.source_id)
+        if (
+            device is None
+            or imported is None
+            or imported.room_id != assignment.room_id
+            or not imported.available
+        ):
+            return False
+        if (
+            device.kind is ClimateDeviceKind.AIR_CONDITIONER
+            and device.control_owner is ClimateControlOwner.CLIMATE_CORE
+            and device.control_scope is ClimateControlScope.MANAGED
+            and "climate.set_temperature" in imported.command_types
+        ):
+            controlled_air_conditioners.append(device)
+    return len(controlled_air_conditioners) == 1
 
 
 def _same_number(left: object, right: object) -> bool:

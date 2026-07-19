@@ -96,6 +96,21 @@ class ClimateConfigurationTest(unittest.TestCase):
                     climate_canary_room_id_value=room,
                 )
 
+    def test_managed_contour_requires_target_and_never_retains_canary_room(
+        self,
+    ) -> None:
+        result = create_options(
+            "shadow",
+            climate_bridge_mode_value="managed",
+            climate_bridge_target_value="http://127.0.0.1:1880",
+            climate_canary_room_id_value="living",
+        )
+
+        configuration = effective_configuration(ENTRY, result)
+        self.assertIs(configuration.climate_bridge_mode, ClimateBridgeMode.MANAGED)
+        self.assertIsNone(configuration.climate_canary_room_id)
+        self.assertNotIn("climate_canary_room_id", result)
+
     def test_persisted_hidden_bridge_fields_fail_closed(self) -> None:
         with self.assertRaisesRegex(ConfigurationViolation, "disabled"):
             effective_configuration(

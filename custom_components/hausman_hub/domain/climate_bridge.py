@@ -26,6 +26,7 @@ class ClimateBridgeMode(StrEnum):
     DISABLED = "disabled"
     SHADOW = "shadow"
     CANARY = "canary"
+    MANAGED = "managed"
 
 
 @dataclass(frozen=True, slots=True)

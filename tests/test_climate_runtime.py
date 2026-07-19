@@ -142,6 +142,32 @@ class AmbiguousBridge(MemoryBridge):
         raise RuntimeError("synthetic transport ambiguity")
 
 
+class ReflectingContourBridge(MemoryBridge):
+    def __init__(self) -> None:
+        super().__init__()
+        self.payload = source_payload()
+        self.payload["rooms"][0]["mode"] = "manual"  # type: ignore[index]
+        self.payload["rooms"][0]["targets"]["temperature"] = 26  # type: ignore[index]
+        self.payload["rooms"][0]["targets"]["targetStrategy"] = "soft"  # type: ignore[index]
+        self.snapshot = import_climate_state(self.payload)
+
+    async def async_execute(self, plan):
+        self.executed.append(plan)
+        room = self.payload["rooms"][0]  # type: ignore[index]
+        if plan.action == "set_room_target_strategy":
+            room["targets"]["targetStrategy"] = plan.backend_payload[  # type: ignore[index]
+                "targetStrategy"
+            ]
+        elif plan.action == "set_room_target":
+            room["targets"]["temperature"] = plan.backend_payload[  # type: ignore[index]
+                "targetTemperature"
+            ]
+        elif plan.action == "set_room_mode":
+            room["mode"] = plan.backend_payload["mode"]  # type: ignore[index]
+        self.snapshot = import_climate_state(self.payload)
+        return {"ok": True}
+
+
 def configuration(mode: ClimateBridgeMode) -> SafeConfiguration:
     return SafeConfiguration(
         mode="shadow",
@@ -173,6 +199,146 @@ def ready_evidence_store(
 
 
 class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_contour_apply_posts_three_typed_changes_and_confirms_state(
+        self,
+    ) -> None:
+        bridge = ReflectingContourBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            operation_id_factory=lambda: "1" * 32,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+
+        public = await runtime.async_contours_snapshot()
+        preview = await runtime.async_contour_apply_preview()
+        receipt = await runtime.async_apply_contour(
+            {
+                "request_id": "apply-1",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+        duplicate = await runtime.async_apply_contour(
+            {
+                "request_id": "apply-1",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+
+        self.assertTrue(
+            public["contours"][0]["execution"]["settings_apply"][  # type: ignore[index]
+                "available"
+            ]
+        )
+        self.assertEqual(3, preview["command_count"])
+        self.assertEqual("confirmed", receipt.status.value)
+        self.assertEqual(3, receipt.accepted_count)
+        self.assertEqual(1, receipt.confirmed_room_count)
+        self.assertEqual(receipt, duplicate)
+        self.assertEqual(
+            [
+                "set_room_target_strategy",
+                "set_room_target",
+                "set_room_mode",
+            ],
+            [plan.action for plan in bridge.executed],
+        )
+
+    async def test_contour_apply_pending_retry_only_rereads_and_never_reposts(
+        self,
+    ) -> None:
+        bridge = MemoryBridge()
+        payload = source_payload()
+        payload["rooms"][0]["targets"]["temperature"] = 26  # type: ignore[index]
+        bridge.snapshot = import_climate_state(payload)
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            operation_id_factory=lambda: "2" * 32,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        request = {
+            "request_id": "apply-pending",
+            "contour_id": "climate",
+            "confirm": True,
+        }
+
+        first = await runtime.async_apply_contour(request)
+        second = await runtime.async_apply_contour(request)
+
+        self.assertEqual("pending", first.status.value)
+        self.assertEqual("pending", second.status.value)
+        self.assertEqual(1, len(bridge.executed))
+        self.assertGreaterEqual(bridge.fetch_count, 4)
+
+    async def test_ambiguous_contour_apply_is_reserved_and_not_retried(self) -> None:
+        bridge = AmbiguousBridge()
+        payload = source_payload()
+        payload["rooms"][0]["targets"]["temperature"] = 26  # type: ignore[index]
+        bridge.snapshot = import_climate_state(payload)
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            operation_id_factory=lambda: "3" * 32,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        request = {
+            "request_id": "apply-ambiguous",
+            "contour_id": "climate",
+            "confirm": True,
+        }
+
+        first = await runtime.async_apply_contour(request)
+        second = await runtime.async_apply_contour(request)
+
+        self.assertEqual("unavailable", first.status.value)
+        self.assertEqual(first, second)
+        self.assertEqual(1, len(bridge.executed))
+
     async def test_contour_setup_uses_existing_engine_and_never_posts(self) -> None:
         bridge = MemoryBridge()
         climate_store = MemoryStore(ClimateRegistry())
@@ -206,6 +372,11 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("ready", result["contours"][0]["status"])  # type: ignore[index]
         self.assertTrue(
             result["contours"][0]["execution"]["automatic_active"]  # type: ignore[index]
+        )
+        self.assertFalse(
+            result["contours"][0]["execution"]["settings_apply"][  # type: ignore[index]
+                "available"
+            ]
         )
         self.assertEqual([], bridge.executed)
         self.assertEqual(contours, contour_store.registry)

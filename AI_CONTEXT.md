@@ -1,6 +1,6 @@
 # HASC AI Context
 
-Last updated: 2026-07-18.
+Last updated: 2026-07-19.
 
 ## Project state
 
@@ -23,6 +23,19 @@ Last updated: 2026-07-18.
   matching targets. Version 1.0.0 sends no climate POST and does not sync
   parameters into the engine; mismatches are explicit `attention`. See the
   [1.0.0 contour decision](LLM_WIKI/Manual/2026-07-18-hasc-v1-0-0-universal-contours.md).
+- Version 1.1.0 adds the first normal contour-settings execution path while
+  keeping the existing `hausman-climate` algorithm and executor. A saved
+  automatic contour uses a distinct `managed` bridge mode; legacy `shadow`
+  remains strictly no-POST and legacy one-room `canary` remains separate.
+  Explicit confirmation can apply only typed room strategy, temperature, and
+  automatic mode, in that order. A bounded in-memory idempotency ledger
+  reserves the request before the first POST, never resubmits ambiguous or
+  duplicate requests, and rereads Climate API state before reporting
+  confirmation. Room humidity is declared unsupported for apply because the
+  current engine has no shared room-humidity command. Contour contract v2 adds
+  observed strategy and apply capability; local tablet preview/apply routes
+  expose no private binding or backend payload. See the
+  [1.1.0 apply decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-1-0-confirmed-contour-apply.md).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after
   its 153 tests, disposable Core 2026.6.4/2026.7.0 checks, and final Kimi
   review passed. This source push did not create a tag, release, HACS
