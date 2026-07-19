@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import unittest
 
 from custom_components.hausman_hub.application.climate_commands import (
@@ -21,6 +22,8 @@ from custom_components.hausman_hub.application.climate_runtime import (
 from custom_components.hausman_hub.application.contours import (
     build_climate_contour_setup,
     contour_registry_to_payload,
+    with_climate_room_profiles,
+    with_climate_schedule,
 )
 from custom_components.hausman_hub.application.climate_registry import registry_to_payload
 from custom_components.hausman_hub.domain.climate import ClimateRegistry
@@ -199,6 +202,152 @@ def ready_evidence_store(
 
 
 class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_schedule_switches_profile_and_uses_existing_typed_executor_once(
+        self,
+    ) -> None:
+        bridge = ReflectingContourBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        contours = with_climate_room_profiles(
+            contours,
+            {
+                "living": {
+                    "profiles": {
+                        "day": {
+                            "target_temperature": 25.0,
+                            "target_humidity": 45,
+                            "strategy": "normal",
+                        },
+                        "night": {
+                            "target_temperature": 22.0,
+                            "target_humidity": 40,
+                            "strategy": "soft",
+                        },
+                    },
+                    "active_profile": "day",
+                }
+            },
+        )
+        contours = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        contour_store = MemoryContourStore(contours)
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=contour_store,
+            bridge_client=bridge,
+            operation_id_factory=lambda: "9" * 32,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+
+        receipt = await runtime.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 0)
+        )
+        repeated = await runtime.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 1)
+        )
+
+        self.assertIsNotNone(receipt)
+        self.assertEqual("confirmed", receipt.status.value)  # type: ignore[union-attr]
+        self.assertIsNone(repeated)
+        self.assertEqual(
+            "night",
+            contour_store.registry.contour("climate").rooms[0].active_profile.value,  # type: ignore[union-attr]
+        )
+        self.assertEqual(
+            ["set_room_target", "set_room_mode"],
+            [plan.action for plan in bridge.executed],
+        )
+
+    async def test_disabled_schedule_and_matching_period_send_no_commands(self) -> None:
+        bridge = ReflectingContourBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+        )
+        await runtime.async_start()
+
+        result = await runtime.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 0)
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual([], bridge.executed)
+
+    async def test_new_schedule_applies_current_period_once_even_if_profile_matches(
+        self,
+    ) -> None:
+        bridge = ReflectingContourBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        contours = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        contour_store = MemoryContourStore(contours)
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=contour_store,
+            bridge_client=bridge,
+        )
+        await runtime.async_start()
+
+        first = await runtime.async_run_climate_schedule(
+            datetime(2026, 7, 19, 12, 0)
+        )
+        second = await runtime.async_run_climate_schedule(
+            datetime(2026, 7, 19, 12, 1)
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNone(second)
+        self.assertEqual(
+            "day",
+            contour_store.registry.contour(  # type: ignore[union-attr]
+                "climate"
+            ).schedule.last_applied_profile.value,
+        )
+        self.assertEqual(3, len(bridge.executed))
+
     async def test_contour_apply_posts_three_typed_changes_and_confirms_state(
         self,
     ) -> None:

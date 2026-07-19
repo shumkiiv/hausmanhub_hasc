@@ -67,6 +67,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         contour_store=HomeAssistantContourStore(hass, entry.entry_id),
     )
     await climate_runtime.async_start()
+    from .climate_schedule import async_start_climate_schedule
+
+    await async_start_climate_schedule(hass, entry, climate_runtime)
     register_climate_api(hass, climate_runtime)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True

@@ -47,7 +47,7 @@ Last updated: 2026-07-19.
   separate confirmed 1.1 apply path is unchanged, including unsupported
   humidity. See the
   [1.2.0 room-parameters decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-2-0-room-parameters.md).
-- Version 1.3.0 is the current HASC-only worktree. Every contour room now has
+- Version 1.3.0 gave every contour room
   exact `day` and `night` comfort bundles and an approved active profile.
   Existing v1 contour storage is migrated once to storage v2 by copying the
   former targets into both profiles with `day` active, so installation or
@@ -58,9 +58,24 @@ Last updated: 2026-07-19.
   HASC state; only the apply step may call the existing `hausman-climate`
   executor. Ordinary contour editing updates the active bundle and preserves
   the inactive bundle. Public contour contract v3 exposes active/day/night
-  comfort values without private bindings. Automatic time switching is not
-  part of 1.3.0 and is the next layer. See the
+  comfort values without private bindings. See the
   [1.3.0 profile decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-3-0-day-night-profiles.md).
+- Version 1.4.0 is the current HASC-only worktree. The first options page and
+  ordinary climate workflow use plain Russian labels, with `strings.json` and
+  the English-locale fallback intentionally mirroring Russian so a locale
+  mismatch cannot produce a half-English UI. The visible sections are
+  Climate, Home information, and Diagnostics/maintenance. Contour/device
+  internals remain stable but are hidden from the ordinary language.
+  An explicitly confirmed local-time schedule can now switch every room
+  between the saved day/night profiles. A one-minute HA clock adapter is
+  always registered; the runtime performs no bridge I/O unless the schedule
+  is enabled, the contour is automatic, the bridge is managed, and the desired
+  profile differs. It atomically persists the new active profile before
+  reusing the same typed, idempotent contour executor. It never retries on the
+  next minute because the selected profile is already persisted. Storage v3
+  migrates v1/v2 with a disabled 07:00/23:00 schedule. Tablet contour contract
+  v4 exposes only enabled/day/night times. See the
+  [1.4.0 schedule decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-4-0-russian-schedule.md).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after
   its 153 tests, disposable Core 2026.6.4/2026.7.0 checks, and final Kimi
   review passed. This source push did not create a tag, release, HACS
@@ -1288,15 +1303,14 @@ test-only changes do not need a new HACS version.
 
 ## Next decision gate
 
-After the staged 1.3.0 verification and release, the next product layer is a
-simple schedule that switches the already saved `day` and `night` profiles.
-It must not create a second climate algorithm: schedule decisions select a
-profile in HASC, while the existing explicit apply boundary and
-`hausman-climate` executor remain authoritative. The Android screen can then
-consume contour contract v3 for profile display and selection. Temporary manual
-overrides, a readable decision journal, and further contour types follow on the
-same general contour model. Generic proxying, arbitrary device execution, and
-unsupervised live deployment remain out of scope.
+After the staged 1.4.0 verification and release, the next product layer is a
+temporary manual override that lasts until the next saved schedule boundary.
+It must keep the existing typed `hausman-climate` executor authoritative and
+must make the remaining duration clear. The Android screen can then consume
+contour contract v4 for profile and schedule display. A readable decision
+journal and further contour types follow on the same general contour model.
+Generic proxying, arbitrary device execution, and unsupervised live deployment
+remain out of scope.
 
 The current public manual-HACS decision and its narrow implementation boundary
 are recorded in the [HACS packaging decision

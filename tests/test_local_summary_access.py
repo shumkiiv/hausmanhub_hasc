@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import importlib
 import json
 from pathlib import Path
@@ -27,8 +28,11 @@ FAKE_MODULE_NAMES = (
     "homeassistant.helpers.area_registry",
     "homeassistant.helpers.device_registry",
     "homeassistant.helpers.entity_registry",
+    "homeassistant.helpers.event",
     "homeassistant.helpers.start",
     "homeassistant.helpers.storage",
+    "homeassistant.util",
+    "homeassistant.util.dt",
 )
 
 
@@ -342,6 +346,19 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     entity_registry.async_entries_for_config_entry = (  # type: ignore[attr-defined]
         lambda registry, entry_id: registry.async_entries_for_config_entry(entry_id)
     )
+    event = ModuleType("homeassistant.helpers.event")
+
+    def async_track_time_interval(
+        hass: object,
+        action: object,
+        interval: object,
+    ) -> object:
+        """Record no timer activity while returning the normal cancel callback."""
+
+        del hass, action, interval
+        return lambda: None
+
+    event.async_track_time_interval = async_track_time_interval  # type: ignore[attr-defined]
     start = ModuleType("homeassistant.helpers.start")
 
     def async_at_started(hass: object, startup_callback: object) -> None:
@@ -380,6 +397,9 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
             return None
 
     storage.Store = FakeStore  # type: ignore[attr-defined]
+    util = ModuleType("homeassistant.util")
+    dt = ModuleType("homeassistant.util.dt")
+    dt.now = lambda: datetime(2026, 7, 19, 12, 0)  # type: ignore[attr-defined]
 
     homeassistant.auth = auth  # type: ignore[attr-defined]
     homeassistant.components = components  # type: ignore[attr-defined]
@@ -391,8 +411,11 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     helpers.area_registry = area_registry  # type: ignore[attr-defined]
     helpers.device_registry = device_registry  # type: ignore[attr-defined]
     helpers.entity_registry = entity_registry  # type: ignore[attr-defined]
+    helpers.event = event  # type: ignore[attr-defined]
     helpers.start = start  # type: ignore[attr-defined]
     helpers.storage = storage  # type: ignore[attr-defined]
+    homeassistant.util = util  # type: ignore[attr-defined]
+    util.dt = dt  # type: ignore[attr-defined]
 
     return {
         "homeassistant": homeassistant,
@@ -406,8 +429,11 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.helpers.area_registry": area_registry,
         "homeassistant.helpers.device_registry": device_registry,
         "homeassistant.helpers.entity_registry": entity_registry,
+        "homeassistant.helpers.event": event,
         "homeassistant.helpers.start": start,
         "homeassistant.helpers.storage": storage,
+        "homeassistant.util": util,
+        "homeassistant.util.dt": dt,
     }
 
 

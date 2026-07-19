@@ -61,7 +61,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("1.3.0", manifest["version"])
+        self.assertEqual("1.4.0", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -2357,6 +2357,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                 {
                     "configure_climate",
                     "configure_profiles",
+                    "configure_schedule",
                     "select_profile",
                     "apply_climate",
                     "view_status",
@@ -2395,14 +2396,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
         expected_labels = {
-            "en": {
-                "read-only": "Normal information reading",
-                "shadow": "Additional information check",
-            },
-            "ru": {
-                "read-only": "Обычное чтение сведений",
-                "shadow": "Дополнительная проверка сведений",
-            },
+            "read-only": "Обычный режим — рекомендуется",
+            "shadow": "Дополнительная проверка ошибок",
         }
 
         for language, content in (("en", english), ("ru", russian)):
@@ -2410,27 +2405,32 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                 user_step = content["config"]["step"]["user"]
                 steps = content["options"]["step"]
                 self.assertEqual(
-                    expected_labels[language],
+                    expected_labels,
                     content["selector"]["mode"]["options"],
                 )
                 self.assertIn("mode", user_step["data_description"])
                 self.assertEqual({"settings_section"}, set(steps["init"]["data"]))
 
-        self.assertIn("grants no device control", english["config"]["step"]["user"]["description"])
-        self.assertIn(
-            "not climate control",
-            english["options"]["step"]["test_switch"]["description"].lower(),
+        for section in ("config", "options", "selector"):
+            self.assertEqual(russian[section], english[section])
+        self.assertEqual(
+            russian,
+            json.loads((INTEGRATION / "strings.json").read_text(encoding="utf-8")),
         )
         self.assertIn(
-            "no commands",
-            english["selector"]["climate_bridge_mode"]["options"]["shadow"].lower(),
+            "Это не управление климатом",
+            english["options"]["step"]["test_switch"]["description"],
+        )
+        self.assertIn(
+            "без команд",
+            english["selector"]["climate_bridge_mode"]["options"]["shadow"],
         )
         self.assertEqual(
             {"disabled", "shadow", "canary", "managed"},
             set(english["selector"]["climate_bridge_mode"]["options"]),
         )
         self.assertIn(
-            "never turns a device",
+            "ничего не включает и не выключает",
             english["options"]["step"]["native_climate"]["description"],
         )
         self.assertIn(
@@ -2438,7 +2438,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             russian["options"]["step"]["native_climate"]["description"],
         )
         self.assertIn(
-            "Управление устройствами здесь не включается",
+            "Управление устройствами не включается",
             russian["config"]["step"]["user"]["description"],
         )
         self.assertIn(

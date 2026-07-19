@@ -21,6 +21,7 @@ from custom_components.hausman_hub.application.contours import (
     with_active_climate_profile,
     with_climate_contour_mode,
     with_climate_room_profiles,
+    with_climate_schedule,
 )
 from custom_components.hausman_hub.domain.climate import (
     ClimateControlOwner,
@@ -92,7 +93,7 @@ class ContoursTest(unittest.TestCase):
         result = contour_snapshot(contours, climate_registry, source_snapshot())
 
         contour = result["contours"][0]  # type: ignore[index]
-        self.assertEqual(3, result["contract"]["version"])  # type: ignore[index]
+        self.assertEqual(4, result["contract"]["version"])  # type: ignore[index]
         self.assertEqual("hausman-climate", contour["engine"]["name"])
         self.assertTrue(contour["execution"]["automatic_active"])
         self.assertFalse(contour["execution"]["hasc_direct_commands"])
@@ -163,7 +164,7 @@ class ContoursTest(unittest.TestCase):
 
         migrated = migrate_contour_registry_payload(1, legacy)
         room = migrated["contours"][0]["rooms"][0]  # type: ignore[index]
-        self.assertEqual(2, migrated["version"])
+        self.assertEqual(3, migrated["version"])
         self.assertEqual("day", room["active_profile"])
         self.assertEqual(room["profiles"]["day"], room["profiles"]["night"])
         self.assertEqual(
@@ -177,6 +178,62 @@ class ContoursTest(unittest.TestCase):
         hidden["contours"][0]["rooms"][0]["hidden"] = True  # type: ignore[index]
         with self.assertRaises(ContourRegistryViolation):
             migrate_contour_registry_payload(1, hidden)
+
+    def test_profile_registry_migration_adds_disabled_schedule(self) -> None:
+        _, contours = setup()
+        profile_payload = contour_registry_to_payload(contours)
+        profile_payload["version"] = 2
+        profile_payload["contours"][0].pop("schedule")  # type: ignore[index]
+
+        migrated = migrate_contour_registry_payload(2, profile_payload)
+
+        schedule = migrated["contours"][0]["schedule"]  # type: ignore[index]
+        self.assertEqual(
+            {
+                "enabled": False,
+                "day_start": "07:00",
+                "night_start": "23:00",
+                "last_applied_profile": None,
+            },
+            schedule,
+        )
+        self.assertEqual(3, migrated["version"])
+
+    def test_schedule_selects_day_and_night_across_midnight(self) -> None:
+        climate_registry, contours = setup()
+        scheduled = with_climate_schedule(
+            contours,
+            enabled=True,
+            day_start="07:00",
+            night_start="23:00",
+        )
+        schedule = scheduled.contour("climate").schedule  # type: ignore[union-attr]
+
+        self.assertEqual("night", schedule.profile_at(hour=6, minute=59).value)
+        self.assertEqual("day", schedule.profile_at(hour=7, minute=0).value)
+        self.assertEqual("night", schedule.profile_at(hour=23, minute=0).value)
+        public = contour_snapshot(scheduled, climate_registry, source_snapshot())
+        self.assertEqual(
+            {"enabled": True, "day_start": "07:00", "night_start": "23:00"},
+            public["contours"][0]["schedule"],  # type: ignore[index]
+        )
+
+    def test_schedule_rejects_equal_or_malformed_times(self) -> None:
+        _, contours = setup()
+        for day_start, night_start in (
+            ("07:00", "07:00"),
+            ("7:00", "23:00"),
+            ("07:00", "24:00"),
+        ):
+            with self.subTest(day=day_start, night=night_start), self.assertRaises(
+                ContourRegistryViolation
+            ):
+                with_climate_schedule(
+                    contours,
+                    enabled=True,
+                    day_start=day_start,
+                    night_start=night_start,
+                )
 
     def test_contour_edit_updates_active_profile_and_keeps_inactive_profile(self) -> None:
         _, contours = setup()

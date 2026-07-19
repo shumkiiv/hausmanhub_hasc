@@ -2890,7 +2890,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_result(
             await disabled_contours.json(),
             {
-                "contract": {"name": "hausman-hasc-contours", "version": 3},
+                "contract": {"name": "hausman-hasc-contours", "version": 4},
                 "contours": [],
             },
             "new disabled contour registry must be empty and versioned",

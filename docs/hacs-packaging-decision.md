@@ -45,7 +45,7 @@ root-level metadata:
 
 ```json
 {
-  "name": "HausMan Hub HASC",
+  "name": "HASC — управление домом",
   "homeassistant": "2026.6.4"
 }
 ```

@@ -156,7 +156,7 @@ class StaticContractValidationTest(unittest.TestCase):
         hacs_metadata = load("hacs.json")
         self.assertEqual(
             {
-                "name": "HausMan Hub HASC",
+                "name": "HASC — управление домом",
                 "homeassistant": "2026.6.4",
             },
             hacs_metadata,

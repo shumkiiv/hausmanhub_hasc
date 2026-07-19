@@ -58,8 +58,10 @@ class HacsPackageCheckTest(unittest.TestCase):
         changed_hacs = replace_file(
             self.files,
             package.HACS_METADATA_PATH,
-            b'{"name":"HausMan Hub HASC","homeassistant":"2026.6.4",'
-            b'"render_readme":true}',
+            (
+                '{"name":"HASC — управление домом",'
+                '"homeassistant":"2026.6.4","render_readme":true}'
+            ).encode("utf-8"),
         )
         hacs_findings = package.find_hacs_package_violations(
             changed_hacs,

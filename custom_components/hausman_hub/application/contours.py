@@ -17,6 +17,7 @@ from ..domain.contours import (
     ClimateComfortSettings,
     ClimateContourRoom,
     ClimateProfile,
+    ClimateSchedule,
     ContourDefinition,
     ContourEngine,
     ContourKind,
@@ -34,8 +35,9 @@ from .climate_registry_import import (
 
 CLIMATE_CONTOUR_ID = "climate"
 CONTOUR_CONTRACT_NAME = "hausman-hasc-contours"
-CONTOUR_CONTRACT_VERSION = 3
+CONTOUR_CONTRACT_VERSION = 4
 LEGACY_CONTOUR_REGISTRY_VERSION = 1
+PROFILE_CONTOUR_REGISTRY_VERSION = 2
 _ACTIVE_KINDS = frozenset(
     {
         ClimateDeviceKind.AIR_CONDITIONER,
@@ -69,8 +71,12 @@ def contour_registry_from_payload(payload: object) -> ContourRegistry:
             item = _mapping(raw, f"contour {index}")
             _exact_keys(
                 item,
-                {"id", "name", "kind", "mode", "engine", "rooms"},
+                {"id", "name", "kind", "mode", "engine", "rooms", "schedule"},
                 f"contour {index}",
+            )
+            schedule = _climate_schedule_from_payload(
+                item.get("schedule"),
+                f"contour {index} schedule",
             )
             raw_rooms = _list(item.get("rooms"), f"contour {index} rooms")
             rooms: list[ClimateContourRoom] = []
@@ -102,6 +108,7 @@ def contour_registry_from_payload(payload: object) -> ContourRegistry:
                     mode=ContourMode(item.get("mode")),
                     engine=ContourEngine(item.get("engine")),
                     rooms=tuple(rooms),
+                    schedule=schedule,
                 )
             )
         return ContourRegistry(contours=tuple(contours))
@@ -123,6 +130,7 @@ def contour_registry_to_payload(registry: ContourRegistry) -> dict[str, object]:
                 "kind": contour.kind.value,
                 "mode": contour.mode.value,
                 "engine": contour.engine.value,
+                "schedule": _climate_schedule_payload(contour.schedule),
                 "rooms": [
                     {
                         "room_id": room.room_id,
@@ -141,53 +149,71 @@ def migrate_contour_registry_payload(
     storage_version: int,
     payload: object,
 ) -> dict[str, object]:
-    """Migrate the exact HASC 1.0-1.2 room shape to day/night profiles."""
+    """Migrate older room/profile shapes to the explicit schedule shape."""
 
     if storage_version == CONTOUR_REGISTRY_VERSION:
         return contour_registry_to_payload(contour_registry_from_payload(payload))
-    if storage_version != LEGACY_CONTOUR_REGISTRY_VERSION:
+    if storage_version not in {
+        LEGACY_CONTOUR_REGISTRY_VERSION,
+        PROFILE_CONTOUR_REGISTRY_VERSION,
+    }:
         raise ContourRegistryViolation("unsupported stored contour version")
-    root = _mapping(payload, "legacy contour registry")
-    _exact_keys(root, {"version", "contours"}, "legacy contour registry")
-    if root.get("version") != LEGACY_CONTOUR_REGISTRY_VERSION:
-        raise ContourRegistryViolation("legacy contour version does not match storage")
+    root = _mapping(payload, "older contour registry")
+    _exact_keys(root, {"version", "contours"}, "older contour registry")
+    if root.get("version") != storage_version:
+        raise ContourRegistryViolation("stored contour version does not match storage")
     contours: list[ContourDefinition] = []
     try:
-        for index, raw in enumerate(_list(root.get("contours"), "legacy contours")):
-            item = _mapping(raw, f"legacy contour {index}")
+        for index, raw in enumerate(_list(root.get("contours"), "older contours")):
+            item = _mapping(raw, f"older contour {index}")
             _exact_keys(
                 item,
                 {"id", "name", "kind", "mode", "engine", "rooms"},
-                f"legacy contour {index}",
+                f"older contour {index}",
             )
             rooms: list[ClimateContourRoom] = []
             for room_index, raw_room in enumerate(
-                _list(item.get("rooms"), f"legacy contour {index} rooms")
+                _list(item.get("rooms"), f"older contour {index} rooms")
             ):
                 room = _mapping(
                     raw_room,
-                    f"legacy contour {index} room {room_index}",
+                    f"older contour {index} room {room_index}",
                 )
-                _exact_keys(
-                    room,
-                    {
-                        "room_id",
-                        "device_ids",
-                        "target_temperature",
-                        "target_humidity",
-                        "strategy",
-                    },
-                    f"legacy contour {index} room {room_index}",
-                )
-                rooms.append(
-                    climate_contour_room(
-                        room_id=room.get("room_id"),
-                        device_ids=room.get("device_ids"),
-                        target_temperature=room.get("target_temperature"),
-                        target_humidity=room.get("target_humidity"),
-                        strategy=room.get("strategy"),
+                if storage_version == LEGACY_CONTOUR_REGISTRY_VERSION:
+                    _exact_keys(
+                        room,
+                        {
+                            "room_id",
+                            "device_ids",
+                            "target_temperature",
+                            "target_humidity",
+                            "strategy",
+                        },
+                        f"older contour {index} room {room_index}",
                     )
-                )
+                    rooms.append(
+                        climate_contour_room(
+                            room_id=room.get("room_id"),
+                            device_ids=room.get("device_ids"),
+                            target_temperature=room.get("target_temperature"),
+                            target_humidity=room.get("target_humidity"),
+                            strategy=room.get("strategy"),
+                        )
+                    )
+                else:
+                    _exact_keys(
+                        room,
+                        {"room_id", "device_ids", "profiles", "active_profile"},
+                        f"older contour {index} room {room_index}",
+                    )
+                    rooms.append(
+                        climate_contour_room(
+                            room_id=room.get("room_id"),
+                            device_ids=room.get("device_ids"),
+                            profiles=room.get("profiles"),
+                            active_profile=room.get("active_profile"),
+                        )
+                    )
             contours.append(
                 ContourDefinition(
                     contour_id=item.get("id"),  # type: ignore[arg-type]
@@ -196,6 +222,7 @@ def migrate_contour_registry_payload(
                     mode=ContourMode(item.get("mode")),
                     engine=ContourEngine(item.get("engine")),
                     rooms=tuple(rooms),
+                    schedule=ClimateSchedule(),
                 )
             )
         return contour_registry_to_payload(ContourRegistry(contours=tuple(contours)))
@@ -248,6 +275,7 @@ def build_climate_contour_setup(
     strategy: object = None,
     room_parameters: object = None,
     room_profiles: object = None,
+    schedule: object = None,
 ) -> tuple[ClimateRegistry, ContourRegistry]:
     """Create one climate contour from explicit existing-engine selections.
 
@@ -282,6 +310,17 @@ def build_climate_contour_setup(
             parameters_by_room=parameters_by_room,
             room_profiles=room_profiles,
         )
+        selected_schedule = (
+            ClimateSchedule()
+            if schedule is None
+            else _climate_schedule_from_payload(schedule, "climate schedule")
+        )
+        if selected_mode is not ContourMode.AUTOMATIC and selected_schedule.enabled:
+            selected_schedule = ClimateSchedule(
+                enabled=False,
+                day_start=selected_schedule.day_start,
+                night_start=selected_schedule.night_start,
+            )
         assignments = tuple(
             climate_contour_room(
                 room_id=room.room_id,
@@ -304,6 +343,7 @@ def build_climate_contour_setup(
                     mode=selected_mode,
                     engine=ContourEngine.EXISTING_CLIMATE_CORE,
                     rooms=assignments,
+                    schedule=selected_schedule,
                 ),
             )
         )
@@ -446,6 +486,104 @@ def with_active_climate_profile(
         raise ContourRegistryViolation(str(error)) from error
 
 
+def with_climate_schedule(
+    registry: ContourRegistry,
+    *,
+    enabled: object,
+    day_start: object,
+    night_start: object,
+) -> ContourRegistry:
+    """Replace only the climate profile schedule after exact validation."""
+
+    contour = registry.contour(CLIMATE_CONTOUR_ID)
+    if contour is None:
+        raise ContourRegistryViolation("climate contour is not configured")
+    try:
+        selected_profile = (
+            contour.schedule.last_applied_profile
+            if enabled is True
+            and contour.schedule.enabled
+            and day_start == contour.schedule.day_start
+            and night_start == contour.schedule.night_start
+            else None
+        )
+        schedule = ClimateSchedule(
+            enabled=enabled,  # type: ignore[arg-type]
+            day_start=day_start,  # type: ignore[arg-type]
+            night_start=night_start,  # type: ignore[arg-type]
+            last_applied_profile=selected_profile,
+        )
+        updated = replace(contour, schedule=schedule)
+        return ContourRegistry(
+            contours=tuple(
+                updated if item.contour_id == CLIMATE_CONTOUR_ID else item
+                for item in registry.contours
+            )
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
+def _climate_schedule_from_payload(payload: object, label: str) -> ClimateSchedule:
+    raw = _mapping(payload, label)
+    _exact_keys(
+        raw,
+        {"enabled", "day_start", "night_start", "last_applied_profile"},
+        label,
+    )
+    try:
+        last_applied = raw.get("last_applied_profile")
+        return ClimateSchedule(
+            enabled=raw.get("enabled"),  # type: ignore[arg-type]
+            day_start=raw.get("day_start"),  # type: ignore[arg-type]
+            night_start=raw.get("night_start"),  # type: ignore[arg-type]
+            last_applied_profile=(
+                None if last_applied is None else ClimateProfile(last_applied)
+            ),
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
+def _climate_schedule_payload(schedule: ClimateSchedule) -> dict[str, object]:
+    if not isinstance(schedule, ClimateSchedule):
+        raise ContourRegistryViolation("climate schedule must be validated")
+    return {
+        "enabled": schedule.enabled,
+        "day_start": schedule.day_start,
+        "night_start": schedule.night_start,
+        "last_applied_profile": (
+            None
+            if schedule.last_applied_profile is None
+            else schedule.last_applied_profile.value
+        ),
+    }
+
+
+def with_applied_climate_schedule_profile(
+    registry: ContourRegistry,
+    profile: ClimateProfile,
+) -> ContourRegistry:
+    """Persist the period reservation before its physical command attempt."""
+
+    contour = registry.contour(CLIMATE_CONTOUR_ID)
+    if contour is None or not contour.schedule.enabled:
+        raise ContourRegistryViolation("climate schedule is not enabled")
+    if not isinstance(profile, ClimateProfile):
+        raise ContourRegistryViolation("climate schedule profile is invalid")
+    try:
+        schedule = replace(contour.schedule, last_applied_profile=profile)
+        updated = replace(contour, schedule=schedule)
+        return ContourRegistry(
+            contours=tuple(
+                updated if item.contour_id == CLIMATE_CONTOUR_ID else item
+                for item in registry.contours
+            )
+        )
+    except (ContourViolation, TypeError, ValueError) as error:
+        raise ContourRegistryViolation(str(error)) from error
+
+
 def _climate_profiles_by_room(
     registry: ClimateRegistry,
     *,
@@ -538,7 +676,14 @@ def with_climate_contour_mode(
         raise ContourRegistryViolation("climate contour is not configured")
     try:
         selected_mode = ContourMode(mode)
-        updated = replace(contour, mode=selected_mode)
+        schedule = contour.schedule
+        if selected_mode is not ContourMode.AUTOMATIC and schedule.enabled:
+            schedule = ClimateSchedule(
+                enabled=False,
+                day_start=schedule.day_start,
+                night_start=schedule.night_start,
+            )
+        updated = replace(contour, mode=selected_mode, schedule=schedule)
         return ContourRegistry(
             contours=tuple(
                 updated if item.contour_id == CLIMATE_CONTOUR_ID else item
@@ -630,6 +775,11 @@ def _contour_status(
         "engine": {
             "name": "hausman-climate",
             "version": 1,
+        },
+        "schedule": {
+            "enabled": contour.schedule.enabled,
+            "day_start": contour.schedule.day_start,
+            "night_start": contour.schedule.night_start,
         },
         "rooms": room_results,
         "execution": {

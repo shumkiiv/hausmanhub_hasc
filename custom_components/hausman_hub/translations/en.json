@@ -2,500 +2,549 @@
   "config": {
     "step": {
       "user": {
-        "title": "HausMan Hub HASC settings",
-        "description": "Initial setup grants no device control. Climate rollout is configured separately and remains disabled by default.",
+        "title": "Добавление HASC",
+        "description": "На первом шаге HASC только добавляет безопасную страницу с информацией о доме. Управление устройствами не включается. Климат можно настроить после добавления интеграции.",
         "data": {
-          "mode": "Operating mode"
+          "mode": "Как показывать информацию о доме"
         },
         "data_description": {
-          "mode": "Normal information reading shows aggregate counts. The additional check also compares data without changing anything."
+          "mode": "Рекомендуется обычный режим. Дополнительная проверка нужна только для поиска ошибок и тоже ничего не изменяет."
         }
       }
     },
     "error": {
-      "unsafe_mode": "Only read-only and comparison-without-changes modes are allowed."
+      "unsafe_mode": "Выберите «Обычное чтение сведений» или «Дополнительная проверка сведений»."
     },
     "abort": {
-      "already_configured": "HASC is already configured. Change its settings from the integration page."
+      "already_configured": "HASC уже добавлен. Изменить его параметры можно в настройках интеграции."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "HASC: choose a settings area",
-        "description": "Use Automatic contours for normal setup. General information only changes the aggregate page. Legacy connection and diagnostic tools are grouped under Advanced settings.",
+        "title": "Настройки HASC",
+        "description": "Выберите нужный раздел. Для повседневной настройки температуры, влажности, комнат и устройств откройте «Климат».",
         "data": {
-          "settings_section": "Settings area"
+          "settings_section": "Что хотите настроить"
         },
         "data_description": {
-          "settings_section": "Automatic contours is the main area for selecting rooms, devices, and operating parameters."
+          "settings_section": "«Климат» — основной раздел. «Информация о доме» меняет только сводку. Диагностика нужна при подключении или поиске ошибок."
         }
       },
       "advanced_settings": {
-        "title": "HASC: advanced settings",
-        "description": "This area is for migration, diagnostics, and service checks. Use Automatic contours for normal climate setup.",
-        "data": {"advanced_settings_action": "Advanced tool"}
+        "title": "HASC: диагностика и обслуживание",
+        "description": "Этот раздел нужен при первом подключении, переносе старых настроек или поиске ошибок. Для обычной работы вернитесь в «Климат».",
+        "data": {
+          "advanced_settings_action": "Что нужно проверить"
+        }
       },
       "contours": {
-        "title": "HASC: automatic contours",
-        "description": "Climate is the first universal HASC contour. Select rooms and devices, configure Day and Night profiles, and separately apply values to the existing proven climate algorithm.",
-        "data": {"contour_action": "Climate contour action"},
-        "data_description": {"contour_action": "Order: 1) create the contour, 2) configure Day and Night, 3) select the active profile, 4) apply it separately. Only the last confirmed action sends commands."}
-      },
-      "climate_contour_source": {
-        "title": "Connect the existing climate algorithm",
-        "description": "Enter the local address once. HASC reads rooms, devices, and current state without sending commands.",
-        "data": {"climate_bridge_target": "Local climate-controller address"},
-        "data_description": {"climate_bridge_target": "Example: http://192.168.1.10:1880. Enter only protocol, local IP, and port."}
-      },
-      "climate_contour_setup": {
-        "title": "Step 1: rooms and devices",
-        "description": "Select rooms and their devices. The next screens collect separate settings for each room. Saved rooms and devices are preselected.",
+        "title": "HASC: климат",
+        "description": "Здесь HASC связывает комнаты с кондиционерами, термоголовками, увлажнителями и другими климатическими устройствами. Затем можно задать дневные и ночные настройки и включить автоматическое расписание.",
         "data": {
-          "contour_name": "Contour name",
-          "contour_mode": "Operating mode",
-          "contour_rooms": "Rooms",
-          "contour_devices": "Contour devices"
+          "contour_action": "Что хотите сделать"
         },
         "data_description": {
-          "contour_mode": "Observe only shows the algorithm. Automatic allows a separate confirmed application of temperature, strategy, and automatic mode to the existing engine.",
-          "contour_rooms": "Select every room served by this contour.",
-          "contour_devices": "Select at least one suitable device in every selected room. Private identifiers remain hidden."
+          "contour_action": "Начните с комнат и устройств, затем задайте настройки «День» и «Ночь». После проверки можно включить расписание — HASC будет переключать и применять их сам."
+        }
+      },
+      "climate_contour_source": {
+        "title": "Где работает управление климатом",
+        "description": "Укажите один раз локальный адрес уже работающей системы климата. HASC прочитает комнаты, устройства и текущее состояние. На этом шаге ничего не включается и не выключается.",
+        "data": {
+          "climate_bridge_target": "Локальный адрес системы климата"
+        },
+        "data_description": {
+          "climate_bridge_target": "Пример: http://192.168.1.10:1880. Укажите только протокол, локальный IP и порт."
+        }
+      },
+      "climate_contour_setup": {
+        "title": "Шаг 1: комнаты и устройства",
+        "description": "Выберите комнаты и работающие в них устройства. На следующих экранах HASC отдельно спросит параметры каждой комнаты. Сохранённые комнаты и устройства уже отмечены.",
+        "data": {
+          "contour_name": "Название климата",
+          "contour_mode": "Что разрешено HASC",
+          "contour_rooms": "Комнаты",
+          "contour_devices": "Климатические устройства"
+        },
+        "data_description": {
+          "contour_mode": "Без управления HASC только показывает состояние. Управление разрешает передавать подтверждённые настройки выбранным устройствам.",
+          "contour_rooms": "Выберите все комнаты, где HASC должен поддерживать климат.",
+          "contour_devices": "В каждой комнате выберите хотя бы одно устройство: кондиционер, термоголовку, увлажнитель или тёплый пол."
         }
       },
       "climate_contour_room": {
-        "title": "Settings for {room_name}",
-        "description": "Room {room_number} of {room_count}. Choose comfort values for this room. A previously saved contour uses its HASC settings as defaults.",
+        "title": "Параметры комнаты «{room_name}»",
+        "description": "Комната {room_number} из {room_count}. Задайте комфортные значения для этой комнаты. При повторной настройке показаны уже сохранённые значения.",
         "data": {
-          "contour_target_temperature": "Comfort temperature, °C",
-          "contour_target_humidity": "Comfort humidity, %",
-          "contour_strategy": "Temperature strategy"
+          "contour_target_temperature": "Комфортная температура, °C",
+          "contour_target_humidity": "Комфортная влажность, %",
+          "contour_strategy": "Как поддерживать температуру"
         },
         "data_description": {
-          "contour_target_temperature": "This room temperature can be applied by a separate confirmed action after saving the contour.",
-          "contour_target_humidity": "Desired humidity is stored separately for this room. The existing engine has no shared room-humidity command, so HASC does not claim to apply it.",
-          "contour_strategy": "Soft is quieter, normal is balanced, and aggressive reaches the target faster."
+          "contour_target_temperature": "Желаемая температура именно в этой комнате.",
+          "contour_target_humidity": "Желаемая влажность. Она сохраняется, но автоматическая передача влажности пока не поддерживается.",
+          "contour_strategy": "Тихий режим экономнее, сбалансированный подходит большинству комнат, быстрый активнее достигает цели."
         }
       },
       "climate_contour_confirm": {
-        "title": "Review the climate contour",
-        "description": "Contour: {name}. Mode: {mode}. Active profile: {active_profile}. Rooms: {room_count}; devices: {device_count}. Active-profile settings: {room_settings}. Algorithm: {algorithm}. Current status: {status}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
-        "data": {"confirm_contour_save": "Save selected rooms, devices, and parameters"},
-        "data_description": {"confirm_contour_save": "HASC saves the configuration and enables continuous reads from the existing engine without sending climate commands."}
-      },
-      "climate_profiles_room": {
-        "title": "{profile_name}: {room_name}",
-        "description": "Room {room_number} of {room_count}. Choose temperature, humidity, and strategy for the {profile_name} profile. This step sends no device commands.",
+        "title": "Проверка настроек климата",
+        "description": "Название: {name}. Работа HASC: {mode}. Сейчас используется: {active_profile}. Комнат: {room_count}, устройств: {device_count}. Настройки: {room_settings}. Состояние: {status}. Автоматическая работа подтверждена: {automatic}. Что проверить: {reasons}.",
         "data": {
-          "contour_target_temperature": "Comfort temperature, °C",
-          "contour_target_humidity": "Comfort humidity, %",
-          "contour_strategy": "Temperature strategy"
+          "confirm_contour_save": "Сохранить выбранные комнаты, устройства и параметры"
         },
         "data_description": {
-          "contour_target_temperature": "Temperature for this profile and room only.",
-          "contour_target_humidity": "Humidity is stored in the profile but is not yet sent to the existing engine.",
-          "contour_strategy": "Soft is quieter, normal is balanced, and aggressive reaches the target faster."
+          "confirm_contour_save": "HASC сохранит выбранные комнаты и устройства. На этом шаге команды не отправляются."
+        }
+      },
+      "climate_profiles_room": {
+        "title": "{profile_name}: комната «{room_name}»",
+        "description": "Комната {room_number} из {room_count}. Задайте температуру, влажность и характер работы для профиля «{profile_name}». Это только настройка: команды устройствам не отправляются.",
+        "data": {
+          "contour_target_temperature": "Комфортная температура, °C",
+          "contour_target_humidity": "Комфортная влажность, %",
+          "contour_strategy": "Как поддерживать температуру"
+        },
+        "data_description": {
+          "contour_target_temperature": "Температура именно для этого профиля и этой комнаты.",
+          "contour_target_humidity": "Влажность сохраняется, но её автоматическая передача пока не поддерживается.",
+          "contour_strategy": "Тихий режим экономнее, сбалансированный подходит большинству комнат, быстрый активнее достигает цели."
         }
       },
       "climate_profiles_confirm": {
-        "title": "Review Day and Night profiles",
-        "description": "Current profile: {active_profile}. Room settings: {profile_settings}. Saving sends no climate commands.",
-        "data": {"confirm_profile_save": "Save Day and Night settings"}
-      },
-      "climate_profile_select": {
-        "title": "Profile to use now",
-        "description": "Choose Day or Night. HASC changes only the active target set. To send it to the existing climate engine, separately choose Apply active profile and enable automation after saving.",
-        "data": {"contour_profile": "Active profile"}
-      },
-      "climate_profile_select_confirm": {
-        "title": "Review selected profile",
-        "description": "Selected profile: {active_profile}. Room settings: {profile_settings}. This step sends no commands.",
-        "data": {"confirm_profile_select": "Save selected profile"}
-      },
-      "contour_status": {
-        "title": "Climate contour status",
-        "description": "Contour: {name}. Mode: {mode}. Active profile: {active_profile}. Status: {status}. Active-profile settings: {room_settings}. Rooms: {room_count}; devices: {device_count}. Algorithm: {algorithm}. Existing-engine automatic operation confirmed: {automatic}. Attention: {reasons}.",
-        "data": {"close_contour_status": "Close status"}
-      },
-      "climate_contour_apply_confirm": {
-        "title": "Apply active profile",
-        "description": "Active profile: {active_profile}. Rooms: {room_count}. Commands: {command_count}. Temperature changes: {temperature_count}; strategy changes: {strategy_count}; automatic-mode changes: {automatic_count}. Commands are sent to the existing engine in that order. Its proven algorithm may then start or stop devices. Humidity is not changed by this action.",
-        "data": {"confirm_contour_apply": "Apply these settings to the existing climate engine"},
-        "data_description": {"confirm_contour_apply": "Confirm only when the selected devices may run automatically. Retrying the same request never submits commands twice."}
-      },
-      "climate_contour_apply_result": {
-        "title": "Climate contour application result",
-        "description": "Result: {status}. Accepted commands: {accepted_count} of {command_count}. Confirmed rooms: {confirmed_room_count} of {room_count}. Details: {reasons}.",
-        "data": {"close_contour_apply_result": "Close result"}
-      },
-      "general_settings": {
-        "title": "HASC: general information",
-        "description": "These settings only affect the page with aggregate home counts. They do not connect climate or control devices.",
+        "title": "Проверка профилей «День» и «Ночь»",
+        "description": "Сейчас выбран профиль: {active_profile}. Настройки комнат: {profile_settings}. Сохранение не отправляет команды климату.",
         "data": {
-          "mode": "How to check general information",
-          "local_summary_enabled": "Show a separate aggregate-count page",
-          "summary_update_interval": "Aggregate-count refresh interval"
+          "confirm_profile_save": "Сохранить дневные и ночные настройки"
+        }
+      },
+      "climate_schedule": {
+        "title": "Автоматическое расписание",
+        "description": "HASC будет сам выбирать настройки «День» и «Ночь» по местному времени Home Assistant. После включения текущие настройки будут применены при ближайшей проверке времени, затем HASC продолжит переключать их автоматически.",
+        "data": {
+          "climate_schedule_enabled": "Включить автоматическое переключение",
+          "climate_day_start": "Когда начинается день",
+          "climate_night_start": "Когда начинается ночь",
+          "confirm_climate_schedule": "Я разрешаю HASC автоматически применять дневные и ночные настройки"
         },
         "data_description": {
-          "mode": "Normal reading is suitable for continuous operation. The additional check only compares data without changing anything.",
-          "local_summary_enabled": "The page shows nine aggregate counts for areas, devices, and entities. It contains no names or controls.",
-          "summary_update_interval": "Fifteen minutes is recommended. This does not affect climate-control response time."
+          "climate_schedule_enabled": "Когда выключено, HASC не меняет профиль по времени.",
+          "climate_day_start": "В это время будут выбраны и применены дневные настройки всех комнат.",
+          "climate_night_start": "В это время будут выбраны и применены ночные настройки всех комнат.",
+          "confirm_climate_schedule": "Это постоянное разрешение. Текущие настройки могут быть применены в течение минуты; отдельное подтверждение при каждом следующем переключении не запрашивается."
+        }
+      },
+      "climate_profile_select": {
+        "title": "Что использовать сейчас",
+        "description": "Выберите «День» или «Ночь». HASC только выберет сохранённые настройки. Для передачи устройствам затем нажмите «Сразу применить выбранные настройки».",
+        "data": {
+          "contour_profile": "Активный профиль"
+        }
+      },
+      "climate_profile_select_confirm": {
+        "title": "Проверка выбранного профиля",
+        "description": "Будет выбран профиль: {active_profile}. Настройки комнат: {profile_settings}. На этом шаге команды не отправляются.",
+        "data": {
+          "confirm_profile_select": "Сохранить выбранный профиль"
+        }
+      },
+      "contour_status": {
+        "title": "Состояние климата",
+        "description": "Название: {name}. Работа HASC: {mode}. Сейчас используется: {active_profile}. Состояние: {status}. Настройки: {room_settings}. Комнат: {room_count}, устройств: {device_count}. Автоматическая работа подтверждена: {automatic}. Что проверить: {reasons}.",
+        "data": {
+          "close_contour_status": "Закрыть состояние"
+        }
+      },
+      "climate_contour_apply_confirm": {
+        "title": "Сразу применить выбранные настройки",
+        "description": "Выбрано: {active_profile}. Комнат: {room_count}. Будет отправлено команд: {command_count}. Из них для температуры: {temperature_count}, характера работы: {strategy_count}, автоматического режима: {automatic_count}. После подтверждения подключённая система климата может сразу включить или выключить устройства. Влажность пока не меняется.",
+        "data": {
+          "confirm_contour_apply": "Применить эти настройки к климатическим устройствам"
+        },
+        "data_description": {
+          "confirm_contour_apply": "Подтверждайте только если готовы разрешить автоматическую работу выбранных климатических устройств. Повтор одного запроса не отправляет команды второй раз."
+        }
+      },
+      "climate_contour_apply_result": {
+        "title": "Результат применения климатического контура",
+        "description": "Результат: {status}. Принято команд: {accepted_count} из {command_count}. Подтверждено комнат: {confirmed_room_count} из {room_count}. Пояснение: {reasons}.",
+        "data": {
+          "close_contour_apply_result": "Закрыть результат"
+        }
+      },
+      "general_settings": {
+        "title": "HASC: общие сведения",
+        "description": "Эти настройки относятся только к странице с общими числами о доме. Они не подключают климат и не управляют устройствами.",
+        "data": {
+          "mode": "Как проверять общие сведения",
+          "local_summary_enabled": "Показывать отдельную страницу с общими числами",
+          "summary_update_interval": "Как часто обновлять общие числа"
+        },
+        "data_description": {
+          "mode": "Обычного чтения достаточно для постоянной работы. Дополнительная проверка нужна только для сравнения данных без изменений.",
+          "local_summary_enabled": "Страница показывает девять общих чисел: количество помещений, устройств и объектов. Названия и управление туда не входят.",
+          "summary_update_interval": "Рекомендуется 15 минут. Этот интервал не влияет на скорость климатического управления."
         }
       },
       "test_switch": {
-        "title": "HASC: service switch test",
-        "description": "This is not climate control. The service test creates one test control only for a Home Assistant Input boolean helper. Leave it off if you do not need this test.",
+        "title": "HASC: служебный тест переключателя",
+        "description": "Это не управление климатом. Служебный тест создаёт одну проверочную кнопку только для помощника Home Assistant типа «Переключатель». Если такой тест вам не нужен, оставьте его выключенным.",
         "data": {
-          "canary_control_enabled": "Use the service test",
-          "canary_control_target": "Input boolean helper for the test"
+          "canary_control_enabled": "Использовать служебный тест",
+          "canary_control_target": "Помощник «Переключатель» для теста"
         },
         "data_description": {
-          "canary_control_enabled": "Turning this off immediately removes the HASC test control.",
-          "canary_control_target": "Select one manually created Input boolean helper. Climate, lights, locks, and other devices are not allowed."
+          "canary_control_enabled": "При выключении проверочная кнопка HASC сразу удаляется.",
+          "canary_control_target": "Выберите один созданный вручную помощник «Переключатель». Кондиционер, свет, замок или другое устройство выбрать нельзя."
         }
       },
       "climate_connection": {
-        "title": "HASC: climate-controller connection",
-        "description": "Choose how HASC connects to the existing climate controller. Use check-only mode for the first connection. One-room trial control comes later, after successful room checks.",
+        "title": "HASC: связь с климатическим контуром",
+        "description": "Здесь выбирается только способ связи HASC с уже работающим климатическим контуром. Для первого подключения используйте проверку без команд. Пробное управление выбирают позже, после успешных проверок одной комнаты.",
         "data": {
-          "climate_bridge_mode": "How to connect the climate controller"
+          "climate_bridge_mode": "Как подключить климатический контур"
         },
         "data_description": {
-          "climate_bridge_mode": "Disabling immediately closes commands and removes the saved address. Check-only mode only reads and compares data."
+          "climate_bridge_mode": "Отключение сразу закрывает команды и удаляет сохранённый адрес. Проверка без команд только читает и сравнивает данные."
         }
       },
       "climate_endpoint": {
-        "title": "HASC: climate-controller address",
-        "description": "Enter where the existing climate controller runs. HASC adds the required service paths. One-room trial control also requires one previously verified stable room ID.",
+        "title": "HASC: адрес климатического контура",
+        "description": "Укажите, где работает существующий климатический контур. HASC сам добавит нужные служебные пути. Для пробного управления дополнительно потребуется постоянный код одной уже проверенной комнаты.",
         "data": {
-          "climate_bridge_target": "Local climate-controller IP address and port",
-          "climate_canary_room_id": "Stable ID of the verified room"
+          "climate_bridge_target": "Локальный IP-адрес и порт климатического контура",
+          "climate_canary_room_id": "Постоянный код проверенной комнаты"
         },
         "data_description": {
-          "climate_bridge_target": "Example: http://192.168.1.10:1880. Enter only the protocol, local IP, and port, without paths, DNS names, credentials, or parameters.",
-          "climate_canary_room_id": "This is not a room name or Home Assistant entity. Use a stable ID from the saved HASC registry, for example living."
+          "climate_bridge_target": "Пример: http://192.168.1.10:1880. Указывайте только протокол, локальный IP и порт — без /api, имени сайта, логина, пароля и параметров.",
+          "climate_canary_room_id": "Это не название комнаты и не объект Home Assistant. Используйте постоянный код из сохранённого списка HASC, например living."
         }
       },
       "native_climate": {
-        "title": "HASC: built-in climate controller",
-        "description": "HASC can own the decision to heat, cool, or humidify a room. The first stage is a one-room preview only: it never turns a device on or off.",
+        "title": "HASC: встроенный климатический контур",
+        "description": "HASC может сам решать, когда комнате нужен нагрев, охлаждение или увлажнение. Сначала доступен только безопасный предпросмотр для одной комнаты: он ничего не включает и не выключает.",
         "data": {
-          "native_climate_mode": "How to use the built-in climate controller"
+          "native_climate_mode": "Как использовать встроенный климатический контур"
         },
         "data_description": {
-          "native_climate_mode": "Preview stores targets and calculates the room state. Device commands are always disabled in this mode."
+          "native_climate_mode": "«Только показывать решение» сохраняет цели и рассчитывает состояние комнаты. Отправка команд в этом режиме всегда запрещена."
         }
       },
       "native_climate_policy": {
-        "title": "HASC: one-room comfort targets",
-        "description": "Choose a room and its targets. HASC reads current values from the connected existing controller and shows its own decision on the next screen without sending commands.",
+        "title": "HASC: цели одной комнаты",
+        "description": "Выберите комнату и желаемые условия. HASC возьмёт текущие показания из подключённого существующего контура и на следующем экране покажет своё решение без отправки команд.",
         "data": {
-          "native_climate_room_id": "Room",
-          "native_target_temperature": "Target temperature, °C",
-          "native_target_humidity": "Target humidity, %"
+          "native_climate_room_id": "Комната",
+          "native_target_temperature": "Желаемая температура, °C",
+          "native_target_humidity": "Желаемая влажность, %"
         },
         "data_description": {
-          "native_climate_room_id": "Only rooms already saved in HASC are shown.",
-          "native_target_temperature": "HASC holds temperature within 0.5 °C of the target.",
-          "native_target_humidity": "HASC holds humidity within 5% of the target."
+          "native_climate_room_id": "Показываются только комнаты, уже сохранённые в HASC.",
+          "native_target_temperature": "HASC считает температуру нормальной в пределах 0,5 °C от цели.",
+          "native_target_humidity": "HASC считает влажность нормальной в пределах 5 % от цели."
         }
       },
       "native_climate_confirm": {
-        "title": "Built-in HASC climate decision",
-        "description": "Room: {room}. Result: {status}. Current temperature: {current_temperature}; target: {target_temperature}; decision: {temperature_decision}; suitable equipment available: {temperature_device}. Current humidity: {current_humidity}; target: {target_humidity}; decision: {humidity_decision}; humidifier available: {humidity_device}. Commands enabled: {commands}. Notes: {reasons}.",
+        "title": "Решение встроенного контура HASC",
+        "description": "Комната: {room}. Результат: {status}. Температура сейчас: {current_temperature}, цель: {target_temperature}, решение: {temperature_decision}, подходящее устройство доступно: {temperature_device}. Влажность сейчас: {current_humidity}, цель: {target_humidity}, решение: {humidity_decision}, увлажнитель доступен: {humidity_device}. Отправка команд: {commands}. Замечания: {reasons}.",
         "data": {
-          "confirm_native_climate_preview": "Save these preview targets"
+          "confirm_native_climate_preview": "Сохранить эти цели для предпросмотра"
         },
         "data_description": {
-          "confirm_native_climate_preview": "Only the room and targets are saved. HASC receives no device-control authority."
+          "confirm_native_climate_preview": "Сохраняются только комната и цели. HASC не получает право управлять устройствами."
         }
       },
       "climate_registry": {
-        "title": "Climate device setup",
-        "description": "Select devices from a fresh read-only import or add them manually, then review the complete draft. Nothing is saved before the separate confirmation step.",
+        "title": "HASC: комнаты и климатические устройства",
+        "description": "Добавьте комнаты и устройства вручную или выберите найденное устройство. Все изменения сначала остаются в черновике. HASC сохранит их только после отдельной проверки и подтверждения.",
         "data": {
-          "climate_registry_action": "Registry action"
+          "climate_registry_action": "Следующее действие"
         },
         "data_description": {
-          "climate_registry_action": "Choose the next guided setup step. Advanced JSON is optional."
+          "climate_registry_action": "Выберите, что нужно сделать со списком климатических устройств. Редактор JSON предназначен только для расширенной настройки."
         }
       },
       "climate_import_candidate": {
-        "title": "Select a Climate API device",
-        "description": "HASC performs only a fresh read-only import. The list shows a name and room while the private source ID is neither displayed nor typed. The selection changes only the temporary draft.",
+        "title": "Выбор найденного климатического устройства",
+        "description": "HASC заново читает список устройств без отправки команд. Здесь показаны только понятные названия устройств и комнат. Внутренние идентификаторы скрыты, а выбор пока изменяет только черновик.",
         "data": {
-          "climate_import_candidate": "Climate API candidate"
+          "climate_import_candidate": "Найденное устройство"
         }
       },
       "climate_import_device": {
-        "title": "Configure the imported device",
-        "description": "Set the public HASC ID and policy fields, then choose the control entity with Home Assistant's native selector. HASC rechecks the fresh candidate, supplies its private binding, and shows the normal preview. This step sends no command and saves nothing.",
+        "title": "Настройка найденного устройства",
+        "description": "Задайте постоянный код, название и назначение устройства. Затем выберите объект управления из обычного списка Home Assistant. HASC ещё раз проверит устройство и добавит его только в черновик. На этом шаге команды не отправляются и настройки не сохраняются.",
         "data": {
-          "climate_device_id": "Public HASC device ID",
-          "climate_device_name": "Device name",
-          "climate_device_kind": "Device kind",
-          "climate_device_control_scope": "Rollout scope",
-          "climate_device_control_owner": "Control owner",
-          "climate_device_control_entity": "Private control entity"
+          "climate_device_id": "Постоянный код устройства в HASC",
+          "climate_device_name": "Понятное название устройства",
+          "climate_device_kind": "Тип устройства",
+          "climate_device_control_scope": "Степень управления",
+          "climate_device_control_owner": "Кто управляет устройством",
+          "climate_device_control_entity": "Объект управления Home Assistant"
         },
         "data_description": {
-          "climate_device_id": "Use a stable lowercase ID; only this ID enters the Android contract.",
-          "climate_device_control_entity": "Select the entity instead of copying its ID. It remains only in the draft until separate confirmation."
+          "climate_device_id": "Введите постоянный код в нижнем регистре. Приложение на планшете будет использовать только этот безопасный код.",
+          "climate_device_control_entity": "Выберите объект из списка, не копируя его внутренний идентификатор вручную. До подтверждения выбор остаётся только в черновике."
         }
       },
       "climate_preflight_candidate": {
-        "title": "Select a room for canary preflight",
-        "description": "Select one room from the saved HASC registry. The check reads current rollout state but cannot activate canary or send a climate command.",
+        "title": "Выбор комнаты для итоговой проверки",
+        "description": "Выберите сохранённую комнату. HASC проверит готовность списка устройств, данных и безопасного отключения, но не включит управление и не отправит команду.",
         "data": {
-          "climate_preflight_room": "Saved HASC room"
+          "climate_preflight_room": "Комната"
         }
       },
       "climate_canary_preflight": {
-        "title": "Climate canary preflight",
-        "description": "Room {room_id}: {status}. Registry match: {registry_matches}; devices matched/missing/moved/unregistered: {matched_devices}/{missing_devices}/{moved_devices}/{unregistered_devices}. Shadow: {shadow_status}, observations {matched}/{required_matched}, translated actions {translated}/{required_actions}, anomalies {anomalies}. Qualified scope: {scope_qualified} ({scope}). Operation: {operation}. Disabled rollback: {rollback}. Reasons: {reasons}. This screen never activates canary; separate authorization is still required.",
+        "title": "Готовность пробного управления комнатой",
+        "description": "Комната: {room_id}. Общий результат: {status}. Список устройств совпадает: {registry_matches}. Устройств совпало: {matched_devices}, отсутствует: {missing_devices}, перенесено в другую комнату: {moved_devices}, не добавлено в HASC: {unregistered_devices}. Проверка без команд: {shadow_status}; успешных наблюдений: {matched} из {required_matched}; проверенных действий: {translated} из {required_actions}; расхождений: {anomalies}. Разрешённые действия подтверждены: {scope_qualified} ({scope}). Незавершённая команда: {operation}. Безопасное отключение: {rollback}. Что мешает запуску: {reasons}. Этот экран ничего не включает: для запуска всё равно нужно отдельное разрешение владельца.",
         "data": {
-          "close_canary_preflight": "Return to climate setup"
+          "close_canary_preflight": "Закрыть результат и вернуться"
         },
         "data_description": {
-          "close_canary_preflight": "Enable only to close this read-only result. No setting, registry entry, or device is changed."
+          "close_canary_preflight": "Включите этот флажок только для возврата к настройке климата. Настройки и устройства не изменятся."
         }
       },
       "climate_registry_room": {
-        "title": "Add or replace a climate room",
-        "description": "A repeated stable room ID replaces that draft room. The draft remains unsaved.",
+        "title": "Добавление комнаты",
+        "description": "Укажите постоянный код и понятное название комнаты. Если такой код уже есть, комната будет заменена только в черновике.",
         "data": {
-          "climate_room_id": "Stable room ID",
-          "climate_room_name": "Room name"
+          "climate_room_id": "Постоянный код комнаты",
+          "climate_room_name": "Название комнаты"
         }
       },
       "climate_registry_device": {
-        "title": "Add or replace a climate device",
-        "description": "Describe one logical HASC device. A repeated stable device ID replaces that draft device. Controllable devices require one control entity; passive sensors must leave it empty and remain observed.",
+        "title": "Добавление климатического устройства",
+        "description": "Опишите одно устройство HASC. Повторный постоянный код заменит его только в черновике. Для управляемого устройства выберите один объект управления Home Assistant. Для обычного датчика оставьте это поле пустым и выберите только наблюдение.",
         "data": {
-          "climate_device_id": "Stable HASC device ID",
-          "climate_device_name": "Device name",
-          "climate_device_room": "HASC room",
-          "climate_device_kind": "Device kind",
-          "climate_device_source_id": "Private Climate API source ID",
-          "climate_device_control_scope": "Rollout scope",
-          "climate_device_control_owner": "Control owner",
-          "climate_device_capabilities": "Public capabilities",
-          "climate_device_control_entity": "Private control entity"
+          "climate_device_id": "Постоянный код устройства",
+          "climate_device_name": "Понятное название устройства",
+          "climate_device_room": "Комната",
+          "climate_device_kind": "Тип устройства",
+          "climate_device_source_id": "Идентификатор источника в климатическом контуре",
+          "climate_device_control_scope": "Степень управления",
+          "climate_device_control_owner": "Кто управляет устройством",
+          "climate_device_capabilities": "Возможности устройства",
+          "climate_device_control_entity": "Объект управления Home Assistant"
         }
       },
       "climate_shadow_candidate": {
-        "title": "Choose a shadow candidate room",
-        "description": "This read-only check evaluates one public HASC room ID. It never sends a climate command.",
+        "title": "Выбор комнаты для безопасной проверки",
+        "description": "HASC только прочитает и сравнит данные выбранной комнаты. Климатические команды отправляться не будут.",
         "data": {
-          "climate_shadow_candidate_room": "Candidate HASC room"
+          "climate_shadow_candidate_room": "Комната"
         }
       },
       "climate_shadow_evidence": {
-        "title": "Climate shadow evidence",
-        "description": "Room {room_id}: {status}. Matching samples: {matched}/{required_matched}; required shadow actions: {translated}/2; anomalies: {anomalies}; rejected intents across the window: {global_rejected}; reasons: {reasons}. This result grants no physical authority.",
+        "title": "Результат проверки без команд",
+        "description": "Комната: {room_id}. Результат: {status}. Успешных наблюдений: {matched} из {required_matched}; проверенных обязательных действий: {translated} из 2; расхождений: {anomalies}; отклонённых проверок: {global_rejected}. Что мешает готовности: {reasons}. Этот результат не разрешает управление устройствами.",
         "data": {
-          "close_shadow_evidence": "Return to climate setup"
+          "close_shadow_evidence": "Закрыть результат и вернуться"
         },
         "data_description": {
-          "close_shadow_evidence": "Enable this only to close the read-only result. No setting or device is changed."
+          "close_shadow_evidence": "Включите этот флажок только для возврата к настройке климата. Настройки и устройства не изменятся."
         }
       },
       "climate_registry_json": {
-        "title": "Advanced climate registry JSON",
-        "description": "Optional advanced editor for the complete private registry. The next step still previews it and requires separate confirmation.",
+        "title": "Расширенный редактор списка устройств",
+        "description": "Необязательный редактор полного списка в формате JSON. После него HASC всё равно покажет результат проверки и попросит отдельное подтверждение.",
         "data": {
-          "climate_registry_json": "Private climate registry JSON"
+          "climate_registry_json": "Список комнат и устройств в формате JSON"
         },
         "data_description": {
-          "climate_registry_json": "The installed v1 JSON Schema is authoritative. Private source/entity bindings never enter the tablet contract."
+          "climate_registry_json": "Формат должен соответствовать установленной схеме версии 1. Внутренние идентификаторы источников и объектов Home Assistant не передаются приложению на планшете."
         }
       },
       "climate_registry_confirm": {
-        "title": "Confirm climate registry",
-        "description": "Preview status: {status}. Rooms: {room_count}; devices: {device_count}; reasons: {reasons}. Confirm to atomically replace the registry.",
+        "title": "Проверка списка климатических устройств",
+        "description": "Результат: {status}. Комнат: {room_count}. Устройств: {device_count}. Замечания: {reasons}. Подтвердите полную замену сохранённого списка.",
         "data": {
-          "confirm_registry_save": "Replace the saved registry"
+          "confirm_registry_save": "Сохранить этот список"
         },
         "data_description": {
-          "confirm_registry_save": "Nothing is saved unless this separate confirmation is enabled."
+          "confirm_registry_save": "Без включённого подтверждения HASC ничего не сохранит."
         }
       }
     },
     "error": {
-      "unsafe_settings_section": "Choose Automatic contours, General information, or Advanced settings.",
-      "unsafe_advanced_action": "Choose one available advanced tool.",
-      "invalid_contour_action": "Choose contour setup, profile setup, apply, status, or disable.",
-      "contour_status_unavailable": "The climate contour status is unavailable.",
-      "contour_not_configured": "The climate contour has not been configured yet.",
-      "contour_save_failed": "The contour could not be saved safely. The previous configuration remains in place.",
-      "climate_contour_source_unavailable": "Fresh data could not be read from the existing climate controller. Check its address and runtime.",
-      "contour_rooms_required": "Select at least one room.",
-      "invalid_contour_rooms": "The room list changed. Refresh the wizard and select rooms again.",
-      "contour_devices_required": "Select at least one climate device.",
-      "invalid_contour_devices": "The device list changed. Refresh the wizard and select devices again.",
-      "device_outside_contour_rooms": "Every selected device must belong to a selected room.",
-      "contour_room_device_required": "Select at least one climate device in every selected room.",
-      "invalid_contour_name": "Enter a non-empty contour name of at most 120 characters without leading or trailing spaces.",
-      "invalid_contour_mode": "Choose observe or automatic operation.",
-      "invalid_contour_room_parameters": "Check this room's temperature, humidity, and strategy.",
-      "invalid_contour_profiles": "Check the Day and Night settings for every room.",
-      "invalid_contour_profile": "Choose the Day or Night profile.",
-      "contour_profile_confirmation_required": "Confirm saving the Day and Night settings.",
-      "contour_profile_selection_confirmation_required": "Confirm the active profile selection.",
-      "invalid_contour_setup": "Check rooms, devices, temperature, humidity, and strategy. Every room needs a controllable device.",
-      "contour_confirmation_required": "Confirm saving the climate contour.",
-      "contour_status_close_required": "Enable this checkbox to close the status screen.",
-      "contour_apply_not_ready": "Settings cannot be applied. Save an automatic contour first and select one available existing-engine air conditioner in every room.",
-      "contour_apply_unavailable": "The application could not be prepared or completed safely. Unconfirmed commands are never resubmitted.",
-      "contour_apply_confirmation_required": "Confirm applying settings to the existing climate engine.",
-      "contour_apply_result_close_required": "Enable this checkbox to close the result.",
-      "unsafe_mode": "Only read-only and comparison-without-changes modes are allowed.",
-      "unsafe_local_summary_setting": "The optional local page can only be turned on or off.",
-      "unsafe_summary_update_interval": "Choose only 5, 15, or 30 minutes for the nine-count refresh.",
-      "unsafe_canary_control_setting": "The control canary can only be armed or disarmed.",
-      "unsafe_canary_control_target": "An armed control canary requires exactly one input_boolean helper.",
-      "unsafe_climate_bridge_mode": "Choose disabled, check-only, normal managed contour, or one-room trial control.",
-      "unsafe_climate_bridge_target": "Use one private literal HTTP(S) origin without a path or credentials.",
-      "unsafe_climate_canary_room": "Canary mode requires one stable lowercase room ID.",
-      "unsafe_native_climate_mode": "Choose disabled or decision preview for the built-in climate controller.",
-      "native_climate_needs_room": "First add and save at least one room under Rooms and climate devices.",
-      "invalid_native_climate_policy": "Choose a saved room, a temperature from 18 to 28 °C, and humidity from 30 to 70%.",
-      "invalid_native_climate_room": "Choose one room already saved in HASC.",
-      "native_climate_preview_unavailable": "The decision could not be calculated. Nothing was saved; check the climate connection and try again.",
-      "native_climate_confirmation_required": "Enable confirmation to save these targets. Commands will remain disabled.",
-      "climate_runtime_unavailable": "The loaded HASC climate runtime is unavailable.",
-      "invalid_climate_registry": "The registry must be valid bounded HASC climate registry JSON v1.",
-      "climate_registry_locked": "Registry changes are locked while the climate bridge is in canary mode.",
-      "invalid_climate_registry_action": "Choose one approved registry setup action.",
-      "invalid_climate_room": "Use one stable lowercase room ID and a non-empty room name.",
-      "invalid_climate_device": "The device fields, required capabilities, ownership, scope, and control entity do not form a valid HASC device.",
-      "climate_registry_needs_room": "Add at least one room before adding a device.",
-      "climate_import_unavailable": "A fresh read-only Climate API import is unavailable. Configure the shadow target and check its state without enabling canary.",
-      "climate_import_no_candidates": "The fresh import has no new supported candidates for this draft.",
-      "invalid_climate_candidate": "The candidate changed, is already present, or cannot form a safe typed device. Refresh the selection and try again.",
-      "climate_preflight_unavailable": "A complete redacted preflight is unavailable. Keep canary off and check the saved registry, shadow state, and current bridge status.",
-      "climate_shadow_evidence_unavailable": "Shadow evidence for this room is unavailable. Keep the bridge in shadow and check its target, registry, and current state."
+      "unsafe_settings_section": "Выберите климат, информацию о доме или диагностику.",
+      "unsafe_advanced_action": "Выберите одно действие для диагностики.",
+      "invalid_contour_action": "Выберите одно действие с климатом.",
+      "contour_status_unavailable": "Не удалось получить состояние климата.",
+      "contour_not_configured": "Климат ещё не настроен. Сначала выберите комнаты и устройства.",
+      "contour_save_failed": "Не удалось безопасно сохранить настройки климата. Предыдущие настройки оставлены без изменений.",
+      "climate_contour_source_unavailable": "Не удалось прочитать свежие данные подключённой системы климата. Проверьте адрес и её работу.",
+      "contour_rooms_required": "Выберите хотя бы одну комнату.",
+      "invalid_contour_rooms": "Список комнат изменился. Обновите мастер и выберите комнаты снова.",
+      "contour_devices_required": "Выберите хотя бы одно климатическое устройство.",
+      "invalid_contour_devices": "Список устройств изменился. Обновите мастер и выберите устройства снова.",
+      "device_outside_contour_rooms": "Каждое выбранное устройство должно находиться в одной из выбранных комнат.",
+      "contour_room_device_required": "В каждой выбранной комнате отметьте хотя бы одно климатическое устройство.",
+      "invalid_contour_name": "Введите название климата длиной не более 120 символов без пробелов в начале и конце.",
+      "invalid_contour_mode": "Выберите наблюдение или автоматическую работу.",
+      "invalid_contour_room_parameters": "Проверьте температуру, влажность и характер работы этой комнаты.",
+      "invalid_contour_profiles": "Проверьте дневные и ночные параметры всех комнат.",
+      "invalid_contour_profile": "Выберите профиль «День» или «Ночь».",
+      "contour_profile_confirmation_required": "Подтвердите сохранение дневных и ночных настроек.",
+      "contour_profile_selection_confirmation_required": "Подтвердите выбор активного профиля.",
+      "invalid_climate_schedule": "Проверьте время начала дня и ночи. Время должно отличаться.",
+      "climate_schedule_confirmation_required": "Подтвердите сохранение расписания и автоматическое применение настроек.",
+      "schedule_requires_automatic_climate": "Сначала настройте климат в режиме управления, затем включайте расписание.",
+      "schedule_controls_profile": "Сейчас профиль выбирает расписание. Чтобы выбирать «День» или «Ночь» вручную, сначала выключите расписание.",
+      "invalid_contour_setup": "Проверьте комнаты, устройства, температуру, влажность и характер работы. В каждой комнате нужно хотя бы одно управляемое устройство.",
+      "contour_confirmation_required": "Подтвердите сохранение настроек климата.",
+      "contour_status_close_required": "Включите этот флажок, чтобы закрыть состояние.",
+      "contour_apply_not_ready": "Настройки нельзя применить: сначала разрешите управление климатом и убедитесь, что в каждой комнате выбран доступный кондиционер.",
+      "contour_apply_unavailable": "Не удалось безопасно подготовить или выполнить применение. Команды без подтверждения не повторяются.",
+      "contour_apply_confirmation_required": "Подтвердите применение настроек к климатическим устройствам.",
+      "contour_apply_result_close_required": "Включите этот флажок, чтобы закрыть результат.",
+      "unsafe_mode": "Выберите «Обычное чтение сведений» или «Дополнительная проверка сведений».",
+      "unsafe_local_summary_setting": "Страницу состояния HASC можно только включить или выключить.",
+      "unsafe_summary_update_interval": "Выберите обновление каждые 5, 15 или 30 минут.",
+      "unsafe_canary_control_setting": "Пробный переключатель можно только включить или выключить.",
+      "unsafe_canary_control_target": "Для пробного переключателя выберите ровно один помощник типа «Переключатель».",
+      "unsafe_climate_bridge_mode": "Выберите: не подключать, проверять без команд, использовать обычный автоматический контур или пробно управлять одной комнатой.",
+      "unsafe_climate_bridge_target": "Укажите один локальный HTTP(S)-адрес с явным IP, без пути, логина и пароля.",
+      "unsafe_climate_canary_room": "Для пробного управления нужен постоянный код одной комнаты в нижнем регистре.",
+      "unsafe_native_climate_mode": "Выберите: выключить встроенный контур или только показывать его решение.",
+      "native_climate_needs_room": "Сначала добавьте и сохраните хотя бы одну комнату в разделе «Комнаты и климатические устройства».",
+      "invalid_native_climate_policy": "Выберите сохранённую комнату, температуру от 18 до 28 °C и влажность от 30 до 70 %.",
+      "invalid_native_climate_room": "Выберите одну из комнат, сохранённых в HASC.",
+      "native_climate_preview_unavailable": "Не удалось выполнить расчёт. Настройки не сохранены; проверьте климатический контур и повторите.",
+      "native_climate_confirmation_required": "Включите подтверждение, чтобы сохранить цели. Команды всё равно останутся запрещены.",
+      "climate_runtime_unavailable": "Управление климатом HASC сейчас недоступно.",
+      "invalid_climate_registry": "Проверьте список комнат и устройств: его формат или значения неверны.",
+      "climate_registry_locked": "Во время пробного управления список климатических устройств нельзя изменять.",
+      "invalid_climate_registry_action": "Выберите одно действие из списка.",
+      "invalid_climate_room": "Укажите постоянный код комнаты в нижнем регистре и непустое название.",
+      "invalid_climate_device": "Проверьте тип, возможности, степень управления, владельца и объект управления устройства.",
+      "climate_registry_needs_room": "Сначала добавьте хотя бы одну комнату.",
+      "climate_import_unavailable": "Не удалось получить свежий список климатических устройств. Включите режим «Проверка без команд», проверьте адрес контура и повторите.",
+      "climate_import_no_candidates": "Новых поддерживаемых устройств не найдено.",
+      "invalid_climate_candidate": "Устройство изменилось, уже добавлено или не поддерживает безопасную настройку. Обновите список и повторите.",
+      "climate_preflight_unavailable": "Не удалось проверить готовность комнаты. Не включайте управление: проверьте сохранённые устройства, режим проверки и текущее состояние климатического контура.",
+      "climate_shadow_evidence_unavailable": "Не удалось получить результат безопасной проверки комнаты. Оставьте режим «Проверка без команд», проверьте адрес, список устройств и состояние контура."
     }
   },
   "selector": {
     "mode": {
       "options": {
-        "read-only": "Normal information reading",
-        "shadow": "Additional information check"
+        "read-only": "Обычный режим — рекомендуется",
+        "shadow": "Дополнительная проверка ошибок"
       }
     },
     "summary_update_interval": {
       "options": {
-        "5m": "Every 5 minutes",
-        "15m": "Every 15 minutes",
-        "30m": "Every 30 minutes"
+        "5m": "Каждые 5 минут",
+        "15m": "Каждые 15 минут",
+        "30m": "Каждые 30 минут"
       }
     },
     "climate_bridge_mode": {
       "options": {
-        "disabled": "Do not connect the climate controller",
-        "shadow": "Connect for checks only — no commands",
-        "canary": "One-room trial control — after verification",
-        "managed": "Normal HASC automatic-contour operation"
+        "disabled": "Не подключать климатический контур",
+        "shadow": "Подключить только для проверки — без команд",
+        "canary": "Пробное управление одной комнатой — после проверки",
+        "managed": "Обычная работа автоматического контура HASC"
       }
     },
     "native_climate_mode": {
       "options": {
-        "disabled": "Disable the built-in climate controller",
-        "preview": "Show decisions only — no commands"
+        "disabled": "Выключить встроенный климатический контур",
+        "preview": "Только показывать решение — без команд"
       }
     },
     "settings_section": {
       "options": {
-        "contours": "Automatic contours",
-        "general_settings": "HASC general information",
-        "advanced_settings": "Advanced settings"
+        "contours": "Климат",
+        "general_settings": "Информация о доме",
+        "advanced_settings": "Диагностика и обслуживание"
       }
     },
     "advanced_settings_action": {
       "options": {
-        "climate_registry": "Legacy room and device editor",
-        "climate_connection": "Technical connection setup",
-        "native_climate": "Legacy HASC decision preview",
-        "test_switch": "Service switch test"
+        "climate_registry": "Проверить старый список комнат и устройств",
+        "climate_connection": "Проверить подключение системы климата",
+        "native_climate": "Проверить встроенный расчёт без управления",
+        "test_switch": "Проверить связь на тестовом переключателе"
       }
     },
     "contour_action": {
       "options": {
-        "configure_climate": "Configure contour rooms and devices",
-        "configure_profiles": "Configure Day and Night profiles",
-        "select_profile": "Make Day or Night active",
-        "apply_climate": "Apply active profile and enable automation",
-        "view_status": "View climate contour status",
-        "disable_climate": "Disable only the HASC climate contour"
+        "configure_climate": "Выбрать комнаты и климатические устройства",
+        "configure_profiles": "Задать настройки для дня и ночи",
+        "configure_schedule": "Настроить автоматическое расписание",
+        "select_profile": "Вручную выбрать «День» или «Ночь»",
+        "apply_climate": "Сразу применить выбранные настройки",
+        "view_status": "Проверить, что сейчас работает",
+        "disable_climate": "Отключить управление климатом в HASC"
       }
     },
     "contour_profile": {
       "options": {
-        "day": "Day",
-        "night": "Night"
+        "day": "День",
+        "night": "Ночь"
       }
     },
     "contour_mode": {
       "options": {
-        "observe": "Observe without HASC commands",
-        "automatic": "Automatic through the existing climate engine"
+        "observe": "Только показывать состояние",
+        "automatic": "Разрешить управление после подтверждения"
       }
     },
     "contour_strategy": {
       "options": {
-        "soft": "Soft and quiet",
-        "normal": "Normal — recommended",
-        "aggressive": "Reach target faster"
+        "soft": "Тихо и экономно",
+        "normal": "Сбалансированно — рекомендуется",
+        "aggressive": "Быстро достичь температуры"
       }
     },
     "climate_registry_action": {
       "options": {
-        "import_candidate": "Select device from read-only import",
-        "add_room": "Add or replace room",
-        "add_device": "Add or replace device",
-        "review_canary_preflight": "Review one-room canary preflight",
-        "review_shadow_evidence": "Review shadow evidence",
-        "review_registry": "Review and confirm draft",
-        "advanced_json": "Advanced JSON editor",
-        "reset_registry": "Reset complete registry"
+        "import_candidate": "Добавить найденное устройство",
+        "add_room": "Добавить или изменить комнату",
+        "add_device": "Добавить устройство вручную",
+        "review_canary_preflight": "Проверить готовность пробного управления",
+        "review_shadow_evidence": "Проверить комнату без отправки команд",
+        "review_registry": "Проверить и сохранить изменения",
+        "advanced_json": "Расширенная настройка в JSON",
+        "reset_registry": "Удалить весь список комнат и устройств"
       }
     },
     "climate_device_kind": {
       "options": {
-        "air_conditioner": "Air conditioner",
-        "radiator_thermostat": "Radiator thermostat",
-        "humidifier": "Humidifier",
-        "floor_heating": "Floor heating",
-        "temperature_sensor": "Temperature sensor",
-        "humidity_sensor": "Humidity sensor"
+        "air_conditioner": "Кондиционер",
+        "radiator_thermostat": "Термоголовка радиатора",
+        "humidifier": "Увлажнитель",
+        "floor_heating": "Тёплый пол",
+        "temperature_sensor": "Датчик температуры",
+        "humidity_sensor": "Датчик влажности"
       }
     },
     "climate_device_control_scope": {
       "options": {
-        "observed": "Observed only",
-        "canary": "Canary",
-        "managed": "Managed"
+        "observed": "Только наблюдение",
+        "canary": "Пробное управление",
+        "managed": "Полное управление"
       }
     },
     "climate_device_control_owner": {
       "options": {
-        "climate_core": "Climate core",
-        "manual": "Manual",
-        "observed": "Observed"
+        "climate_core": "Климатический контур",
+        "manual": "Пользователь вручную",
+        "observed": "Никто, только наблюдение"
       }
     },
     "climate_device_capabilities": {
       "options": {
-        "power": "Power",
-        "target_temperature": "Target temperature",
-        "target_humidity": "Target humidity",
-        "hvac_mode": "HVAC mode",
-        "fan_mode": "Fan mode",
-        "auto_manual": "Auto/manual",
-        "target_strategy": "Target strategy",
-        "cooldown": "Cooldown",
-        "physical_feedback": "Physical feedback"
+        "power": "Включение и выключение",
+        "target_temperature": "Установка температуры",
+        "target_humidity": "Установка влажности",
+        "hvac_mode": "Режим нагрева или охлаждения",
+        "fan_mode": "Скорость вентилятора",
+        "auto_manual": "Автоматический или ручной режим",
+        "target_strategy": "Способ поддержания температуры",
+        "cooldown": "Защита от слишком частых команд",
+        "physical_feedback": "Подтверждение состояния от устройства"
       }
     }
   },

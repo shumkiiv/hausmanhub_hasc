@@ -29,6 +29,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
+    TimeSelector,
 )
 
 from .application.configuration import (
@@ -69,6 +70,7 @@ from .application.contours import (
     with_active_climate_profile,
     with_climate_contour_mode,
     with_climate_room_profiles,
+    with_climate_schedule,
 )
 from .application.contour_apply import ContourApplyViolation
 from .const import DOMAIN, ENTRY_TITLE, ENTRY_UNIQUE_ID
@@ -100,6 +102,8 @@ from .domain.native_climate import (
 from .domain.contours import (
     CLIMATE_TARGET_HUMIDITY_DEFAULT,
     CLIMATE_TARGET_TEMPERATURE_DEFAULT,
+    CLIMATE_DAY_START_DEFAULT,
+    CLIMATE_NIGHT_START_DEFAULT,
     ClimateProfile,
     ClimateStrategy,
     ContourMode,
@@ -124,6 +128,10 @@ CONTOUR_APPLY_RESULT_CLOSE_FIELD = "close_contour_apply_result"
 CONTOUR_PROFILE_FIELD = "contour_profile"
 CONTOUR_PROFILE_CONFIRM_FIELD = "confirm_profile_save"
 CONTOUR_PROFILE_SELECT_CONFIRM_FIELD = "confirm_profile_select"
+CLIMATE_SCHEDULE_ENABLED_FIELD = "climate_schedule_enabled"
+CLIMATE_DAY_START_FIELD = "climate_day_start"
+CLIMATE_NIGHT_START_FIELD = "climate_night_start"
+CLIMATE_SCHEDULE_CONFIRM_FIELD = "confirm_climate_schedule"
 CLIMATE_REGISTRY_JSON_FIELD = "climate_registry_json"
 CLIMATE_REGISTRY_CONFIRM_FIELD = "confirm_registry_save"
 CLIMATE_REGISTRY_ACTION_FIELD = "climate_registry_action"
@@ -219,7 +227,7 @@ _RUSSIAN_CONTOUR_STATUS_LABELS = {
     "disabled": "выключен в HASC",
     "ready": "готов",
     "attention": "нужно проверить настройки",
-    "unavailable": "двигатель недоступен",
+    "unavailable": "система климата недоступна",
     "stale": "данные устарели",
 }
 _RUSSIAN_CONTOUR_MODE_LABELS = {
@@ -241,23 +249,23 @@ _RUSSIAN_CONTOUR_REASON_LABELS = {
     "room_state_unavailable": "нет состояния комнаты",
     "state_stale": "показания устарели",
     "device_unavailable": "одно из устройств недоступно",
-    "engine_not_automatic": "существующий климатический двигатель не в автоматическом режиме",
-    "authority_not_ready": "двигатель не подтвердил готовность управления",
-    "target_temperature_differs": "температура в двигателе отличается от настройки HASC",
-    "target_humidity_differs": "влажность в двигателе отличается от настройки HASC",
-    "target_strategy_unavailable": "двигатель не сообщил текущую стратегию",
-    "target_strategy_differs": "стратегия двигателя отличается от настройки HASC",
+    "engine_not_automatic": "подключённая система климата не в автоматическом режиме",
+    "authority_not_ready": "подключённая система не подтвердила готовность управления",
+    "target_temperature_differs": "температура отличается от настройки HASC",
+    "target_humidity_differs": "влажность отличается от настройки HASC",
+    "target_strategy_unavailable": "подключённая система не сообщила характер работы",
+    "target_strategy_differs": "характер работы отличается от настройки HASC",
 }
 _RUSSIAN_CONTOUR_APPLY_STATUS_LABELS = {
     "pending": "команды приняты, подтверждение состояния ещё ожидается",
-    "confirmed": "настройки подтверждены двигателем",
+    "confirmed": "настройки подтверждены системой климата",
     "partial": "применена только часть настроек",
-    "rejected": "двигатель отклонил настройку",
+    "rejected": "система климата отклонила настройку",
     "unavailable": "результат команды не удалось проверить",
 }
 _RUSSIAN_CONTOUR_APPLY_REASON_LABELS = {
     "already_in_sync": "настройки уже совпадали, команды не потребовались",
-    "engine_rejected": "двигатель отклонил одну из команд",
+    "engine_rejected": "система климата отклонила одну из команд",
     "command_result_unavailable": "ответ на одну из команд потерян; повторная отправка заблокирована",
     "verification_unavailable": "после команд не удалось перечитать состояние",
     "state_not_confirmed": "двигатель ещё не показал все новые значения",
@@ -312,6 +320,14 @@ def _display_measurement(value: object, unit: str) -> str:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return "нет данных"
     return f"{value:g}{unit}"
+
+
+def _schedule_clock_value(value: object) -> object:
+    """Normalize the Home Assistant time selector to persisted HH:MM."""
+
+    if isinstance(value, str) and len(value) == 8 and value.endswith(":00"):
+        return value[:5]
+    return value
 
 
 def _russian_native_value(value: object, labels: Mapping[str, str]) -> str:
@@ -388,6 +404,7 @@ CONTOUR_ACTION_SELECTOR = SelectSelector(
         options=[
             "configure_climate",
             "configure_profiles",
+            "configure_schedule",
             "select_profile",
             "apply_climate",
             "view_status",
@@ -625,6 +642,34 @@ def _contour_profile_select_schema(default: str) -> vol.Schema:
 def _contour_profile_confirm_schema(field: str) -> vol.Schema:
     return vol.Schema(
         {vol.Required(field, default=False): StrictBooleanSelector()}
+    )
+
+
+def _climate_schedule_schema(
+    *,
+    enabled: bool,
+    day_start: str,
+    night_start: str,
+) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CLIMATE_SCHEDULE_ENABLED_FIELD,
+                default=enabled,
+            ): StrictBooleanSelector(),
+            vol.Required(
+                CLIMATE_DAY_START_FIELD,
+                default=day_start,
+            ): TimeSelector(),
+            vol.Required(
+                CLIMATE_NIGHT_START_FIELD,
+                default=night_start,
+            ): TimeSelector(),
+            vol.Required(
+                CLIMATE_SCHEDULE_CONFIRM_FIELD,
+                default=False,
+            ): StrictBooleanSelector(),
+        }
     )
 
 
@@ -1189,6 +1234,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _contour_saved_mode: str | None = None
     _contour_saved_room_parameters: dict[str, dict[str, object]] | None = None
     _contour_saved_room_profiles: dict[str, dict[str, object]] | None = None
+    _contour_saved_schedule: dict[str, object] | None = None
     _contour_saved_source_ids: tuple[str, ...] = ()
     _contour_name_draft: str | None = None
     _contour_mode_draft: str | None = None
@@ -1210,6 +1256,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _profile_phase: str = ClimateProfile.DAY.value
     _profile_settings_draft: dict[str, dict[str, object]] | None = None
     _profile_selection_draft: str | None = None
+    _schedule_contours_draft: Any | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Show one short choice instead of mixing unrelated settings."""
@@ -1271,6 +1318,8 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 return await self._async_begin_climate_contour(runtime)
             if action == "configure_profiles":
                 return await self._async_begin_climate_profiles(runtime)
+            if action == "configure_schedule":
+                return await self._async_begin_climate_schedule(runtime)
             if action == "select_profile":
                 return await self._async_begin_profile_selection(runtime)
             if action == "apply_climate":
@@ -1599,6 +1648,99 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             description_placeholders=self._profile_preview_placeholders(contours),
         )
 
+    async def _async_begin_climate_schedule(self, runtime: Any) -> FlowResult:
+        """Load the saved automatic climate schedule for one simple form."""
+
+        try:
+            contours, _, _ = await self._async_profile_contour(runtime)
+        except Exception:
+            return self.async_show_form(
+                step_id="contours",
+                data_schema=_contour_action_schema(),
+                errors={"base": "contour_not_configured"},
+            )
+        self._schedule_contours_draft = contours
+        return await self.async_step_climate_schedule()
+
+    async def async_step_climate_schedule(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Save the explicitly authorized day/night switching times."""
+
+        runtime = self._climate_runtime()
+        contours = self._schedule_contours_draft
+        contour = None if contours is None else contours.contour("climate")
+        if runtime is None or contour is None:
+            return await self.async_step_contours()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            expected = {
+                CLIMATE_SCHEDULE_ENABLED_FIELD,
+                CLIMATE_DAY_START_FIELD,
+                CLIMATE_NIGHT_START_FIELD,
+                CLIMATE_SCHEDULE_CONFIRM_FIELD,
+            }
+            enabled = user_input.get(CLIMATE_SCHEDULE_ENABLED_FIELD)
+            if set(user_input) != expected or type(enabled) is not bool:
+                errors["base"] = "invalid_climate_schedule"
+            elif user_input.get(CLIMATE_SCHEDULE_CONFIRM_FIELD) is not True:
+                errors[CLIMATE_SCHEDULE_CONFIRM_FIELD] = (
+                    "climate_schedule_confirmation_required"
+                )
+            else:
+                try:
+                    configuration = effective_configuration(
+                        self.config_entry.data,
+                        self.config_entry.options,
+                    )
+                except (ConfigurationViolation, ContourRegistryViolation):
+                    errors["base"] = "invalid_climate_schedule"
+                else:
+                    if enabled and (
+                        contour.mode is not ContourMode.AUTOMATIC
+                        or configuration.climate_bridge_mode
+                        is not ClimateBridgeMode.MANAGED
+                    ):
+                        errors["base"] = "schedule_requires_automatic_climate"
+                    else:
+                        try:
+                            updated = with_climate_schedule(
+                                contours,
+                                enabled=enabled,
+                                day_start=_schedule_clock_value(
+                                    user_input.get(CLIMATE_DAY_START_FIELD)
+                                ),
+                                night_start=_schedule_clock_value(
+                                    user_input.get(CLIMATE_NIGHT_START_FIELD)
+                                ),
+                            )
+                            await runtime.async_replace_contours(
+                                contour_registry_to_payload(updated)
+                            )
+                        except ContourRegistryViolation:
+                            errors["base"] = "invalid_climate_schedule"
+                        except Exception:
+                            errors["base"] = "contour_save_failed"
+                        else:
+                            return self.async_create_entry(
+                                title="",
+                                data=_merged_safe_options(
+                                    self.config_entry.data,
+                                    self.config_entry.options,
+                                    {},
+                                ),
+                            )
+        return self.async_show_form(
+            step_id="climate_schedule",
+            data_schema=_climate_schedule_schema(
+                enabled=contour.schedule.enabled,
+                day_start=contour.schedule.day_start,
+                night_start=contour.schedule.night_start,
+            ),
+            errors=errors,
+        )
+
     async def _async_begin_profile_selection(self, runtime: Any) -> FlowResult:
         """Load saved profiles before selecting which set becomes active."""
 
@@ -1611,6 +1753,12 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 step_id="contours",
                 data_schema=_contour_action_schema(),
                 errors={"base": "contour_not_configured"},
+            )
+        if contour.schedule.enabled:
+            return self.async_show_form(
+                step_id="contours",
+                data_schema=_contour_action_schema(),
+                errors={"base": "schedule_controls_profile"},
             )
         self._profile_contours_draft = contours
         self._profile_room_names_draft = room_names
@@ -2015,6 +2163,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                             }
                             or None
                         ),
+                        schedule=self._contour_saved_schedule,
                     )
                     preview = contour_snapshot(contours, registry, snapshot)
                 except ContourRegistryViolation:
@@ -3034,6 +3183,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self._contour_saved_mode = None
         self._contour_saved_room_parameters = None
         self._contour_saved_room_profiles = None
+        self._contour_saved_schedule = None
         self._contour_saved_source_ids = ()
         self._contour_name_draft = None
         self._contour_mode_draft = None
@@ -3088,6 +3238,16 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self._contour_saved_mode = contour.mode.value
         self._contour_saved_room_parameters = parameters
         self._contour_saved_room_profiles = profiles
+        self._contour_saved_schedule = {
+            "enabled": contour.schedule.enabled,
+            "day_start": contour.schedule.day_start,
+            "night_start": contour.schedule.night_start,
+            "last_applied_profile": (
+                None
+                if contour.schedule.last_applied_profile is None
+                else contour.schedule.last_applied_profile.value
+            ),
+        }
         self._contour_saved_source_ids = tuple(source_ids)
 
     def _contour_room_defaults(
@@ -3201,7 +3361,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             "automatic": _russian_yes_no(
                 execution_values.get("automatic_active")
             ),
-            "algorithm": "существующий климатический контур",
+            "algorithm": "подключённая система климата",
             "active_profile": _RUSSIAN_CLIMATE_PROFILE_LABELS.get(
                 next(iter(active_profiles))
                 if len(active_profiles) == 1

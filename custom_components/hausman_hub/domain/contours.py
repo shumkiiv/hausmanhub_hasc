@@ -8,13 +8,13 @@ reimplementing that mature policy inside the Home Assistant integration.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 import re
 
 
-CONTOUR_REGISTRY_VERSION = 2
+CONTOUR_REGISTRY_VERSION = 3
 MAX_CONTOURS = 32
 MAX_CONTOUR_ROOMS = 128
 MAX_CONTOUR_DEVICES = 512
@@ -26,8 +26,11 @@ CLIMATE_TARGET_TEMPERATURE_STEP = 0.5
 CLIMATE_TARGET_HUMIDITY_MINIMUM = 30
 CLIMATE_TARGET_HUMIDITY_MAXIMUM = 70
 CLIMATE_TARGET_HUMIDITY_STEP = 5
+CLIMATE_DAY_START_DEFAULT = "07:00"
+CLIMATE_NIGHT_START_DEFAULT = "23:00"
 
 _STABLE_ID = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_CLOCK_TIME = re.compile(r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
 
 
 class ContourViolation(ValueError):
@@ -67,6 +70,51 @@ class ClimateProfile(StrEnum):
 
     DAY = "day"
     NIGHT = "night"
+
+
+@dataclass(frozen=True, slots=True)
+class ClimateSchedule:
+    """One explicitly enabled local-time switch between comfort profiles."""
+
+    enabled: bool = False
+    day_start: str = CLIMATE_DAY_START_DEFAULT
+    night_start: str = CLIMATE_NIGHT_START_DEFAULT
+    last_applied_profile: ClimateProfile | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.enabled) is not bool:
+            raise ContourViolation("climate schedule enabled must be boolean")
+        _clock_minutes(self.day_start, "day profile start")
+        _clock_minutes(self.night_start, "night profile start")
+        if self.day_start == self.night_start:
+            raise ContourViolation("day and night profile starts must differ")
+        if self.last_applied_profile is not None and not isinstance(
+            self.last_applied_profile,
+            ClimateProfile,
+        ):
+            raise ContourViolation("last applied climate profile must be approved")
+
+    def profile_at(self, *, hour: int, minute: int) -> ClimateProfile:
+        """Return the profile selected for one local wall-clock minute."""
+
+        if type(hour) is not int or type(minute) is not int:
+            raise ContourViolation("climate schedule time must be numeric")
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ContourViolation("climate schedule time is invalid")
+        current = hour * 60 + minute
+        day = _clock_minutes(self.day_start, "day profile start")
+        night = _clock_minutes(self.night_start, "night profile start")
+        if day < night:
+            return (
+                ClimateProfile.DAY
+                if day <= current < night
+                else ClimateProfile.NIGHT
+            )
+        return (
+            ClimateProfile.DAY
+            if current >= day or current < night
+            else ClimateProfile.NIGHT
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +197,7 @@ class ContourDefinition:
     mode: ContourMode
     engine: ContourEngine
     rooms: tuple[ClimateContourRoom, ...]
+    schedule: ClimateSchedule = field(default_factory=ClimateSchedule)
 
     def __post_init__(self) -> None:
         _stable_id(self.contour_id, "contour id")
@@ -165,6 +214,10 @@ class ContourDefinition:
             raise ContourViolation("climate contour has too many rooms")
         if any(not isinstance(room, ClimateContourRoom) for room in self.rooms):
             raise ContourViolation("climate contour room must be validated")
+        if not isinstance(self.schedule, ClimateSchedule):
+            raise ContourViolation("climate schedule must be validated")
+        if self.schedule.enabled and self.mode is not ContourMode.AUTOMATIC:
+            raise ContourViolation("climate schedule requires automatic mode")
         _unique((room.room_id for room in self.rooms), "contour room ids")
         _unique(
             (device_id for room in self.rooms for device_id in room.device_ids),
@@ -305,6 +358,15 @@ def _temperature(value: object) -> float:
     ):
         raise ContourViolation("target temperature must be 18..28 in 0.5 steps")
     return float(number)
+
+
+def _clock_minutes(value: object, field: str) -> int:
+    """Validate one exact 24-hour clock string and return minutes after midnight."""
+
+    if not isinstance(value, str) or _CLOCK_TIME.fullmatch(value) is None:
+        raise ContourViolation(f"{field} must use HH:MM")
+    hour, minute = value.split(":", maxsplit=1)
+    return int(hour) * 60 + int(minute)
 
 
 def _humidity(value: object) -> int:

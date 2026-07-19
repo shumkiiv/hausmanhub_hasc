@@ -33,6 +33,7 @@ CHANGELOG_PATH = PurePosixPath("CHANGELOG.md")
 LICENSE_PATH = PurePosixPath("LICENSE")
 README_PATH = PurePosixPath("README.md")
 TRANSLATION_PATHS = (
+    INTEGRATION_DIRECTORY / "strings.json",
     INTEGRATION_DIRECTORY / "translations/en.json",
     INTEGRATION_DIRECTORY / "translations/ru.json",
 )
@@ -51,11 +52,18 @@ CONTRACT_PATHS = tuple(
         "climate-registry.schema.json",
         "climate-shadow-candidate-query.schema.json",
         "climate-shadow-evidence.schema.json",
+        "contour-apply-preview.schema.json",
+        "contour-apply-receipt.schema.json",
+        "contour-apply-request.schema.json",
+        "contours.schema.json",
     )
 ) + (
     INTEGRATION_DIRECTORY / "contracts" / "v2" / "climate-home.schema.json",
+    INTEGRATION_DIRECTORY / "contracts" / "v2" / "contours.schema.json",
     INTEGRATION_DIRECTORY / "contracts" / "v3" / "climate-home.schema.json",
+    INTEGRATION_DIRECTORY / "contracts" / "v3" / "contours.schema.json",
     INTEGRATION_DIRECTORY / "contracts" / "v4" / "climate-home.schema.json",
+    INTEGRATION_DIRECTORY / "contracts" / "v4" / "contours.schema.json",
 )
 REQUIRED_PACKAGE_PATHS = (
     HACS_METADATA_PATH,
@@ -76,19 +84,24 @@ REQUIRED_PACKAGE_PATHS = (
     INTEGRATION_DIRECTORY / "application/climate_registry.py",
     INTEGRATION_DIRECTORY / "application/climate_registry_import.py",
     INTEGRATION_DIRECTORY / "application/climate_runtime.py",
+    INTEGRATION_DIRECTORY / "application/contour_apply.py",
+    INTEGRATION_DIRECTORY / "application/contours.py",
     INTEGRATION_DIRECTORY / "domain/control.py",
     INTEGRATION_DIRECTORY / "domain/climate.py",
     INTEGRATION_DIRECTORY / "domain/climate_bridge.py",
+    INTEGRATION_DIRECTORY / "domain/contours.py",
     INTEGRATION_DIRECTORY / "climate_api.py",
     INTEGRATION_DIRECTORY / "climate_bridge.py",
     INTEGRATION_DIRECTORY / "climate_evidence_storage.py",
     INTEGRATION_DIRECTORY / "climate_storage.py",
+    INTEGRATION_DIRECTORY / "climate_schedule.py",
+    INTEGRATION_DIRECTORY / "contour_storage.py",
     MANIFEST_PATH,
     ICON_PATH,
     *TRANSLATION_PATHS,
     *CONTRACT_PATHS,
 )
-EXPECTED_NAME = "HausMan Hub HASC"
+EXPECTED_NAME = "HASC — управление домом"
 EXPECTED_DOMAIN = "hausman_hub"
 EXPECTED_HOME_ASSISTANT = "2026.6.4"
 EXPECTED_HACS_METADATA = {

@@ -78,6 +78,10 @@ class FakeBooleanSelector:
     """Represent the one local-page setting without a Home Assistant runtime."""
 
 
+class FakeTimeSelector:
+    """Represent a local clock picker without a Home Assistant runtime."""
+
+
 class FakeEntitySelectorConfig:
     """Capture the exact entity domain permitted by the canary selector."""
 
@@ -218,6 +222,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     selector.TextSelector = FakeTextSelector  # type: ignore[attr-defined]
     selector.TextSelectorConfig = FakeTextSelectorConfig  # type: ignore[attr-defined]
     selector.TextSelectorType = FakeTextSelectorType  # type: ignore[attr-defined]
+    selector.TimeSelector = FakeTimeSelector  # type: ignore[attr-defined]
 
     homeassistant.config_entries = config_entries  # type: ignore[attr-defined]
     homeassistant.core = core  # type: ignore[attr-defined]
@@ -1229,7 +1234,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual("climate_contour_apply_result", result["step_id"])
         self.assertEqual(
-            "настройки подтверждены двигателем",
+            "настройки подтверждены системой климата",
             result["description_placeholders"]["status"],
         )
         self.assertEqual(2, len(bridge.executed))
@@ -1237,6 +1242,68 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"close_contour_apply_result": True}
         )
         self.assertEqual("create_entry", closed["type"])
+
+        schedule_flow = self.config_flow.HausmanHubOptionsFlow()
+        schedule_flow.config_entry = FakeConfigEntry(
+            options_flow.config_entry.data,
+            dict(saved["data"]),
+        )
+        schedule_flow.hass = options_flow.hass
+        schedule_form = await schedule_flow.async_step_contours(
+            {"contour_action": "configure_schedule"}
+        )
+        self.assertEqual("climate_schedule", schedule_form["step_id"])
+        schedule_fields = {
+            marker.key: (marker, selector)
+            for marker, selector in schedule_form["schema"].fields.items()
+        }
+        self.assertEqual(
+            {
+                "climate_schedule_enabled",
+                "climate_day_start",
+                "climate_night_start",
+                "confirm_climate_schedule",
+            },
+            set(schedule_fields),
+        )
+        self.assertEqual("07:00", schedule_fields["climate_day_start"][0].default)
+        self.assertEqual("23:00", schedule_fields["climate_night_start"][0].default)
+        refused_schedule = await schedule_flow.async_step_climate_schedule(
+            {
+                "climate_schedule_enabled": True,
+                "climate_day_start": "07:00:00",
+                "climate_night_start": "23:00:00",
+                "confirm_climate_schedule": False,
+            }
+        )
+        self.assertEqual(
+            {
+                "confirm_climate_schedule": (
+                    "climate_schedule_confirmation_required"
+                )
+            },
+            refused_schedule["errors"],
+        )
+        schedule_saved = await schedule_flow.async_step_climate_schedule(
+            {
+                "climate_schedule_enabled": True,
+                "climate_day_start": "07:00:00",
+                "climate_night_start": "23:00:00",
+                "confirm_climate_schedule": True,
+            }
+        )
+        self.assertEqual("create_entry", schedule_saved["type"])
+        self.assertTrue(contour_store.registry.contours[0].schedule.enabled)
+        self.assertEqual("07:00", contour_store.registry.contours[0].schedule.day_start)
+        self.assertEqual([], bridge.executed[2:])
+
+        blocked_manual_flow = self.config_flow.HausmanHubOptionsFlow()
+        blocked_manual_flow.config_entry = schedule_flow.config_entry
+        blocked_manual_flow.hass = options_flow.hass
+        blocked_manual = await blocked_manual_flow.async_step_contours(
+            {"contour_action": "select_profile"}
+        )
+        self.assertEqual({"base": "schedule_controls_profile"}, blocked_manual["errors"])
 
         disabled = await options_flow.async_step_contours(
             {"contour_action": "disable_climate"}
