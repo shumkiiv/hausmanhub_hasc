@@ -64,6 +64,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v2/home.json": "v2/climate-home.schema.json",
             "hasc_climate_v3/home.json": "v3/climate-home.schema.json",
             "hasc_climate_v4/home.json": "v4/climate-home.schema.json",
+            "hasc_climate_v5/home.json": "v5/climate-home.schema.json",
             "hasc_contours_v1/contours.json": "v1/contours.schema.json",
             "hasc_contours_v2/contours.json": "v2/contours.schema.json",
             "hasc_contours_v3/contours.json": "v3/contours.schema.json",
@@ -93,14 +94,25 @@ class ClimateContractSchemasTest(unittest.TestCase):
         registry = registry_from_payload(load_json(FIXTURES / "registry.json"))
         snapshot = import_climate_state(load_json(SOURCE_FIXTURE))
 
-        home = android_climate_snapshot(
-            registry,
+        contour_climate_registry, contours = build_climate_contour_setup(
             snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        home = android_climate_snapshot(
+            contour_climate_registry,
+            snapshot,
+            contours=contours,
             bridge_mode=ClimateBridgeMode.SHADOW,
         )
         admin = admin_climate_import_snapshot(registry, snapshot)
 
-        validator("v4/climate-home.schema.json").validate(home)
+        validator("v5/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
@@ -137,16 +149,6 @@ class ClimateContractSchemasTest(unittest.TestCase):
             disabled_preflight
         )
 
-        contour_climate_registry, contours = build_climate_contour_setup(
-            snapshot,
-            room_ids=["living"],
-            source_ids=["synthetic-ac-source-living"],
-            name="Климат",
-            mode="automatic",
-            target_temperature=25.0,
-            target_humidity=45,
-            strategy="normal",
-        )
         generated_contours = contour_snapshot(
             contours,
             contour_climate_registry,
@@ -156,6 +158,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         contour_json = json.dumps(generated_contours, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("synthetic-ac-source-living", contour_json)
         self.assertNotIn("entity_id", contour_json)
+        self.assertEqual(generated_contours["contours"], home["contours"])
 
     def test_action_and_registry_schemas_reject_extra_or_missing_boundary_fields(self) -> None:
         capabilities = api_capabilities_snapshot()
@@ -238,6 +241,38 @@ class ClimateContractSchemasTest(unittest.TestCase):
         orphan_presentation["rooms"][0]["control"]["action_inputs"] = {}  # type: ignore[index]
         with self.assertRaises(Exception):
             validator("v4/climate-home.schema.json").validate(orphan_presentation)
+
+        split_home = load_json(
+            ROOT / "fixtures" / "hasc_climate_v5" / "home.json"
+        )
+        split_home.pop("contours")  # type: ignore[union-attr]
+        with self.assertRaises(Exception):
+            validator("v5/climate-home.schema.json").validate(split_home)
+
+    def test_v5_examples_describe_reachable_control_states(self) -> None:
+        home = load_json(ROOT / "fixtures" / "hasc_climate_v5" / "home.json")
+        room = home["rooms"][0]  # type: ignore[index]
+        contour = home["contours"][0]  # type: ignore[index]
+        contour_room = contour["rooms"][0]
+
+        self.assertEqual(room["id"], contour_room["id"])
+        self.assertEqual(
+            room["target_temperature"],
+            contour_room["targets"]["temperature"],
+        )
+        self.assertTrue(contour_room["targets_in_sync"])
+        self.assertFalse(contour["execution"]["settings_apply"]["available"])
+        self.assertFalse(contour_room["temporary_temperature"]["available"])
+        self.assertFalse(
+            contour["execution"]["temporary_temperature"]["available"]
+        )
+
+        contours = load_json(
+            ROOT / "fixtures" / "hasc_contours_v5" / "contours.json"
+        )
+        managed = contours["contours"][0]  # type: ignore[index]
+        self.assertTrue(managed["execution"]["settings_apply"]["available"])
+        self.assertTrue(managed["rooms"][0]["temporary_temperature"]["available"])
 
 
 if __name__ == "__main__":

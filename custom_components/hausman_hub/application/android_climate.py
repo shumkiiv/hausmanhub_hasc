@@ -16,6 +16,7 @@ from ..domain.climate import (
     ClimateRegistry,
 )
 from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.contours import ContourRegistry
 from .climate_commands import (
     CLIMATE_TEMPERATURE_MAXIMUM,
     CLIMATE_TEMPERATURE_MINIMUM,
@@ -23,10 +24,11 @@ from .climate_commands import (
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_registry import reconcile_climate_registry
+from .contours import contour_snapshot
 
 
 ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hasc-home"
-ANDROID_CLIMATE_CONTRACT_VERSION = 4
+ANDROID_CLIMATE_CONTRACT_VERSION = 5
 ANDROID_ROOM_CONTROL_ACTIONS = (
     "set_room_target",
     "turn_room_off",
@@ -41,6 +43,7 @@ def android_climate_snapshot(
     registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot,
     *,
+    contours: ContourRegistry | None = None,
     bridge_mode: ClimateBridgeMode,
     canary_room_id: str | None = None,
     candidate_ready: bool = False,
@@ -106,6 +109,12 @@ def android_climate_snapshot(
             }
         )
 
+    public_contours = contour_snapshot(
+        contours or ContourRegistry(),
+        registry,
+        snapshot,
+        settings_apply_enabled=(bridge_mode is ClimateBridgeMode.MANAGED),
+    )["contours"]
     return {
         "contract": {
             "name": ANDROID_CLIMATE_CONTRACT_NAME,
@@ -117,6 +126,7 @@ def android_climate_snapshot(
             "commands_enabled": room_control_enabled,
         },
         "rooms": rooms,
+        "contours": public_contours,
         "reconciliation": {
             "matches": reconciliation.matches,
             "matched_device_ids": list(reconciliation.matched_device_ids),

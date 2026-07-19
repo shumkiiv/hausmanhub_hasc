@@ -3477,8 +3477,18 @@ async def async_assert_shadow_climate_end_to_end(
             raise RuntimeError("tablet home contract must not expose private climate bindings")
         assert_result(
             home_payload.get("contract"),
-            {"name": "hausman-hasc-home", "version": 4},
-            "tablet must receive the explicit v4 home contract",
+            {"name": "hausman-hasc-home", "version": 5},
+            "tablet must receive the combined v5 home contract",
+        )
+        combined_contours = home_payload.get("contours", [])
+        assert_result(
+            [
+                contour.get("id")
+                for contour in combined_contours
+                if isinstance(contour, dict)
+            ],
+            [],
+            "tablet home must contain an explicit empty contour list before saving",
         )
         home_rooms = home_payload.get("rooms", [])
         living_room = next(

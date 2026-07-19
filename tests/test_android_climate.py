@@ -28,7 +28,8 @@ class AndroidClimateTest(unittest.TestCase):
         )
 
         self.assertEqual("hausman-hasc-home", result["contract"]["name"])
-        self.assertEqual(4, result["contract"]["version"])
+        self.assertEqual(5, result["contract"]["version"])
+        self.assertEqual([], result["contours"])
         self.assertEqual("living_ac", result["rooms"][0]["devices"][0]["id"])
         self.assertEqual(25.8, result["rooms"][0]["temperature"])
         self.assertFalse(result["climate"]["commands_enabled"])

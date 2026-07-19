@@ -839,7 +839,11 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, home_response.status)
-        self.assertEqual(4, home_response.payload["contract"]["version"])
+        self.assertEqual(5, home_response.payload["contract"]["version"])
+        self.assertEqual(
+            "climate",
+            home_response.payload["contours"][0]["id"],
+        )
         living_control = home_response.payload["rooms"][0]["control"]
         self.assertFalse(living_control["enabled"])
         self.assertEqual(

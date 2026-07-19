@@ -100,11 +100,18 @@ Last updated: 2026-07-19.
 - The 1.5.0 release candidate passed 289 local tests, isolated Home Assistant
   2026.6.4 and 2026.7.0 checks, and a final read-only Kimi review with no
   significant findings (session `ses_084f948c2ffee4C3vSqj22zKaT`).
-- Version 1.6.0 is the current HASC-only development line. Its first roadmap
-  item adds `GET /api/hausman_hub/v1/capabilities`, a local-tablet discovery
+- Version 1.6.0 completed the first HASC-only roadmap item. It adds
+  `GET /api/hausman_hub/v1/capabilities`, a local-tablet discovery
   response containing only installed HASC features, public paths, and contract
   versions. It is independent of current climate command readiness and exposes
   no home data, private binding, or climate-module address.
+- Version 1.6.1 is the current HASC-only development version. The second
+  roadmap item advances `hausman-hasc-home` to v5 and embeds the
+  public contour projection in the same response as live rooms and devices.
+  Both projections use one imported Climate API snapshot; the legacy
+  `/contours` route remains available. Android and the climate module are not
+  changed. The final staged review passed after fixture reachability was made
+  explicit (Kimi session `ses_084b63f0bffeaYv70SAOrV4Jqu`).
   Progress is tracked in the
   [50-item HASC roadmap](LLM_WIKI/Manual/2026-07-19-hasc-50-point-roadmap.md).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after

@@ -220,6 +220,7 @@ class ClimateRuntime:
             return android_climate_snapshot(
                 self._registry,
                 snapshot,
+                contours=self._contours,
                 bridge_mode=self.configuration.climate_bridge_mode,
                 canary_room_id=self.configuration.climate_canary_room_id,
                 candidate_ready=candidate_ready,

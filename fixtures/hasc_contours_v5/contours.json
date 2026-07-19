@@ -66,7 +66,7 @@
         "automatic_active": true,
         "hasc_direct_commands": false,
         "settings_apply": {
-          "available": false,
+          "available": true,
           "requires_confirmation": true,
           "parameters": {
             "temperature": true,

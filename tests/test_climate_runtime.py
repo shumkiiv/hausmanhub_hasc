@@ -802,6 +802,40 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(0, bridge.fetch_count)
         self.assertEqual([], bridge.executed)
 
+    async def test_public_home_combines_room_and_contour_from_one_refresh(self) -> None:
+        bridge = MemoryBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        fetches_before = bridge.fetch_count
+
+        result = await runtime.async_public_snapshot()
+
+        self.assertEqual(fetches_before + 1, bridge.fetch_count)
+        self.assertEqual(5, result["contract"]["version"])  # type: ignore[index]
+        self.assertEqual("climate", result["contours"][0]["id"])  # type: ignore[index]
+        self.assertEqual(
+            result["rooms"][0]["temperature"],  # type: ignore[index]
+            result["contours"][0]["rooms"][0]["current"]["temperature"],  # type: ignore[index]
+        )
+        self.assertEqual([], bridge.executed)
+
     async def test_contour_store_failure_rolls_back_device_registry(self) -> None:
         bridge = MemoryBridge()
         original = ClimateRegistry()
@@ -1211,7 +1245,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertFalse(snapshot["climate"]["commands_enabled"])  # type: ignore[index]
-        self.assertEqual(4, snapshot["contract"]["version"])  # type: ignore[index]
+        self.assertEqual(5, snapshot["contract"]["version"])  # type: ignore[index]
         self.assertIn(
             "evidence_not_ready",
             snapshot["rooms"][0]["control"]["blocked_reasons"],  # type: ignore[index]
