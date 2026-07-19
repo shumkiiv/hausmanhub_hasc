@@ -2884,7 +2884,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             capabilities_payload.get("capabilities", {})
             .get("climate_home", {})
             .get("response_contract"),
-            {"name": "hausman-hasc-home", "version": 7},
+            {"name": "hausman-hasc-home", "version": 8},
             "HASC capabilities must advertise the current home contract",
         )
         assert_result(
@@ -3492,8 +3492,8 @@ async def async_assert_shadow_climate_end_to_end(
             raise RuntimeError("tablet home contract must not expose private climate bindings")
         assert_result(
             home_payload.get("contract"),
-            {"name": "hausman-hasc-home", "version": 7},
-            "tablet must receive the combined v7 home contract",
+            {"name": "hausman-hasc-home", "version": 8},
+            "tablet must receive the combined v8 home contract",
         )
         combined_contours = home_payload.get("contours", [])
         assert_result(
@@ -3560,6 +3560,29 @@ async def async_assert_shadow_climate_end_to_end(
                 "mode": "automatic",
             },
             "tablet room must expose one explicit factual current-state block",
+        )
+        assert_result(
+            (
+                living_room.get("active_target")
+                if isinstance(living_room, dict)
+                else None,
+                living_room.get("saved_profiles")
+                if isinstance(living_room, dict)
+                else None,
+            ),
+            (
+                {
+                    "temperature": 25.0,
+                    "humidity": 45.0,
+                    "strategy": "normal",
+                },
+                {
+                    "active": None,
+                    "day": None,
+                    "night": None,
+                },
+            ),
+            "tablet must keep active target separate from unsaved profiles",
         )
         assert_result(
             [

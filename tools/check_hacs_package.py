@@ -71,6 +71,7 @@ CONTRACT_PATHS = tuple(
     INTEGRATION_DIRECTORY / "contracts" / "v6" / "climate-home.schema.json",
     INTEGRATION_DIRECTORY / "contracts" / "v6" / "contours.schema.json",
     INTEGRATION_DIRECTORY / "contracts" / "v7" / "climate-home.schema.json",
+    INTEGRATION_DIRECTORY / "contracts" / "v8" / "climate-home.schema.json",
 )
 REQUIRED_PACKAGE_PATHS = (
     HACS_METADATA_PATH,

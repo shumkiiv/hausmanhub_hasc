@@ -120,12 +120,17 @@ Last updated: 2026-07-19.
   contour reason, and the schema allow-lists all device capability codes. The
   final read-only Kimi review passed after those completeness checks were added
   (session `ses_0849e5c55ffesSAtzPiPLoPqe2`).
-- Version 1.6.3 is the current HASC-only development version. Home contract v7
+- Version 1.6.3 completed the fourth HASC-only roadmap item. Home contract v7
   gives every registered room an explicit factual `actual` block with current,
   stale, or unavailable data status, temperature, humidity, and normalized
   engine mode. Missing source data stays null/unknown; legacy flat fields remain
   temporarily for Android compatibility. The final read-only Kimi review passed
   (session `ses_084881905ffeftJ53HfmP6RXTu`).
+- Version 1.6.4 completed the fifth HASC-only roadmap item. Home contract v8
+  separates the imported engine `active_target` from HASC `saved_profiles` for
+  day and night. An unconfigured contour keeps all saved profile values null
+  instead of copying the current engine target. The final read-only Kimi review
+  passed (session `ses_0847a2b90ffe5Z4brgW45Gy2m2`).
   Progress is tracked in the
   [50-item HASC roadmap](LLM_WIKI/Manual/2026-07-19-hasc-50-point-roadmap.md).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after

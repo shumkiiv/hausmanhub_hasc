@@ -839,7 +839,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, home_response.status)
-        self.assertEqual(7, home_response.payload["contract"]["version"])
+        self.assertEqual(8, home_response.payload["contract"]["version"])
         self.assertEqual(
             "current",
             home_response.payload["rooms"][0]["actual"]["data_status"],

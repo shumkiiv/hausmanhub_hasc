@@ -13,6 +13,9 @@ from custom_components.hausman_hub.application.android_climate import (
 )
 from custom_components.hausman_hub.application.climate_import import import_climate_state
 from custom_components.hausman_hub.application.climate_registry import registry_from_payload
+from custom_components.hausman_hub.application.contours import (
+    build_climate_contour_setup,
+)
 from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
 from tests.test_climate_import import registry_payload, source_payload
 
@@ -28,13 +31,25 @@ class AndroidClimateTest(unittest.TestCase):
         )
 
         self.assertEqual("hausman-hasc-home", result["contract"]["name"])
-        self.assertEqual(7, result["contract"]["version"])
+        self.assertEqual(8, result["contract"]["version"])
         self.assertEqual(
             "Автоматически",
             result["display_names"]["room_modes"]["automatic"],
         )
         self.assertEqual("automatic", result["rooms"][0]["mode"])
         self.assertEqual("working", result["rooms"][0]["devices"][0]["state"])
+        self.assertEqual(
+            {
+                "temperature": 25.0,
+                "humidity": 45.0,
+                "strategy": "normal",
+            },
+            result["rooms"][0]["active_target"],
+        )
+        self.assertEqual(
+            {"active": None, "day": None, "night": None},
+            result["rooms"][0]["saved_profiles"],
+        )
         self.assertEqual(
             {
                 "data_status": "current",
@@ -97,6 +112,42 @@ class AndroidClimateTest(unittest.TestCase):
             result["rooms"][0]["control"]["blocked_reasons"],
         )
         self.assertEqual(1, result["reconciliation"]["unregistered_device_count"])
+
+    def test_active_engine_target_is_separate_from_saved_profiles(self) -> None:
+        source = source_payload()
+        source["rooms"][0]["targets"]["temperature"] = 24.0  # type: ignore[index]
+        snapshot = import_climate_state(source)
+        registry, contours = build_climate_contour_setup(
+            snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="soft",
+        )
+
+        result = android_climate_snapshot(
+            registry,
+            snapshot,
+            contours=contours,
+            bridge_mode=ClimateBridgeMode.SHADOW,
+        )
+        room = result["rooms"][0]
+
+        self.assertEqual(24.0, room["active_target"]["temperature"])
+        self.assertEqual("normal", room["active_target"]["strategy"])
+        self.assertEqual(25.0, room["saved_profiles"]["day"]["temperature"])
+        self.assertEqual("soft", room["saved_profiles"]["day"]["strategy"])
+        self.assertEqual(
+            room["saved_profiles"],
+            result["contours"][0]["rooms"][0]["comfort_profiles"],
+        )
+        self.assertIsNot(
+            room["saved_profiles"],
+            result["contours"][0]["rooms"][0]["comfort_profiles"],
+        )
 
     def test_room_actual_state_distinguishes_stale_and_missing_data(self) -> None:
         stale_source = source_payload()

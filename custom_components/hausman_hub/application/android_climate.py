@@ -30,11 +30,12 @@ from .public_climate_values import (
     public_device_state,
     public_room_data_status,
     public_room_mode,
+    public_strategy,
 )
 
 
 ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hasc-home"
-ANDROID_CLIMATE_CONTRACT_VERSION = 7
+ANDROID_CLIMATE_CONTRACT_VERSION = 8
 ANDROID_ROOM_CONTROL_ACTIONS = (
     "set_room_target",
     "turn_room_off",
@@ -85,6 +86,14 @@ def android_climate_snapshot(
             }
         )
 
+    public_contours = contour_snapshot(
+        contours or ContourRegistry(),
+        registry,
+        snapshot,
+        settings_apply_enabled=(bridge_mode is ClimateBridgeMode.MANAGED),
+    )["contours"]
+    saved_profiles_by_room = _saved_profiles_by_room(public_contours)
+
     rooms: list[dict[str, object]] = []
     room_control_enabled = False
     for room in registry.rooms:
@@ -111,6 +120,23 @@ def android_climate_snapshot(
                 ),
                 "target_humidity": imported.target_humidity if imported else None,
                 "mode": public_mode,
+                "active_target": {
+                    "temperature": (
+                        imported.target_temperature if imported else None
+                    ),
+                    "humidity": imported.target_humidity if imported else None,
+                    "strategy": public_strategy(
+                        None if imported is None else imported.target_strategy
+                    ),
+                },
+                "saved_profiles": saved_profiles_by_room.get(
+                    room.room_id,
+                    {
+                        "active": None,
+                        "day": None,
+                        "night": None,
+                    },
+                ),
                 "actual": {
                     "data_status": public_room_data_status(
                         present=imported is not None,
@@ -128,12 +154,6 @@ def android_climate_snapshot(
             }
         )
 
-    public_contours = contour_snapshot(
-        contours or ContourRegistry(),
-        registry,
-        snapshot,
-        settings_apply_enabled=(bridge_mode is ClimateBridgeMode.MANAGED),
-    )["contours"]
     return {
         "contract": {
             "name": ANDROID_CLIMATE_CONTRACT_NAME,
@@ -159,6 +179,38 @@ def android_climate_snapshot(
             ),
         },
     }
+
+
+def _saved_profiles_by_room(
+    contours: object,
+) -> dict[str, dict[str, object]]:
+    """Copy configured day/night profiles beside each matching public room."""
+
+    result: dict[str, dict[str, object]] = {}
+    if not isinstance(contours, list):
+        return result
+    for contour in contours:
+        if not isinstance(contour, dict) or contour.get("kind") != "climate":
+            continue
+        contour_rooms = contour.get("rooms")
+        if not isinstance(contour_rooms, list):
+            continue
+        for room in contour_rooms:
+            if not isinstance(room, dict) or not isinstance(room.get("id"), str):
+                continue
+            profiles = room.get("comfort_profiles")
+            if not isinstance(profiles, dict):
+                continue
+            day = profiles.get("day")
+            night = profiles.get("night")
+            if not isinstance(day, dict) or not isinstance(night, dict):
+                continue
+            result[room["id"]] = {
+                "active": profiles.get("active"),
+                "day": dict(day),
+                "night": dict(night),
+            }
+    return result
 
 
 def _room_control_projection(

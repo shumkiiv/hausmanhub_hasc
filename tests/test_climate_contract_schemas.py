@@ -67,6 +67,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v5/home.json": "v5/climate-home.schema.json",
             "hasc_climate_v6/home.json": "v6/climate-home.schema.json",
             "hasc_climate_v7/home.json": "v7/climate-home.schema.json",
+            "hasc_climate_v8/home.json": "v8/climate-home.schema.json",
             "hasc_contours_v1/contours.json": "v1/contours.schema.json",
             "hasc_contours_v2/contours.json": "v2/contours.schema.json",
             "hasc_contours_v3/contours.json": "v3/contours.schema.json",
@@ -115,7 +116,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         )
         admin = admin_climate_import_snapshot(registry, snapshot)
 
-        validator("v7/climate-home.schema.json").validate(home)
+        validator("v8/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
@@ -129,7 +130,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             contours=contours,
             bridge_mode=ClimateBridgeMode.SHADOW,
         )
-        validator("v7/climate-home.schema.json").validate(stale_home)
+        validator("v8/climate-home.schema.json").validate(stale_home)
         self.assertEqual(
             "stale",
             stale_home["rooms"][0]["actual"]["data_status"],  # type: ignore[index]
@@ -146,7 +147,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             contours=contours,
             bridge_mode=ClimateBridgeMode.SHADOW,
         )
-        validator("v7/climate-home.schema.json").validate(missing_home)
+        validator("v8/climate-home.schema.json").validate(missing_home)
         self.assertEqual(
             {
                 "data_status": "unavailable",
@@ -397,6 +398,24 @@ class ClimateContractSchemasTest(unittest.TestCase):
         unknown_status["rooms"][0]["actual"]["data_status"] = "vendor_fresh"  # type: ignore[index]
         with self.assertRaises(Exception):
             validator("v7/climate-home.schema.json").validate(unknown_status)
+
+    def test_v8_active_target_and_saved_profiles_cannot_be_confused(self) -> None:
+        home = load_json(ROOT / "fixtures" / "hasc_climate_v8" / "home.json")
+        room = home["rooms"][0]  # type: ignore[index]
+
+        self.assertEqual(24, room["active_target"]["temperature"])
+        self.assertEqual(23, room["saved_profiles"]["night"]["temperature"])
+        self.assertEqual("day", room["saved_profiles"]["active"])
+
+        partial_profiles = copy.deepcopy(home)
+        partial_profiles["rooms"][0]["saved_profiles"]["active"] = None  # type: ignore[index]
+        with self.assertRaises(Exception):
+            validator("v8/climate-home.schema.json").validate(partial_profiles)
+
+        private_strategy = copy.deepcopy(home)
+        private_strategy["rooms"][0]["active_target"]["strategy"] = "vendor"  # type: ignore[index]
+        with self.assertRaises(Exception):
+            validator("v8/climate-home.schema.json").validate(private_strategy)
 
 
 if __name__ == "__main__":
