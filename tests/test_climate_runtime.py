@@ -57,6 +57,10 @@ from custom_components.hausman_hub.domain.climate_policy import (
 from custom_components.hausman_hub.domain.climate_protection import (
     ClimateProtectionMemory,
 )
+from custom_components.hausman_hub.domain.climate_comparison import (
+    ClimateComparisonReason,
+    ClimateComparisonStatus,
+)
 from custom_components.hausman_hub.domain.configuration import SafeConfiguration
 from custom_components.hausman_hub.domain.native_climate import native_climate_policy
 from custom_components.hausman_hub.domain.contours import ClimateProfile, ContourRegistry
@@ -1961,6 +1965,45 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertFalse(result.commands_enabled)  # type: ignore[union-attr]
+        self.assertEqual([], bridge.executed)
+
+    async def test_native_climate_comparison_reads_once_without_commands(
+        self,
+    ) -> None:
+        bridge = MemoryBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        fetches_before = bridge.fetch_count
+
+        result = await runtime.async_native_climate_comparison()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(fetches_before + 1, bridge.fetch_count)
+        self.assertFalse(result.commands_enabled)  # type: ignore[union-attr]
+        room = result.room("living")  # type: ignore[union-attr]
+        self.assertIs(room.status, ClimateComparisonStatus.DIVERGED)
+        self.assertEqual(
+            (ClimateComparisonReason.DEVICE_ACTIVITY_MISMATCH,),
+            room.reasons,
+        )
+        self.assertEqual(("living",), result.diverged_room_ids)  # type: ignore[union-attr]
         self.assertEqual([], bridge.executed)
 
     async def test_shadow_refreshes_but_never_posts(self) -> None:

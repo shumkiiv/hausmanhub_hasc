@@ -9,6 +9,7 @@ import time
 from typing import Protocol
 
 from ..domain.climate import ClimateRegistry
+from ..domain.climate_comparison import ClimateComparisonSnapshot
 from ..domain.climate_demand import ClimateDemandSnapshot
 from ..domain.climate_equipment import ClimateEquipmentSnapshot
 from ..domain.climate_isolation import ClimateIsolationSnapshot
@@ -45,6 +46,7 @@ from .climate_evidence import (
 from .climate_equipment import build_climate_equipment_snapshot
 from .climate_import import ClimateImportSnapshot
 from .climate_isolation import build_isolated_climate_policy_snapshot
+from .climate_comparison import build_climate_comparison_snapshot
 from .climate_demands import build_climate_demand_snapshot
 from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
 from .climate_observations import (
@@ -940,6 +942,19 @@ class ClimateRuntime:
                 return None
             observation = await self._async_native_climate_observation_unlocked()
             return build_isolated_climate_policy_snapshot(contour, observation)
+
+    async def async_native_climate_comparison(
+        self,
+    ) -> ClimateComparisonSnapshot | None:
+        """Compare native decisions with the observed module without commands."""
+
+        async with self._lock:
+            contour = self._contours.contour(CLIMATE_CONTOUR_ID)
+            if contour is None:
+                return None
+            observation = await self._async_native_climate_observation_unlocked()
+            isolation = build_isolated_climate_policy_snapshot(contour, observation)
+            return build_climate_comparison_snapshot(isolation, observation)
 
     async def _async_native_climate_observation_unlocked(
         self,

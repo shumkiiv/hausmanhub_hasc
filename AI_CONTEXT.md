@@ -282,6 +282,22 @@ Last updated: 2026-07-20.
   fix iteration that made the stored version check strictly typed. The final
   staged tree passed 471 local tests, the HACS/package/boundary/Android
   checks, and disposable Home Assistant Core 2026.6.4/2026.7.0.
+- Version 1.9.0 completes roadmap item 31. A strict command-free comparison
+  layer now states, for every configured room and selected device, whether the
+  observed state of the working climate module agrees with the native
+  HausmanHub plan. Each room and device is `aligned`, `diverged`, or
+  `not_comparable` with a fixed ordered reason list: stale observation,
+  missing room policy, unavailable room data, manual observe, planned observe,
+  unobserved or unavailable device, unknown activity, unobserved settings,
+  activity mismatch, or settings mismatch. A stale observation short-circuits
+  all rooms; manual mode and deliberate observe are honestly not comparable;
+  an already stopped device needs no repeated stop. The comparison uses only
+  stable HausmanHub ids and approved codes, always has
+  `commands_enabled=False`, and the runtime accessor reads one observation
+  without writes or POSTs. The source climate module and Android repository
+  remain unchanged. The final staged tree passed 485 local tests, the
+  HACS/package/boundary/Android checks, and disposable Home Assistant Core
+  2026.6.4/2026.7.0.
 - Workspace boundary: this thread may change only HausmanHub and its integration
   wrapper. The Android application is developed separately in
   `/home/ivsh/projects/УД-android`; it may be inspected only read-only for
@@ -1827,5 +1843,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-20T21:05:52+03:00.
+- Last sync: 2026-07-20T21:37:14+03:00.
 <!-- llm-wiki-sync:end -->
