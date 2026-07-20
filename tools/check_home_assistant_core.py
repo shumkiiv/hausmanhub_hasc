@@ -2884,7 +2884,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             capabilities_payload.get("capabilities", {})
             .get("climate_home", {})
             .get("response_contract"),
-            {"name": "hausman-hasc-home", "version": 10},
+            {"name": "hausman-hasc-home", "version": 11},
             "HASC capabilities must advertise the current home contract",
         )
         assert_result(
@@ -3492,8 +3492,8 @@ async def async_assert_shadow_climate_end_to_end(
             raise RuntimeError("tablet home contract must not expose private climate bindings")
         assert_result(
             home_payload.get("contract"),
-            {"name": "hausman-hasc-home", "version": 10},
-            "tablet must receive the combined v10 home contract",
+            {"name": "hausman-hasc-home", "version": 11},
+            "tablet must receive the combined v11 home contract",
         )
         combined_contours = home_payload.get("contours", [])
         assert_result(
@@ -3598,6 +3598,7 @@ async def async_assert_shadow_climate_end_to_end(
                 living_control.get("enabled"),
                 living_control.get("actions"),
                 living_control.get("allowed_actions"),
+                living_control.get("action_availability"),
                 living_control.get("action_inputs"),
                 living_control.get("action_presentations"),
                 living_control.get("blocked_reasons"),
@@ -3607,6 +3608,16 @@ async def async_assert_shadow_climate_end_to_end(
                 False,
                 ["set_room_target", "turn_room_off"],
                 [],
+                {
+                    "set_room_target": {
+                        "allowed": False,
+                        "blocked_reasons": ["shadow_only"],
+                    },
+                    "turn_room_off": {
+                        "allowed": False,
+                        "blocked_reasons": ["shadow_only"],
+                    },
+                },
                 {
                     "set_room_target": {
                         "target_temperature": {

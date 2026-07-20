@@ -14,7 +14,7 @@
       "method": "GET",
       "response_contract": {
         "name": "hausman-hasc-home",
-        "version": 10
+        "version": 11
       }
     },
     "automatic_contours": {

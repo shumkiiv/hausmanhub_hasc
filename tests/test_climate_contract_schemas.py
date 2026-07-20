@@ -72,6 +72,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v8/home.json": "v8/climate-home.schema.json",
             "hasc_climate_v9/home.json": "v9/climate-home.schema.json",
             "hasc_climate_v10/home.json": "v10/climate-home.schema.json",
+            "hasc_climate_v11/home.json": "v11/climate-home.schema.json",
             "hasc_contours_v1/contours.json": "v1/contours.schema.json",
             "hasc_contours_v2/contours.json": "v2/contours.schema.json",
             "hasc_contours_v3/contours.json": "v3/contours.schema.json",
@@ -122,7 +123,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         )
         admin = admin_climate_import_snapshot(registry, snapshot)
 
-        validator("v10/climate-home.schema.json").validate(home)
+        validator("v11/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
@@ -137,7 +138,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             bridge_mode=ClimateBridgeMode.SHADOW,
             local_now=LOCAL_NOW,
         )
-        validator("v10/climate-home.schema.json").validate(stale_home)
+        validator("v11/climate-home.schema.json").validate(stale_home)
         self.assertEqual(
             "stale",
             stale_home["rooms"][0]["actual"]["data_status"],  # type: ignore[index]
@@ -155,7 +156,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             bridge_mode=ClimateBridgeMode.SHADOW,
             local_now=LOCAL_NOW,
         )
-        validator("v10/climate-home.schema.json").validate(missing_home)
+        validator("v11/climate-home.schema.json").validate(missing_home)
         self.assertEqual(
             {
                 "data_status": "unavailable",
@@ -499,6 +500,61 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v10/climate-home.schema.json").validate(
                 missing_allowed_actions
             )
+
+    def test_v11_every_advertised_action_has_exact_blocked_reasons(self) -> None:
+        home = load_json(ROOT / "fixtures" / "hasc_climate_v11" / "home.json")
+        control = home["rooms"][0]["control"]  # type: ignore[index]
+
+        self.assertEqual(set(control["actions"]), set(control["action_availability"]))
+        for action in control["actions"]:
+            availability = control["action_availability"][action]
+            self.assertFalse(availability["allowed"])
+            self.assertEqual(["shadow_only"], availability["blocked_reasons"])
+            self.assertEqual(
+                "Включена только проверка без команд",
+                home["display_names"]["blocked_reasons"]["shadow_only"],  # type: ignore[index]
+            )
+
+        ready = copy.deepcopy(home)
+        ready_control = ready["rooms"][0]["control"]  # type: ignore[index]
+        ready_control["enabled"] = True
+        ready_control["allowed_actions"] = list(ready_control["actions"])
+        ready_control["blocked_reasons"] = []
+        for availability in ready_control["action_availability"].values():
+            availability["allowed"] = True
+            availability["blocked_reasons"] = []
+        ready["climate"]["commands_enabled"] = True  # type: ignore[index]
+        validator("v11/climate-home.schema.json").validate(ready)
+
+        missing_action_status = copy.deepcopy(home)
+        missing_action_status["rooms"][0]["control"][  # type: ignore[index]
+            "action_availability"
+        ].pop("set_room_target")
+        with self.assertRaises(Exception):
+            validator("v11/climate-home.schema.json").validate(
+                missing_action_status
+            )
+
+        false_permission = copy.deepcopy(home)
+        false_permission["rooms"][0]["control"]["action_availability"][  # type: ignore[index]
+            "turn_room_off"
+        ]["allowed"] = True
+        with self.assertRaises(Exception):
+            validator("v11/climate-home.schema.json").validate(false_permission)
+
+        missing_reason = copy.deepcopy(home)
+        missing_reason["rooms"][0]["control"]["action_availability"][  # type: ignore[index]
+            "turn_room_off"
+        ]["blocked_reasons"] = []
+        with self.assertRaises(Exception):
+            validator("v11/climate-home.schema.json").validate(missing_reason)
+
+        unknown_reason = copy.deepcopy(home)
+        unknown_reason["rooms"][0]["control"]["action_availability"][  # type: ignore[index]
+            "turn_room_off"
+        ]["blocked_reasons"] = ["private_backend_error"]
+        with self.assertRaises(Exception):
+            validator("v11/climate-home.schema.json").validate(unknown_reason)
 
 
 if __name__ == "__main__":

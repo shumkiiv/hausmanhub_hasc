@@ -148,6 +148,13 @@ Last updated: 2026-07-20.
   Both configured OpenCode review profiles failed before review with token
   refresh `401`; the final Codex audit found no remaining issue after adding the
   strict aggregate-to-room schema relation.
+- Version 1.6.7 completed the eighth HASC-only roadmap item. Home contract v11
+  adds `action_availability` for every advertised room action. Each entry has an
+  exact allowed flag and bounded blocked-reason codes whose Russian labels are
+  supplied by the existing `display_names` catalog. The schema requires action,
+  permission, and reason lists to stay consistent. OpenCode review again failed
+  before reading the change because token refresh returned `401`; the final
+  Codex audit found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

@@ -31,7 +31,7 @@ class AndroidClimateTest(unittest.TestCase):
         )
 
         self.assertEqual("hausman-hasc-home", result["contract"]["name"])
-        self.assertEqual(10, result["contract"]["version"])
+        self.assertEqual(11, result["contract"]["version"])
         self.assertEqual(
             "Автоматически",
             result["display_names"]["room_modes"]["automatic"],
@@ -68,6 +68,23 @@ class AndroidClimateTest(unittest.TestCase):
             result["rooms"][0]["control"]["actions"],
         )
         self.assertEqual([], result["rooms"][0]["control"]["allowed_actions"])
+        self.assertEqual(
+            {
+                "set_room_target": {
+                    "allowed": False,
+                    "blocked_reasons": ["shadow_only"],
+                },
+                "turn_room_off": {
+                    "allowed": False,
+                    "blocked_reasons": ["shadow_only"],
+                },
+            },
+            result["rooms"][0]["control"]["action_availability"],
+        )
+        self.assertEqual(
+            "Включена только проверка без команд",
+            result["display_names"]["blocked_reasons"]["shadow_only"],
+        )
         self.assertEqual(
             {
                 "set_room_target": {
@@ -198,6 +215,19 @@ class AndroidClimateTest(unittest.TestCase):
             ["set_room_target", "turn_room_off"],
             result["rooms"][0]["control"]["allowed_actions"],
         )
+        self.assertEqual(
+            {
+                "set_room_target": {
+                    "allowed": True,
+                    "blocked_reasons": [],
+                },
+                "turn_room_off": {
+                    "allowed": True,
+                    "blocked_reasons": [],
+                },
+            },
+            result["rooms"][0]["control"]["action_availability"],
+        )
         self.assertEqual([], result["rooms"][0]["control"]["blocked_reasons"])
         self.assertNotIn("synthetic-ac-source-living", encoded)
         self.assertNotIn("climate.synthetic_living_ac", encoded)
@@ -221,6 +251,7 @@ class AndroidClimateTest(unittest.TestCase):
         self.assertTrue(rooms["living"]["control"]["enabled"])
         self.assertEqual([], rooms["kids"]["control"]["allowed_actions"])
         self.assertFalse(rooms["kids"]["control"]["enabled"])
+        self.assertEqual({}, rooms["kids"]["control"]["action_availability"])
         self.assertIn(
             "room_not_selected",
             rooms["kids"]["control"]["blocked_reasons"],
@@ -258,6 +289,15 @@ class AndroidClimateTest(unittest.TestCase):
 
         self.assertEqual(["turn_room_off"], control["actions"])
         self.assertEqual([], control["allowed_actions"])
+        self.assertEqual(
+            {
+                "turn_room_off": {
+                    "allowed": False,
+                    "blocked_reasons": ["actions_unsupported"],
+                }
+            },
+            control["action_availability"],
+        )
         self.assertEqual({}, control["action_inputs"])
         self.assertEqual(
             {
@@ -285,6 +325,7 @@ class AndroidClimateTest(unittest.TestCase):
         empty_control = without_actions["rooms"][0]["control"]
         self.assertEqual([], empty_control["actions"])
         self.assertEqual([], empty_control["allowed_actions"])
+        self.assertEqual({}, empty_control["action_availability"])
         self.assertEqual({}, empty_control["action_inputs"])
         self.assertEqual({}, empty_control["action_presentations"])
 
@@ -318,10 +359,22 @@ class AndroidClimateTest(unittest.TestCase):
         )
         self.assertIn(
             "device_unavailable",
+            unavailable["rooms"][0]["control"]["action_availability"][
+                "set_room_target"
+            ]["blocked_reasons"],
+        )
+        self.assertIn(
+            "device_unavailable",
             unavailable["rooms"][0]["control"]["blocked_reasons"],
         )
         self.assertFalse(pending["rooms"][0]["control"]["enabled"])
         self.assertEqual([], pending["rooms"][0]["control"]["allowed_actions"])
+        self.assertEqual(
+            ["operation_pending"],
+            pending["rooms"][0]["control"]["action_availability"][
+                "turn_room_off"
+            ]["blocked_reasons"],
+        )
         self.assertEqual(
             ["operation_pending"],
             pending["rooms"][0]["control"]["blocked_reasons"],
@@ -409,6 +462,9 @@ class AndroidClimateTest(unittest.TestCase):
                 self.assertFalse(control["enabled"])
                 self.assertEqual([], control["allowed_actions"])
                 self.assertIn(reason, control["blocked_reasons"])
+                for availability in control["action_availability"].values():
+                    self.assertFalse(availability["allowed"])
+                    self.assertIn(reason, availability["blocked_reasons"])
                 self.assertFalse(result["climate"]["commands_enabled"])
 
     def test_admin_import_explicitly_contains_candidates_and_private_bindings(self) -> None:
