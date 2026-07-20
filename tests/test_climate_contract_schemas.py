@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from pathlib import Path
 import unittest
@@ -73,6 +74,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v9/home.json": "v9/climate-home.schema.json",
             "hasc_climate_v10/home.json": "v10/climate-home.schema.json",
             "hasc_climate_v11/home.json": "v11/climate-home.schema.json",
+            "hasc_climate_v12/home.json": "v12/climate-home.schema.json",
             "hasc_contours_v1/contours.json": "v1/contours.schema.json",
             "hasc_contours_v2/contours.json": "v2/contours.schema.json",
             "hasc_contours_v3/contours.json": "v3/contours.schema.json",
@@ -123,7 +125,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         )
         admin = admin_climate_import_snapshot(registry, snapshot)
 
-        validator("v11/climate-home.schema.json").validate(home)
+        validator("v12/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
@@ -138,7 +140,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             bridge_mode=ClimateBridgeMode.SHADOW,
             local_now=LOCAL_NOW,
         )
-        validator("v11/climate-home.schema.json").validate(stale_home)
+        validator("v12/climate-home.schema.json").validate(stale_home)
         self.assertEqual(
             "stale",
             stale_home["rooms"][0]["actual"]["data_status"],  # type: ignore[index]
@@ -156,7 +158,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             bridge_mode=ClimateBridgeMode.SHADOW,
             local_now=LOCAL_NOW,
         )
-        validator("v11/climate-home.schema.json").validate(missing_home)
+        validator("v12/climate-home.schema.json").validate(missing_home)
         self.assertEqual(
             {
                 "data_status": "unavailable",
@@ -555,6 +557,42 @@ class ClimateContractSchemasTest(unittest.TestCase):
         ]["blocked_reasons"] = ["private_backend_error"]
         with self.assertRaises(Exception):
             validator("v11/climate-home.schema.json").validate(unknown_reason)
+
+    def test_v12_state_revision_is_required_and_json_safe(self) -> None:
+        home = load_json(ROOT / "fixtures" / "hasc_climate_v12" / "home.json")
+        revision = home["state_revision"]  # type: ignore[index]
+
+        self.assertIs(type(revision), int)
+        self.assertGreaterEqual(revision, 0)
+        self.assertLessEqual(revision, 9_007_199_254_740_991)
+        revision_payload = copy.deepcopy(home)
+        revision_payload.pop("generated_at")  # type: ignore[union-attr]
+        revision_payload.pop("state_revision")  # type: ignore[union-attr]
+        encoded = json.dumps(
+            revision_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        expected = int.from_bytes(hashlib.sha256(encoded).digest()[:8], "big") % (
+            9_007_199_254_740_991 + 1
+        )
+        self.assertEqual(expected, revision)
+        validator("v12/climate-home.schema.json").validate(home)
+
+        missing_revision = copy.deepcopy(home)
+        missing_revision.pop("state_revision")  # type: ignore[union-attr]
+        with self.assertRaises(Exception):
+            validator("v12/climate-home.schema.json").validate(missing_revision)
+
+        for invalid in (-1, 9_007_199_254_740_992, 1.5, "revision"):
+            with self.subTest(invalid=invalid):
+                invalid_revision = copy.deepcopy(home)
+                invalid_revision["state_revision"] = invalid  # type: ignore[index]
+                with self.assertRaises(Exception):
+                    validator("v12/climate-home.schema.json").validate(
+                        invalid_revision
+                    )
 
 
 if __name__ == "__main__":

@@ -155,6 +155,13 @@ Last updated: 2026-07-20.
   permission, and reason lists to stay consistent. OpenCode review again failed
   before reading the change because token refresh returned `401`; the final
   Codex audit found no remaining issue.
+- Version 1.6.8 completed the ninth HASC-only roadmap item. Home contract v12
+  adds a deterministic JSON-safe integer `state_revision` over all public home
+  content except `generated_at`. Equal public content keeps the same revision;
+  any visible state, configuration, or permission change produces a new opaque
+  value. Clients compare equality only; the value is not monotonic. OpenCode
+  review again stopped before reading the change because token refresh returned
+  `401`; the final Codex audit found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

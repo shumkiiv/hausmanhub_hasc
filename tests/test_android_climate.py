@@ -31,7 +31,7 @@ class AndroidClimateTest(unittest.TestCase):
         )
 
         self.assertEqual("hausman-hasc-home", result["contract"]["name"])
-        self.assertEqual(11, result["contract"]["version"])
+        self.assertEqual(12, result["contract"]["version"])
         self.assertEqual(
             "Автоматически",
             result["display_names"]["room_modes"]["automatic"],
@@ -166,6 +166,39 @@ class AndroidClimateTest(unittest.TestCase):
             room["saved_profiles"],
             result["contours"][0]["rooms"][0]["comfort_profiles"],
         )
+
+    def test_state_revision_ignores_read_time_but_changes_with_public_state(
+        self,
+    ) -> None:
+        source = source_payload()
+        later_source = copy.deepcopy(source)
+        later_source["generatedAt"] = source["generatedAt"] + 60_000
+
+        first = android_climate_snapshot(
+            registry_from_payload(registry_payload()),
+            import_climate_state(source),
+            bridge_mode=ClimateBridgeMode.SHADOW,
+        )
+        later = android_climate_snapshot(
+            registry_from_payload(registry_payload()),
+            import_climate_state(later_source),
+            bridge_mode=ClimateBridgeMode.SHADOW,
+        )
+
+        self.assertNotEqual(first["generated_at"], later["generated_at"])
+        self.assertEqual(first["state_revision"], later["state_revision"])
+        self.assertIs(type(first["state_revision"]), int)
+        self.assertGreaterEqual(first["state_revision"], 0)
+        self.assertLessEqual(first["state_revision"], 9_007_199_254_740_991)
+
+        changed_source = copy.deepcopy(later_source)
+        changed_source["rooms"][0]["sourceData"]["temperature"] = 26.1
+        changed = android_climate_snapshot(
+            registry_from_payload(registry_payload()),
+            import_climate_state(changed_source),
+            bridge_mode=ClimateBridgeMode.SHADOW,
+        )
+        self.assertNotEqual(first["state_revision"], changed["state_revision"])
 
     def test_room_actual_state_distinguishes_stale_and_missing_data(self) -> None:
         stale_source = source_payload()

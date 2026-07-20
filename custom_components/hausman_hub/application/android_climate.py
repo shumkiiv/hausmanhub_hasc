@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from datetime import datetime
+import hashlib
+import json
 
 from ..domain.climate import (
     ClimateControlOwner,
@@ -36,7 +38,8 @@ from .public_climate_values import (
 
 
 ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hasc-home"
-ANDROID_CLIMATE_CONTRACT_VERSION = 11
+ANDROID_CLIMATE_CONTRACT_VERSION = 12
+ANDROID_STATE_REVISION_MAXIMUM = 9_007_199_254_740_991
 ANDROID_ROOM_CONTROL_ACTIONS = (
     "set_room_target",
     "turn_room_off",
@@ -157,7 +160,7 @@ def android_climate_snapshot(
             }
         )
 
-    return {
+    result: dict[str, object] = {
         "contract": {
             "name": ANDROID_CLIMATE_CONTRACT_NAME,
             "version": ANDROID_CLIMATE_CONTRACT_VERSION,
@@ -182,6 +185,26 @@ def android_climate_snapshot(
             ),
         },
     }
+    result["state_revision"] = _public_state_revision(result)
+    return result
+
+
+def _public_state_revision(payload: dict[str, object]) -> int:
+    """Return a JSON-safe number that changes only with public state content."""
+
+    revision_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"generated_at", "state_revision"}
+    }
+    encoded = json.dumps(
+        revision_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    digest = hashlib.sha256(encoded).digest()
+    return int.from_bytes(digest[:8], "big") % (ANDROID_STATE_REVISION_MAXIMUM + 1)
 
 
 def _saved_profiles_by_room(

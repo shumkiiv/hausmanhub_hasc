@@ -2884,7 +2884,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             capabilities_payload.get("capabilities", {})
             .get("climate_home", {})
             .get("response_contract"),
-            {"name": "hausman-hasc-home", "version": 11},
+            {"name": "hausman-hasc-home", "version": 12},
             "HASC capabilities must advertise the current home contract",
         )
         assert_result(
@@ -3490,10 +3490,17 @@ async def async_assert_shadow_climate_end_to_end(
         serialized_home = json.dumps(home_payload, ensure_ascii=True, sort_keys=True)
         if "source_id" in serialized_home or "entity_id" in serialized_home:
             raise RuntimeError("tablet home contract must not expose private climate bindings")
+        state_revision = home_payload.get("state_revision")
+        if (
+            type(state_revision) is not int
+            or state_revision < 0
+            or state_revision > 9_007_199_254_740_991
+        ):
+            raise RuntimeError("tablet home state revision must be a JSON-safe integer")
         assert_result(
             home_payload.get("contract"),
-            {"name": "hausman-hasc-home", "version": 11},
-            "tablet must receive the combined v11 home contract",
+            {"name": "hausman-hasc-home", "version": 12},
+            "tablet must receive the combined v12 home contract",
         )
         combined_contours = home_payload.get("contours", [])
         assert_result(
