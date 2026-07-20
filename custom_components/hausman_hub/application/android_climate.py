@@ -36,7 +36,7 @@ from .public_climate_values import (
 
 
 ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hasc-home"
-ANDROID_CLIMATE_CONTRACT_VERSION = 9
+ANDROID_CLIMATE_CONTRACT_VERSION = 10
 ANDROID_ROOM_CONTROL_ACTIONS = (
     "set_room_target",
     "turn_room_off",
@@ -281,9 +281,11 @@ def _room_control_projection(
         reasons.append("operation_pending")
 
     blocked_reasons = list(dict.fromkeys(reasons))
+    allowed_actions = list(actions) if not blocked_reasons else []
     return {
-        "enabled": not blocked_reasons,
+        "enabled": bool(allowed_actions),
         "actions": actions,
+        "allowed_actions": allowed_actions,
         "action_inputs": _room_action_inputs(actions),
         "action_presentations": _room_action_presentations(actions),
         "blocked_reasons": blocked_reasons,

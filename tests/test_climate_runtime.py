@@ -837,7 +837,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         result = await runtime.async_public_snapshot()
 
         self.assertEqual(fetches_before + 1, bridge.fetch_count)
-        self.assertEqual(9, result["contract"]["version"])  # type: ignore[index]
+        self.assertEqual(10, result["contract"]["version"])  # type: ignore[index]
         self.assertEqual("climate", result["contours"][0]["id"])  # type: ignore[index]
         self.assertEqual(
             {
@@ -1264,7 +1264,11 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertFalse(snapshot["climate"]["commands_enabled"])  # type: ignore[index]
-        self.assertEqual(9, snapshot["contract"]["version"])  # type: ignore[index]
+        self.assertEqual(10, snapshot["contract"]["version"])  # type: ignore[index]
+        self.assertEqual(
+            [],
+            snapshot["rooms"][0]["control"]["allowed_actions"],  # type: ignore[index]
+        )
         self.assertIn(
             "evidence_not_ready",
             snapshot["rooms"][0]["control"]["blocked_reasons"],  # type: ignore[index]
@@ -1297,8 +1301,16 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         pending = await runtime.async_public_snapshot()
 
         self.assertTrue(ready["rooms"][0]["control"]["enabled"])  # type: ignore[index]
+        self.assertEqual(
+            ["set_room_target", "turn_room_off"],
+            ready["rooms"][0]["control"]["allowed_actions"],  # type: ignore[index]
+        )
         self.assertTrue(ready["climate"]["commands_enabled"])  # type: ignore[index]
         self.assertFalse(pending["rooms"][0]["control"]["enabled"])  # type: ignore[index]
+        self.assertEqual(
+            [],
+            pending["rooms"][0]["control"]["allowed_actions"],  # type: ignore[index]
+        )
         self.assertEqual(
             ["operation_pending"],
             pending["rooms"][0]["control"]["blocked_reasons"],  # type: ignore[index]

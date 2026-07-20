@@ -140,6 +140,14 @@ Last updated: 2026-07-20.
   uses Home Assistant local time, and the schedule calculation follows real UTC
   minutes across daylight-saving changes. The final read-only Kimi review
   passed (session `ses_0824c7fa7ffe02CSROzGL3CO5h`).
+- Version 1.6.6 completed the seventh HASC-only roadmap item. Home contract v10
+  adds `allowed_actions` to every room. Existing `actions` remain the device's
+  supported controls, while `allowed_actions` contains only commands executable
+  now for that exact room. Runtime and schema both require aggregate
+  `commands_enabled` to match whether at least one room has an allowed action.
+  Both configured OpenCode review profiles failed before review with token
+  refresh `401`; the final Codex audit found no remaining issue after adding the
+  strict aggregate-to-room schema relation.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

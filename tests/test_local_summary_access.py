@@ -839,7 +839,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, home_response.status)
-        self.assertEqual(9, home_response.payload["contract"]["version"])
+        self.assertEqual(10, home_response.payload["contract"]["version"])
         self.assertEqual(
             "current",
             home_response.payload["rooms"][0]["actual"]["data_status"],
@@ -854,6 +854,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             ["set_room_target", "turn_room_off"],
             living_control["actions"],
         )
+        self.assertEqual([], living_control["allowed_actions"])
         self.assertEqual(
             (18.0, 28.0, 0.5, "°C"),
             tuple(
