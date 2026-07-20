@@ -771,6 +771,35 @@ class LocalSummaryAccessTest(unittest.TestCase):
             ).status,
         )
 
+        save_path = "/api/hausman_hub/v1/admin/climate-drafts/save"
+        save_view = views[save_path]
+        self.assertEqual(
+            503,
+            asyncio.run(
+                save_view.post(
+                    FakeJsonRequest(
+                        "127.0.0.1",
+                        admin,
+                        save_path,
+                        draft_request,
+                    )
+                )
+            ).status,
+        )
+        self.assertEqual(
+            403,
+            asyncio.run(
+                save_view.post(
+                    FakeJsonRequest(
+                        "127.0.0.1",
+                        tablet,
+                        save_path,
+                        draft_request,
+                    )
+                )
+            ).status,
+        )
+
         preflight_path = "/api/hausman_hub/v1/admin/climate-canary-preflight"
         preflight = views[preflight_path]
         invalid_admin_response = asyncio.run(
@@ -1233,6 +1262,71 @@ class LocalSummaryAccessTest(unittest.TestCase):
                     ).status,
                 )
 
+        save_path = "/api/hausman_hub/v1/admin/climate-drafts/save"
+        save_view = {
+            item.url: item for item in self.hass.http.views
+        }[save_path]
+        oversized_save = FakeJsonRequest(
+            "192.168.1.20",
+            owner,
+            save_path,
+            response.payload,
+        )
+        oversized_save.content_length = 256 * 1024 + 1
+        self.assertEqual(400, asyncio.run(save_view.post(oversized_save)).status)
+        stale_draft = dict(response.payload)
+        stale_draft["snapshot_revision"] += 1
+        stale_save = asyncio.run(
+            save_view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    owner,
+                    save_path,
+                    stale_draft,
+                )
+            )
+        )
+        self.assertEqual(409, stale_save.status)
+        self.assertEqual([], store.saved)
+        self.assertEqual([], contour_store.saved)
+        for remote, user in (
+            ("192.168.1.20", reader_user("system-users")),
+            ("8.8.8.8", reader_user("system-admin", admin=True)),
+        ):
+            with self.subTest(save_remote=remote):
+                self.assertEqual(
+                    403,
+                    asyncio.run(
+                        save_view.post(
+                            FakeJsonRequest(
+                                remote,
+                                user,
+                                save_path,
+                                response.payload,
+                            )
+                        )
+                    ).status,
+                )
+        save_response = asyncio.run(
+            save_view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    owner,
+                    save_path,
+                    response.payload,
+                )
+            )
+        )
+        self.assertEqual(200, save_response.status)
+        self.assertEqual("saved", save_response.payload["status"])
+        self.assertFalse(save_response.payload["commands_sent"])
+        self.assertFalse(save_response.payload["restart_required"])
+        self.assertEqual(1, len(store.saved))
+        self.assertEqual(1, len(contour_store.saved))
+        self.assertEqual([], bridge.executed)
+        serialized = json.dumps(save_response.payload, ensure_ascii=True)
+        self.assertNotIn("synthetic-ac-source-living", serialized)
+
     def test_managed_contour_routes_apply_once_and_confirm_engine_state(self) -> None:
         """The tablet may apply only saved settings through the managed contour."""
 
@@ -1575,7 +1669,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(17, len(self.hass.http.views))
+        self.assertEqual(18, len(self.hass.http.views))
         self.assertEqual(
             1,
             sum(
@@ -1864,7 +1958,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual(16, len(closed_hass.http.views))
+        self.assertEqual(17, len(closed_hass.http.views))
         self.assertEqual(
             {
                 "/api/hausman_hub/v1/capabilities",
@@ -1877,6 +1971,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 "/api/hausman_hub/v1/admin/climate-import",
                 "/api/hausman_hub/v1/admin/climate-drafts",
                 "/api/hausman_hub/v1/admin/climate-drafts/validate",
+                "/api/hausman_hub/v1/admin/climate-drafts/save",
                 "/api/hausman_hub/v1/admin/climate-registry",
                 "/api/hausman_hub/v1/admin/climate-registry-preview",
                 "/api/hausman_hub/v1/admin/climate-readiness",

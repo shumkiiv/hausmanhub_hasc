@@ -280,6 +280,127 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([], registry_store.saved)
         self.assertEqual([], contour_store.saved)
 
+    async def test_contour_draft_saves_rooms_devices_and_parameters_together(
+        self,
+    ) -> None:
+        bridge = MemoryBridge()
+        original_registry = ClimateRegistry()
+        registry_store = MemoryStore(original_registry)
+        contour_store = MemoryContourStore()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=registry_store,
+            contour_store=contour_store,
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        options = await runtime.async_climate_setup_options()
+        draft = await runtime.async_create_contour_draft(
+            {
+                "snapshot_revision": options["snapshot_revision"],
+                "name": "Климат дома",
+                "mode": "automatic",
+                "rooms": [
+                    {
+                        "room_id": "living",
+                        "target_temperature": 25.0,
+                        "target_humidity": 45,
+                        "strategy": "normal",
+                        "devices": [
+                            {
+                                "candidate_id": "candidate_0002",
+                                "type": "air_conditioner",
+                            }
+                        ],
+                    },
+                    {
+                        "room_id": "kids",
+                        "target_temperature": 24.0,
+                        "target_humidity": 50,
+                        "strategy": "soft",
+                        "devices": [
+                            {
+                                "candidate_id": "candidate_0001",
+                                "type": "humidifier",
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
+        saves_before = len(registry_store.saved)
+        contour_saves_before = len(contour_store.saved)
+
+        receipt = await runtime.async_save_contour_draft(draft)
+
+        self.assertEqual("saved", receipt["status"])
+        self.assertFalse(receipt["commands_sent"])
+        self.assertFalse(receipt["restart_required"])
+        self.assertEqual({"room_count": 2, "device_count": 2}, receipt["summary"])
+        self.assertEqual(saves_before + 1, len(registry_store.saved))
+        self.assertEqual(contour_saves_before + 1, len(contour_store.saved))
+        self.assertEqual(["kids", "living"], [room.room_id for room in registry_store.registry.rooms])
+        contour = contour_store.registry.contour("climate")
+        self.assertIsNotNone(contour)
+        self.assertEqual("existing_climate_core", contour.engine.value)  # type: ignore[union-attr]
+        self.assertEqual(
+            [24.0, 25.0],
+            [room.day_profile.target_temperature for room in contour.rooms],  # type: ignore[union-attr]
+        )
+        self.assertEqual([], bridge.executed)
+        serialized = json.dumps(receipt, ensure_ascii=True, sort_keys=True)
+        self.assertNotIn("synthetic-ac-source-living", serialized)
+
+    async def test_contour_draft_save_rolls_back_everything_on_storage_failure(
+        self,
+    ) -> None:
+        bridge = MemoryBridge()
+        original_registry = ClimateRegistry()
+        original_contours = ContourRegistry()
+        registry_store = MemoryStore(original_registry)
+        contour_store = MemoryContourStore(original_contours)
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=registry_store,
+            contour_store=contour_store,
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        options = await runtime.async_climate_setup_options()
+        draft = await runtime.async_create_contour_draft(
+            {
+                "snapshot_revision": options["snapshot_revision"],
+                "name": "Климат",
+                "mode": "observe",
+                "rooms": [
+                    {
+                        "room_id": "living",
+                        "target_temperature": 25.0,
+                        "target_humidity": 45,
+                        "strategy": "normal",
+                        "devices": [
+                            {
+                                "candidate_id": "candidate_0002",
+                                "type": "air_conditioner",
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        contour_store.fail = True
+
+        with self.assertRaisesRegex(RuntimeError, "contour persistence"):
+            await runtime.async_save_contour_draft(draft)
+
+        self.assertEqual(original_registry, registry_store.registry)
+        self.assertEqual(original_contours, contour_store.registry)
+        self.assertEqual([], bridge.executed)
+
     async def test_schedule_switches_profile_and_uses_existing_typed_executor_once(
         self,
     ) -> None:

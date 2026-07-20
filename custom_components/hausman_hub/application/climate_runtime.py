@@ -35,6 +35,8 @@ from .climate_registry import (
     registry_to_payload,
 )
 from .climate_setup import (
+    build_climate_contour_draft_setup,
+    climate_draft_save_receipt,
     climate_setup_options,
     create_climate_contour_draft,
     validate_climate_contour_draft,
@@ -285,6 +287,31 @@ class ClimateRuntime:
                 snapshot,
                 payload,
             )
+
+    async def async_save_contour_draft(
+        self,
+        payload: object,
+    ) -> dict[str, object]:
+        """Validate and atomically save one unchanged climate contour draft."""
+
+        async with self._lock:
+            if self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY:
+                raise ClimateRuntimeUnavailable(
+                    "contour setup changes require disabled or shadow mode"
+                )
+            if self._contour_store is None:
+                raise ClimateRuntimeUnavailable("contour storage is unavailable")
+            snapshot = await self._async_refresh_unlocked(
+                persist_evidence=False,
+                record_evidence=False,
+            )
+            registry, contours, validation = build_climate_contour_draft_setup(
+                self._registry,
+                snapshot,
+                payload,
+            )
+            await self._async_persist_contour_setup_unlocked(registry, contours)
+            return climate_draft_save_receipt(payload, validation)
 
     async def async_registry_import_snapshot(self) -> ClimateImportSnapshot:
         """Refresh one typed read-only snapshot for the local options wizard."""
@@ -779,89 +806,104 @@ class ClimateRuntime:
             registry = registry_from_payload(registry_payload)
             contours = contour_registry_from_payload(contour_payload)
             validate_contour_bindings(contours, registry)
-            previous_registry = self._registry
-            previous_contours = self._contours
-            previous_evidence = self._evidence
-            next_evidence = ClimateShadowEvidence.for_registry(
+            return await self._async_persist_contour_setup_unlocked(
                 registry,
-                now_ms=self._safe_now(),
+                contours,
             )
-            registry_saved = False
-            contours_saved = False
-            try:
-                await self._registry_store.async_save(registry)
-                registry_saved = True
-                await self._contour_store.async_save(contours)
-                contours_saved = True
-                if self._evidence_store is not None:
-                    await self._evidence_store.async_save(next_evidence)
-            except Exception as error:
-                rollback_error: Exception | None = None
-                registry_restored = not registry_saved
-                if registry_saved:
-                    try:
-                        await self._registry_store.async_save(previous_registry)
-                    except Exception as failure:
-                        rollback_error = failure
-                    else:
-                        registry_restored = True
-                contours_restored = not contours_saved
-                if contours_saved and registry_restored:
-                    try:
-                        await self._contour_store.async_save(previous_contours)
-                    except Exception as failure:
-                        rollback_error = rollback_error or failure
-                    else:
-                        contours_restored = True
 
-                if registry_restored and contours_restored:
-                    self._registry = previous_registry
-                    self._contours = previous_contours
-                    self._evidence = previous_evidence
+    async def _async_persist_contour_setup_unlocked(
+        self,
+        registry: ClimateRegistry,
+        contours: ContourRegistry,
+    ) -> dict[str, object]:
+        """Persist one already validated setup with complete rollback semantics."""
+
+        if self._contour_store is None:
+            raise ClimateRuntimeUnavailable("contour storage is unavailable")
+        validate_contour_bindings(contours, registry)
+        previous_registry = self._registry
+        previous_contours = self._contours
+        previous_evidence = self._evidence
+        next_evidence = ClimateShadowEvidence.for_registry(
+            registry,
+            now_ms=self._safe_now(),
+        )
+        registry_saved = False
+        contours_saved = False
+        try:
+            await self._registry_store.async_save(registry)
+            registry_saved = True
+            await self._contour_store.async_save(contours)
+            contours_saved = True
+            if self._evidence_store is not None:
+                await self._evidence_store.async_save(next_evidence)
+        except Exception as error:
+            rollback_error: Exception | None = None
+            registry_restored = not registry_saved
+            if registry_saved:
+                try:
+                    await self._registry_store.async_save(previous_registry)
+                except Exception as failure:
+                    rollback_error = failure
                 else:
-                    # If either backward write fails, keep the already-saved
-                    # new pair together. A registry rollback can fail before
-                    # contours are touched; a contour rollback failure is
-                    # compensated by restoring the new registry.
-                    if not registry_restored and not contours_saved:
-                        try:
-                            await self._contour_store.async_save(contours)
-                        except Exception as failure:
-                            self._registry = registry
-                            self._contours = previous_contours
-                            self._evidence = previous_evidence
-                            self.last_error = type(failure).__name__
-                            raise ClimateRuntimeUnavailable(
-                                "contour setup storage is inconsistent"
-                            ) from failure
-                    if registry_restored and contours_saved:
-                        try:
-                            await self._registry_store.async_save(registry)
-                        except Exception as failure:
-                            self._registry = previous_registry
-                            self._contours = contours
-                            self._evidence = previous_evidence
-                            self.last_error = type(failure).__name__
-                            raise ClimateRuntimeUnavailable(
-                                "contour setup storage is inconsistent"
-                            ) from failure
-                    self._registry = registry
-                    self._contours = contours
-                    self._evidence = next_evidence
-                self.last_error = type(error).__name__
-                if rollback_error is not None:
-                    raise ClimateRuntimeUnavailable(
-                        "contour setup rollback failed"
-                    ) from rollback_error
-                raise
-            self._registry = registry
-            self._contours = contours
-            self._evidence = next_evidence
-            self.last_error = None
-            return {
-                "registry": registry_to_payload(registry),
-                "contours": contour_registry_to_payload(contours),
-            }
+                    registry_restored = True
+            contours_restored = not contours_saved
+            if contours_saved and registry_restored:
+                try:
+                    await self._contour_store.async_save(previous_contours)
+                except Exception as failure:
+                    rollback_error = rollback_error or failure
+                else:
+                    contours_restored = True
+
+            if registry_restored and contours_restored:
+                self._registry = previous_registry
+                self._contours = previous_contours
+                self._evidence = previous_evidence
+            else:
+                # If either backward write fails, keep the already-saved new
+                # pair together. A registry rollback can fail before contours
+                # are touched; a contour rollback failure is compensated by
+                # restoring the new registry.
+                if not registry_restored and not contours_saved:
+                    try:
+                        await self._contour_store.async_save(contours)
+                    except Exception as failure:
+                        self._registry = registry
+                        self._contours = previous_contours
+                        self._evidence = previous_evidence
+                        self.last_error = type(failure).__name__
+                        raise ClimateRuntimeUnavailable(
+                            "contour setup storage is inconsistent"
+                        ) from failure
+                if registry_restored and contours_saved:
+                    try:
+                        await self._registry_store.async_save(registry)
+                    except Exception as failure:
+                        self._registry = previous_registry
+                        self._contours = contours
+                        self._evidence = previous_evidence
+                        self.last_error = type(failure).__name__
+                        raise ClimateRuntimeUnavailable(
+                            "contour setup storage is inconsistent"
+                        ) from failure
+                self._registry = registry
+                self._contours = contours
+                self._evidence = next_evidence
+            self.last_error = type(error).__name__
+            if rollback_error is not None:
+                raise ClimateRuntimeUnavailable(
+                    "contour setup rollback failed"
+                ) from rollback_error
+            raise
+        self._registry = registry
+        self._contours = contours
+        self._evidence = next_evidence
+        self.last_error = None
+        return {
+            "registry": registry_to_payload(registry),
+            "contours": contour_registry_to_payload(contours),
+        }
 
     async def async_action(self, payload: object) -> ClimateOperationReceipt:
         """Idempotently validate and optionally post one typed climate action."""

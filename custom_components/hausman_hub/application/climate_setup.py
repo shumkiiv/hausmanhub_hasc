@@ -6,6 +6,7 @@ import hashlib
 import json
 
 from ..domain.climate import ClimateRegistry
+from ..domain.contours import ContourRegistry
 from .contours import (
     ContourRegistryViolation,
     build_climate_contour_setup,
@@ -34,6 +35,8 @@ CLIMATE_SETUP_OPTIONS_CONTRACT_NAME = "hausman-hasc-climate-setup-options"
 CLIMATE_SETUP_OPTIONS_CONTRACT_VERSION = 1
 CLIMATE_DRAFT_VALIDATION_CONTRACT_NAME = "hausman-hasc-climate-draft-validation"
 CLIMATE_DRAFT_VALIDATION_CONTRACT_VERSION = 1
+CLIMATE_DRAFT_SAVE_CONTRACT_NAME = "hausman-hasc-climate-draft-save"
+CLIMATE_DRAFT_SAVE_CONTRACT_VERSION = 1
 MAX_CLIMATE_DRAFT_NAME_LENGTH = 120
 MAX_CLIMATE_DRAFT_ROOMS = 128
 MAX_CLIMATE_DRAFT_DEVICES = 512
@@ -822,6 +825,108 @@ def validate_climate_contour_draft(
             "room_count": len(request_rooms),
             "device_count": len(selected_source_ids),
         },
+    }
+
+
+def build_climate_contour_draft_setup(
+    registry: ClimateRegistry,
+    snapshot: ClimateImportSnapshot,
+    payload: object,
+) -> tuple[ClimateRegistry, ContourRegistry, dict[str, object]]:
+    """Build the exact deeply validated pair that may be saved atomically."""
+
+    validation = validate_climate_contour_draft(registry, snapshot, payload)
+    if validation["save_allowed"] is not True:
+        raise ClimateSetupViolation(
+            "climate draft is not ready to save",
+            code="draft_blocked",
+        )
+    draft = _exact_mapping(
+        payload,
+        _CLIMATE_DRAFT_RESPONSE_FIELDS,
+        "saved climate draft",
+    )
+    source_ids = _ordered_candidate_source_ids(registry, snapshot)
+    source_by_candidate = {
+        f"candidate_{index:04d}": source_id
+        for index, source_id in enumerate(source_ids, start=1)
+    }
+    selected_source_ids: list[str] = []
+    selected_source_kinds: dict[str, object] = {}
+    room_parameters: dict[str, object] = {}
+    room_ids: list[str] = []
+    rooms = draft["rooms"]
+    if not isinstance(rooms, list):
+        raise ClimateSetupViolation("saved climate draft rooms are invalid")
+    for room in rooms:
+        if not isinstance(room, dict):
+            raise ClimateSetupViolation("saved climate draft room is invalid")
+        room_id = room["id"]
+        if not isinstance(room_id, str):
+            raise ClimateSetupViolation("saved climate draft room id is invalid")
+        room_ids.append(room_id)
+        targets = room["targets"]
+        devices = room["devices"]
+        if not isinstance(targets, dict) or not isinstance(devices, list):
+            raise ClimateSetupViolation("saved climate draft room is invalid")
+        room_parameters[room_id] = dict(targets)
+        for device in devices:
+            if not isinstance(device, dict):
+                raise ClimateSetupViolation("saved climate draft device is invalid")
+            candidate_id = device["candidate_id"]
+            if not isinstance(candidate_id, str):
+                raise ClimateSetupViolation(
+                    "saved climate draft candidate id is invalid"
+                )
+            source_id = source_by_candidate[candidate_id]
+            selected_source_ids.append(source_id)
+            selected_source_kinds[source_id] = device["type"]
+
+    climate_registry, contours = build_climate_contour_setup(
+        snapshot,
+        room_ids=room_ids,
+        source_ids=selected_source_ids,
+        source_kinds=selected_source_kinds,
+        name=draft["name"],
+        mode=draft["mode"],
+        room_parameters=room_parameters,
+    )
+    return climate_registry, contours, validation
+
+
+def climate_draft_save_receipt(
+    draft: object,
+    validation: object,
+) -> dict[str, object]:
+    """Return a private-id-free receipt only after the pair was persisted."""
+
+    values = _exact_mapping(
+        draft,
+        _CLIMATE_DRAFT_RESPONSE_FIELDS,
+        "saved climate draft",
+    )
+    if not isinstance(validation, dict) or validation.get("status") != "ready":
+        raise ClimateSetupViolation("saved climate draft validation is invalid")
+    summary = validation.get("summary")
+    if not isinstance(summary, dict):
+        raise ClimateSetupViolation("saved climate draft summary is invalid")
+    return {
+        "contract": {
+            "name": CLIMATE_DRAFT_SAVE_CONTRACT_NAME,
+            "version": CLIMATE_DRAFT_SAVE_CONTRACT_VERSION,
+        },
+        "saved_at": validation["generated_at"],
+        "snapshot_revision": validation["snapshot_revision"],
+        "draft_revision": validation["draft_revision"],
+        "status": "saved",
+        "commands_sent": False,
+        "restart_required": False,
+        "contour": {
+            "id": "climate",
+            "name": values["name"],
+            "mode": values["mode"],
+        },
+        "summary": dict(summary),
     }
 
 

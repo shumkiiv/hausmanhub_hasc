@@ -253,6 +253,23 @@ Last updated: 2026-07-20.
   `err_6718dd9d`. The final Codex audit strengthened blocked-result schema
   consistency and explicit request-size regression coverage and found no
   remaining issue.
+- Version 1.7.5 completed the sixteenth HASC-only roadmap item. A local-admin
+  POST at `/api/hausman_hub/v1/admin/climate-drafts/save` refreshes discovery,
+  deeply revalidates the exact unchanged draft, resolves private device
+  bindings only after validation, and builds the existing HASC climate
+  registry and `existing_climate_core` contour model under one runtime lock.
+  Registry, contour, and shadow-evidence stores use the existing
+  rollback-protected setup transaction: a failed later write restores the
+  prior working configuration, while rollback failure remains explicitly
+  unavailable instead of reporting success. The strict private-id-free receipt
+  says `saved`, `commands_sent: false`, and `restart_required: false`. The route
+  is local-admin-only, has the separate 256 KiB setup limit, sends no device
+  command, and maps a stale snapshot to HTTP 409 without persistence. The final
+  staged tree passed 349 local tests, package/boundary/Android checks, and Home
+  Assistant Core 2026.6.4 and 2026.7.0. Kimi provider session
+  `ses_081d77549ffe5piZVGFmOgJuGd` failed before review with server reference
+  `err_4169f40f`. The final Codex audit added direct stale-save and
+  blocked-draft regression checks and found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

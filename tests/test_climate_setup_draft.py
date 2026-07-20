@@ -18,7 +18,9 @@ from custom_components.hausman_hub.application.climate_registry import (
 )
 from custom_components.hausman_hub.application.climate_setup import (
     ClimateSetupViolation,
+    build_climate_contour_draft_setup,
     climate_device_candidates,
+    climate_draft_save_receipt,
     climate_setup_options,
     create_climate_contour_draft,
     validate_climate_contour_draft,
@@ -58,6 +60,50 @@ class ClimateSetupDraftTest(unittest.TestCase):
         self.validation_validator = Draft202012Validator(
             load_json(CONTRACTS / "climate-draft-validation.schema.json")
         )
+        self.save_validator = Draft202012Validator(
+            load_json(CONTRACTS / "climate-draft-save.schema.json")
+        )
+
+    def test_ready_draft_builds_one_exact_setup_and_private_free_receipt(self) -> None:
+        draft = load_json(DRAFT_FIXTURES / "draft.json")
+        draft_before = copy.deepcopy(draft)
+        registry_before = registry_to_payload(self.registry)  # type: ignore[arg-type]
+        snapshot_before = copy.deepcopy(self.snapshot)
+
+        registry, contours, validation = build_climate_contour_draft_setup(
+            self.registry,  # type: ignore[arg-type]
+            self.snapshot,
+            draft,
+        )
+        receipt = climate_draft_save_receipt(draft, validation)
+
+        self.save_validator.validate(receipt)
+        self.assertEqual(load_json(DRAFT_FIXTURES / "save.json"), receipt)
+        self.assertEqual(["kids", "living"], [room.room_id for room in registry.rooms])
+        self.assertEqual(
+            ["kids_humidifier", "living_air_conditioner"],
+            [device.device_id for device in registry.devices],
+        )
+        contour = contours.contours[0]
+        self.assertEqual("climate", contour.contour_id)
+        self.assertEqual("Климат дома", contour.name)
+        self.assertEqual(
+            [24.0, 25.0],
+            [room.day_profile.target_temperature for room in contour.rooms],
+        )
+        self.assertEqual(draft_before, draft)
+        self.assertEqual(
+            registry_before,
+            registry_to_payload(self.registry),  # type: ignore[arg-type]
+        )
+        self.assertEqual(snapshot_before, self.snapshot)
+        serialized = json.dumps(receipt, ensure_ascii=True, sort_keys=True)
+        for private_value in (
+            "source_id",
+            "synthetic-ac-source-living",
+            "synthetic-humidifier-source-kids",
+        ):
+            self.assertNotIn(private_value, serialized)
 
     def test_ready_draft_is_validated_without_mutating_inputs(self) -> None:
         draft = load_json(DRAFT_FIXTURES / "draft.json")
@@ -162,6 +208,13 @@ class ClimateSetupDraftTest(unittest.TestCase):
             "private-temperature-sensor",
             json.dumps(validation, ensure_ascii=True, sort_keys=True),
         )
+        with self.assertRaises(ClimateSetupViolation) as blocked:
+            build_climate_contour_draft_setup(
+                self.registry,  # type: ignore[arg-type]
+                snapshot,
+                draft,
+            )
+        self.assertEqual("draft_blocked", blocked.exception.code)
 
     def test_changed_draft_or_candidate_snapshot_cannot_be_validated(self) -> None:
         changed_draft = copy.deepcopy(load_json(DRAFT_FIXTURES / "draft.json"))

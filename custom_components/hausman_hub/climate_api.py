@@ -39,6 +39,7 @@ DATA_CLIMATE_VIEWS = "climate_views"
 ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 ADMIN_DRAFT_PATH = "/api/hausman_hub/v1/admin/climate-drafts"
 ADMIN_DRAFT_VALIDATION_PATH = "/api/hausman_hub/v1/admin/climate-drafts/validate"
+ADMIN_DRAFT_SAVE_PATH = "/api/hausman_hub/v1/admin/climate-drafts/save"
 ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
 ADMIN_REGISTRY_PREVIEW_PATH = "/api/hausman_hub/v1/admin/climate-registry-preview"
 ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
@@ -73,6 +74,7 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ClimateAdminImportView(hass),
             ClimateAdminDraftView(hass),
             ClimateAdminDraftValidationView(hass),
+            ClimateAdminDraftSaveView(hass),
             ClimateAdminRegistryView(hass),
             ClimateAdminRegistryPreviewView(hass),
             ClimateAdminReadinessView(hass),
@@ -448,6 +450,50 @@ class ClimateAdminDraftValidationView(_ClimateView):
             )
             return self.json_message(
                 "Не удалось проверить черновик климатического контура.",
+                status,
+                headers=NO_STORE_HEADERS,
+            )
+        except ValueError:
+            return self.json_message(
+                "Черновик климатического контура заполнен неверно.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(result, headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminDraftSaveView(_ClimateView):
+    """Atomically save rooms, devices, and parameters from one exact draft."""
+
+    url = ADMIN_DRAFT_SAVE_PATH
+    name = "api:hausman_hub:climate_admin_draft_save"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_DRAFT_SAVE_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(
+                request,
+                maximum_bytes=MAX_CLIMATE_SETUP_BODY_BYTES,
+            )
+            result = await runtime.async_save_contour_draft(payload)
+        except ClimateSetupViolation as error:
+            status = (
+                HTTPStatus.CONFLICT
+                if error.code in {"snapshot_changed", "data_stale"}
+                else HTTPStatus.BAD_REQUEST
+            )
+            return self.json_message(
+                "Не удалось сохранить климатический контур.",
                 status,
                 headers=NO_STORE_HEADERS,
             )

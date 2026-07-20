@@ -24,8 +24,10 @@ from custom_components.hausman_hub.application.climate_canary_preflight import (
 from custom_components.hausman_hub.application.climate_import import import_climate_state
 from custom_components.hausman_hub.application.climate_registry import registry_from_payload
 from custom_components.hausman_hub.application.climate_setup import (
+    build_climate_contour_draft_setup,
     climate_available_rooms,
     climate_device_candidates,
+    climate_draft_save_receipt,
     climate_room_suggestions,
     climate_setup_options,
     create_climate_contour_draft,
@@ -77,6 +79,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_room_suggestions_v1/suggestions.json": "v1/climate-room-suggestions.schema.json",
             "hasc_climate_draft_v1/request.json": "v1/climate-draft-request.schema.json",
             "hasc_climate_draft_v1/draft.json": "v1/climate-draft.schema.json",
+            "hasc_climate_draft_v1/save.json": "v1/climate-draft-save.schema.json",
             "hasc_climate_draft_v1/options.json": "v1/climate-setup-options.schema.json",
             "hasc_climate_draft_v1/validation.json": "v1/climate-draft-validation.schema.json",
             "hasc_climate_v2/home.json": "v2/climate-home.schema.json",
@@ -159,6 +162,14 @@ class ClimateContractSchemasTest(unittest.TestCase):
             snapshot,
             draft,
         )
+        saved_registry, saved_contours, save_validation = (
+            build_climate_contour_draft_setup(
+                draft_registry,
+                snapshot,
+                draft,
+            )
+        )
+        draft_save = climate_draft_save_receipt(draft, save_validation)
 
         validator("v12/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
@@ -171,6 +182,15 @@ class ClimateContractSchemasTest(unittest.TestCase):
         validator("v1/climate-draft-validation.schema.json").validate(
             draft_validation
         )
+        validator("v1/climate-draft-save.schema.json").validate(draft_save)
+        self.assertEqual(
+            load_json(
+                ROOT / "fixtures" / "hasc_climate_draft_v1" / "save.json"
+            ),
+            draft_save,
+        )
+        self.assertEqual(2, len(saved_registry.rooms))
+        self.assertEqual(1, len(saved_contours.contours))
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
         self.assertNotIn("entity_id", serialized_home)

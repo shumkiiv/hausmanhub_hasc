@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/climate-draft-save.schema.json",
+  "title": "Подтверждение сохранения климатического контура HASC v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "saved_at",
+    "snapshot_revision",
+    "draft_revision",
+    "status",
+    "commands_sent",
+    "restart_required",
+    "contour",
+    "summary"
+  ],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "hausman-hasc-climate-draft-save"
+        },
+        "version": {
+          "const": 1
+        }
+      }
+    },
+    "saved_at": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "snapshot_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "draft_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "status": {
+      "const": "saved"
+    },
+    "commands_sent": {
+      "const": false
+    },
+    "restart_required": {
+      "const": false
+    },
+    "contour": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "mode"
+      ],
+      "properties": {
+        "id": {
+          "const": "climate"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "mode": {
+          "enum": [
+            "observe",
+            "automatic"
+          ]
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "room_count",
+        "device_count"
+      ],
+      "properties": {
+        "room_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "device_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        }
+      }
+    }
+  },
+  "$defs": {
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    }
+  }
+}
