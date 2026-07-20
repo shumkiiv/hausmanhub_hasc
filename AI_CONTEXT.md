@@ -249,6 +249,22 @@ Last updated: 2026-07-20.
   and Android repository remain unchanged. The final staged tree passed 454
   local tests, HACS/package/boundary/Android checks, and disposable Home
   Assistant Core 2026.6.4/2026.7.0.
+- Version 1.8.8 completes roadmap item 29. The full strict climate pipeline now
+  runs independently per configured room. A missing room input, no retained
+  device, or a bounded local calculation violation produces a failed result
+  only for that room and does not erase neighbouring policies. A configured
+  device absent from the observation is removed only from that room's effective
+  calculation and reported by stable HausmanHub id; `missing` and `unavailable`
+  placeholders remain explicit while healthy devices in the same room keep
+  their plans. Each immutable room result is `ready`, `degraded`, `unavailable`,
+  or `failed` with fixed ordered reasons. The snapshot rejects forged states,
+  mutable ids, mixed observation times, and private bindings; it always has
+  `commands_enabled=False`. Runtime obtains one observation without evidence
+  mutation or POST. Item 30 owns restoration of state and protective delays
+  after restart. The source climate module and Android repository remain
+  unchanged. The final staged tree passed 463 local tests,
+  HACS/package/boundary/Android checks, and disposable Home Assistant Core
+  2026.6.4/2026.7.0.
 - Workspace boundary: this thread may change only HausmanHub and its integration
   wrapper. The Android application is developed separately in
   `/home/ivsh/projects/УД-android`; it may be inspected only read-only for

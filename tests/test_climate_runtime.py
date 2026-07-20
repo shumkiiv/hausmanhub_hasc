@@ -43,6 +43,9 @@ from custom_components.hausman_hub.domain.climate_resolution import (
 from custom_components.hausman_hub.domain.climate_equipment import (
     ClimateEquipmentAction,
 )
+from custom_components.hausman_hub.domain.climate_isolation import (
+    ClimateRoomIsolationStatus,
+)
 from custom_components.hausman_hub.domain.climate_stability import (
     ClimateStabilityAction,
 )
@@ -1779,6 +1782,48 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             ClimateFinalDeviceAction.UNAVAILABLE,
         )
         self.assertEqual(0, bridge.fetch_count)
+        self.assertEqual([], bridge.executed)
+
+    async def test_native_climate_isolation_reads_once_and_keeps_both_rooms(
+        self,
+    ) -> None:
+        bridge = MemoryBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living", "kids"],
+            source_ids=[
+                "synthetic-ac-source-living",
+                "synthetic-humidifier-source-kids",
+            ],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        fetches_before = bridge.fetch_count
+
+        result = await runtime.async_native_climate_isolation()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(fetches_before + 1, bridge.fetch_count)
+        self.assertEqual(2, result.available_policy_count)  # type: ignore[union-attr]
+        self.assertTrue(
+            all(
+                room.status is ClimateRoomIsolationStatus.READY
+                for room in result.rooms  # type: ignore[union-attr]
+            )
+        )
+        self.assertFalse(result.commands_enabled)  # type: ignore[union-attr]
         self.assertEqual([], bridge.executed)
 
     async def test_shadow_refreshes_but_never_posts(self) -> None:
