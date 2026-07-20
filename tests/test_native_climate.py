@@ -5,6 +5,9 @@ from __future__ import annotations
 import unittest
 
 from custom_components.hausman_hub.application.climate_import import import_climate_state
+from custom_components.hausman_hub.application.climate_observations import (
+    build_climate_observation_snapshot,
+)
 from custom_components.hausman_hub.application.climate_registry import registry_from_payload
 from custom_components.hausman_hub.domain.native_climate import (
     HumidityDemand,
@@ -23,7 +26,10 @@ class NativeClimateTest(unittest.TestCase):
         decision = preview_native_climate(
             policy,
             registry_from_payload(registry_payload()),
-            import_climate_state(source_payload()),
+            build_climate_observation_snapshot(
+                registry_from_payload(registry_payload()),
+                import_climate_state(source_payload()),
+            ),
         )
 
         self.assertIs(policy.mode, NativeClimateMode.DISABLED)
@@ -35,10 +41,14 @@ class NativeClimateTest(unittest.TestCase):
     def test_preview_calculates_cooling_from_fresh_observations(self) -> None:
         policy = native_climate_policy("preview", "living", "22.0", 45)
 
+        registry = registry_from_payload(registry_payload())
         decision = preview_native_climate(
             policy,
-            registry_from_payload(registry_payload()),
-            import_climate_state(source_payload()),
+            registry,
+            build_climate_observation_snapshot(
+                registry,
+                import_climate_state(source_payload()),
+            ),
         )
 
         self.assertEqual("ready", decision.status)
@@ -54,10 +64,14 @@ class NativeClimateTest(unittest.TestCase):
     def test_preview_reports_missing_heating_equipment_without_a_command(self) -> None:
         policy = native_climate_policy("preview", "living", 28.0, 45)
 
+        registry = registry_from_payload(registry_payload())
         decision = preview_native_climate(
             policy,
-            registry_from_payload(registry_payload()),
-            import_climate_state(source_payload()),
+            registry,
+            build_climate_observation_snapshot(
+                registry,
+                import_climate_state(source_payload()),
+            ),
         )
 
         self.assertIs(decision.temperature_demand, TemperatureDemand.HEATING)
@@ -74,7 +88,10 @@ class NativeClimateTest(unittest.TestCase):
         stale = preview_native_climate(
             policy,
             registry,
-            import_climate_state(source_payload(), now_ms=1784280300001),
+            build_climate_observation_snapshot(
+                registry,
+                import_climate_state(source_payload(), now_ms=1784280300001),
+            ),
         )
 
         self.assertEqual("unavailable", missing.status)

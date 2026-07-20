@@ -81,6 +81,26 @@ Last updated: 2026-07-20.
   passed 378 local tests, HACS/package/boundary/Android checks, and disposable
   Home Assistant Core 2026.6.4/2026.7.0. Independent read-only review passed
   in OpenCode session `ses_0811f930fffeb7iYWFxEvPAST5`.
+- Version 1.8.1 completes roadmap item 22. The pure
+  `ClimateObservationSnapshot` boundary represents home, controller, room, and
+  logical-device facts using only stable HausmanHub room/device IDs. It makes
+  freshness, missing rooms, unavailable or missing devices, normalized
+  activity, targets, window state, timing, and physical feedback explicit;
+  contradictory, mutable, non-finite, out-of-range, or cross-room values fail
+  validation. `build_climate_observation_snapshot` is the only adapter that
+  consumes a registry's private `source_id`, solely to look up imported state;
+  the resulting model has no source/entity IDs, endpoints, services,
+  transports, or commands. The command-free native preview now consumes this
+  model and resolves devices by stable HausmanHub ID. A separate reference
+  adapter proves that all 30 immutable version-1.8.0 cases fit the same model
+  without changing the frozen corpus. The source climate module and Android
+  repository remain unchanged. Roadmap item 23 must calculate room temperature
+  and humidity targets on this boundary without adding execution authority.
+  The final staged tree passed 386 local tests, HACS/package/boundary/Android
+  checks, and disposable Home Assistant Core 2026.6.4/2026.7.0. Independent
+  read-only review passed in OpenCode session
+  `ses_0810846a3ffe8paQjkDJAIZrfr`; its only non-blocking future-kind note was
+  closed by making reference display-name coverage complete.
 - Workspace boundary: this thread may change only HausmanHub and its integration
   wrapper. The Android application is developed separately in
   `/home/ivsh/projects/УД-android`; it may be inspected only read-only for

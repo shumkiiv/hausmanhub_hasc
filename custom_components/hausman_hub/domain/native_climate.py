@@ -45,14 +45,14 @@ class NativeClimateDeviceState(Protocol):
 
 
 class NativeClimateSnapshot(Protocol):
-    """Small observation boundary implemented by the existing Climate API."""
+    """Small boundary implemented by HausmanHub's internal observations."""
 
     runtime_fresh: bool
 
     def room(self, room_id: str) -> NativeClimateRoomState | None:
         """Return one observed room."""
 
-    def device(self, source_id: str) -> NativeClimateDeviceState | None:
+    def device(self, device_id: str) -> NativeClimateDeviceState | None:
         """Return one observed device."""
 
 
@@ -419,7 +419,7 @@ def _available_control_device(
             or device.control_scope is ClimateControlScope.OBSERVED
         ):
             continue
-        imported = snapshot.device(device.source_id)
-        if imported is not None and imported.available:
+        observed = snapshot.device(device.device_id)
+        if observed is not None and observed.available:
             return True
     return False

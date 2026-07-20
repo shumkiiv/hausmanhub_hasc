@@ -9,6 +9,7 @@ import time
 from typing import Protocol
 
 from ..domain.climate import ClimateRegistry
+from ..domain.climate_observation import ClimateObservationViolation
 from ..domain.climate_bridge import ClimateBridgeMode
 from ..domain.configuration import SafeConfiguration
 from ..domain.contours import ContourDefinition, ContourMode, ContourRegistry
@@ -29,6 +30,7 @@ from .climate_evidence import (
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
+from .climate_observations import build_climate_observation_snapshot
 from .climate_registry import (
     reconcile_climate_registry,
     registry_from_payload,
@@ -733,7 +735,19 @@ class ClimateRuntime:
                     )
                 except ClimateRuntimeUnavailable:
                     snapshot = None
-            decision = preview_native_climate(policy, self._registry, snapshot)
+            try:
+                observation = (
+                    None
+                    if snapshot is None
+                    else build_climate_observation_snapshot(
+                        self._registry,
+                        snapshot,
+                        observed_at=self._safe_now(),
+                    )
+                )
+            except ClimateObservationViolation:
+                observation = None
+            decision = preview_native_climate(policy, self._registry, observation)
             return decision.as_payload()
 
     async def async_readiness(self) -> dict[str, object]:
