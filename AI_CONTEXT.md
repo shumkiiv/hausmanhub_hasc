@@ -175,6 +175,19 @@ Last updated: 2026-07-20.
   `ses_08227e465ffekdVIgv90Up8d7b`; the final Codex audit added exact coverage
   between all HASC device kinds and Android domain mappings and found no
   remaining issue.
+- Version 1.7.0 completed the eleventh HASC-only roadmap item. The new strict
+  `hausman-hasc-climate-rooms` v1 contract projects the union of discovered and
+  configured rooms using only stable HASC IDs. It sorts deterministically,
+  preserves the configured HASC name, disables all selection for stale data,
+  and keeps a configured-but-missing room visible and unselectable. Fixed
+  Russian status labels ship in the payload. The contract contains no bridge
+  origin, source device ID, entity ID, or command. It is intentionally an
+  application contract only in this point; the administrative draft HTTP route
+  belongs to roadmap item 14. The final staged tree passed 319 local tests and
+  both supported Home Assistant Core checks. OpenCode stopped before review
+  with token-refresh `401` in session `ses_0821dbbf9ffe3R4Ym2RCx1eFzu`; the
+  final Codex audit added a schema rule forbidding stale per-room status inside
+  a current snapshot and found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

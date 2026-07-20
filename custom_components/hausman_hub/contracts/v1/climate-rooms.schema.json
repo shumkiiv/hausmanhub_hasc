@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/climate-rooms.schema.json",
+  "title": "HASC available climate rooms v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "generated_at",
+    "data_status",
+    "selection_allowed",
+    "display_names",
+    "rooms"
+  ],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "hausman-hasc-climate-rooms"},
+        "version": {"const": 1}
+      }
+    },
+    "generated_at": {"type": "integer", "minimum": 0},
+    "data_status": {"enum": ["current", "stale"]},
+    "selection_allowed": {"type": "boolean"},
+    "display_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["room_status"],
+      "properties": {
+        "room_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available", "data_stale", "source_missing"],
+          "properties": {
+            "available": {"const": "Можно выбрать"},
+            "data_stale": {"const": "Нужно обновить данные"},
+            "source_missing": {"const": "Комната больше не найдена"}
+          }
+        }
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/room"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"data_status": {"const": "stale"}}},
+      "then": {
+        "properties": {
+          "selection_allowed": {"const": false},
+          "rooms": {
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/room"},
+                {
+                  "properties": {
+                    "selectable": {"const": false},
+                    "status": {"const": "data_stale"}
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "rooms": {
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/room"},
+                {"properties": {"status": {"enum": ["available", "source_missing"]}}}
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"selection_allowed": {"const": true}}},
+      "then": {
+        "properties": {
+          "rooms": {
+            "contains": {
+              "type": "object",
+              "required": ["selectable"],
+              "properties": {"selectable": {"const": true}}
+            },
+            "minContains": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "rooms": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "required": ["selectable"],
+                "properties": {"selectable": {"const": true}}
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stable_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "configured", "selectable", "status"],
+      "properties": {
+        "id": {"$ref": "#/$defs/stable_id"},
+        "name": {"$ref": "#/$defs/name"},
+        "configured": {"type": "boolean"},
+        "selectable": {"type": "boolean"},
+        "status": {"enum": ["available", "data_stale", "source_missing"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "available"}}},
+          "then": {"properties": {"selectable": {"const": true}}}
+        },
+        {
+          "if": {"properties": {"status": {"const": "data_stale"}}},
+          "then": {"properties": {"selectable": {"const": false}}}
+        },
+        {
+          "if": {"properties": {"status": {"const": "source_missing"}}},
+          "then": {
+            "properties": {
+              "configured": {"const": true},
+              "selectable": {"const": false}
+            }
+          }
+        }
+      ]
+    }
+  }
+}
