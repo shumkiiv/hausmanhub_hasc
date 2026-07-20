@@ -31,6 +31,7 @@ from custom_components.hausman_hub.application.climate_setup import (
     climate_room_suggestions,
     climate_setup_options,
     create_climate_contour_draft,
+    current_climate_contour_setup,
     validate_climate_contour_draft,
 )
 from custom_components.hausman_hub.application.contours import (
@@ -80,6 +81,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_draft_v1/request.json": "v1/climate-draft-request.schema.json",
             "hasc_climate_draft_v1/draft.json": "v1/climate-draft.schema.json",
             "hasc_climate_draft_v1/save.json": "v1/climate-draft-save.schema.json",
+            "hasc_climate_current_setup_v1/current.json": "v1/climate-current-setup.schema.json",
             "hasc_climate_draft_v1/options.json": "v1/climate-setup-options.schema.json",
             "hasc_climate_draft_v1/validation.json": "v1/climate-draft-validation.schema.json",
             "hasc_climate_v2/home.json": "v2/climate-home.schema.json",
@@ -170,6 +172,11 @@ class ClimateContractSchemasTest(unittest.TestCase):
             )
         )
         draft_save = climate_draft_save_receipt(draft, save_validation)
+        current_setup = current_climate_contour_setup(
+            contour_climate_registry,
+            contours,
+            snapshot,
+        )
 
         validator("v12/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
@@ -183,6 +190,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             draft_validation
         )
         validator("v1/climate-draft-save.schema.json").validate(draft_save)
+        validator("v1/climate-current-setup.schema.json").validate(current_setup)
         self.assertEqual(
             load_json(
                 ROOT / "fixtures" / "hasc_climate_draft_v1" / "save.json"

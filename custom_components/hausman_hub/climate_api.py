@@ -38,6 +38,7 @@ DATA_CLIMATE_RUNTIME = "climate_runtime"
 DATA_CLIMATE_VIEWS = "climate_views"
 ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 ADMIN_DRAFT_PATH = "/api/hausman_hub/v1/admin/climate-drafts"
+ADMIN_DRAFT_CURRENT_PATH = "/api/hausman_hub/v1/admin/climate-drafts/current"
 ADMIN_DRAFT_VALIDATION_PATH = "/api/hausman_hub/v1/admin/climate-drafts/validate"
 ADMIN_DRAFT_SAVE_PATH = "/api/hausman_hub/v1/admin/climate-drafts/save"
 ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
@@ -73,6 +74,7 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ClimateActionView(hass),
             ClimateAdminImportView(hass),
             ClimateAdminDraftView(hass),
+            ClimateAdminDraftCurrentView(hass),
             ClimateAdminDraftValidationView(hass),
             ClimateAdminDraftSaveView(hass),
             ClimateAdminRegistryView(hass),
@@ -384,6 +386,7 @@ class ClimateAdminDraftView(_ClimateView):
             return self._unavailable()
         return self.json(result, headers=NO_STORE_HEADERS)
 
+
     async def post(self, request: Any) -> Any:
         if not _is_exact_request(request, ADMIN_DRAFT_PATH):
             return _not_found(self)
@@ -415,6 +418,29 @@ class ClimateAdminDraftView(_ClimateView):
                 HTTPStatus.BAD_REQUEST,
                 headers=NO_STORE_HEADERS,
             )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(result, headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminDraftCurrentView(_ClimateView):
+    """Return the current saved climate setup to one local administrator."""
+
+    url = ADMIN_DRAFT_CURRENT_PATH
+    name = "api:hausman_hub:climate_admin_draft_current"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_DRAFT_CURRENT_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            result = await runtime.async_current_contour_setup()
         except ClimateRuntimeUnavailable:
             return self._unavailable()
         except Exception:

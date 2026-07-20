@@ -11,12 +11,15 @@ from .contours import (
     ContourRegistryViolation,
     build_climate_contour_setup,
     climate_room_parameters,
+    contour_registry_to_payload,
+    validate_contour_bindings,
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_registry_import import (
     ClimateRegistryImportViolation,
     import_managed_climate_selection,
 )
+from .climate_registry import registry_to_payload
 from .public_climate_values import public_climate_display_names
 
 
@@ -37,6 +40,8 @@ CLIMATE_DRAFT_VALIDATION_CONTRACT_NAME = "hausman-hasc-climate-draft-validation"
 CLIMATE_DRAFT_VALIDATION_CONTRACT_VERSION = 1
 CLIMATE_DRAFT_SAVE_CONTRACT_NAME = "hausman-hasc-climate-draft-save"
 CLIMATE_DRAFT_SAVE_CONTRACT_VERSION = 1
+CLIMATE_CURRENT_SETUP_CONTRACT_NAME = "hausman-hasc-climate-current-setup"
+CLIMATE_CURRENT_SETUP_CONTRACT_VERSION = 1
 MAX_CLIMATE_DRAFT_NAME_LENGTH = 120
 MAX_CLIMATE_DRAFT_ROOMS = 128
 MAX_CLIMATE_DRAFT_DEVICES = 512
@@ -99,6 +104,19 @@ _DRAFT_STRATEGY_NAMES = {
     "soft": "Плавно",
     "normal": "Обычно",
     "aggressive": "Быстро",
+}
+_CURRENT_SETUP_STATUS_NAMES = {
+    "not_configured": "Ещё не настроен",
+    "ready": "Можно редактировать",
+    "attention": "Нужно проверить устройства",
+}
+_CURRENT_SETUP_ISSUE_NAMES = {
+    "not_configured": "Климатический контур ещё не настроен.",
+    "data_stale": "Данные об устройствах устарели. Обновите экран.",
+    "source_missing": "Настроенное устройство больше не найдено.",
+    "device_unavailable": "Настроенное устройство сейчас недоступно.",
+    "registry_mismatch": "Привязка настроенного устройства изменилась.",
+    "unsupported_device": "Тип настроенного устройства больше не поддерживается.",
 }
 
 _ROOM_STATUS_NAMES = {
@@ -652,6 +670,196 @@ def climate_setup_options(
             for room in rooms_payload["rooms"]  # type: ignore[index]
         ],
         "devices": devices,
+    }
+
+
+def current_climate_contour_setup(
+    registry: ClimateRegistry,
+    contours: ContourRegistry,
+    snapshot: ClimateImportSnapshot,
+) -> dict[str, object]:
+    """Project the exact saved climate setup for a future safe editor."""
+
+    if not isinstance(registry, ClimateRegistry):
+        raise ClimateSetupViolation("current climate registry must be valid")
+    if not isinstance(contours, ContourRegistry):
+        raise ClimateSetupViolation("current contour registry must be valid")
+    if not isinstance(snapshot, ClimateImportSnapshot):
+        raise ClimateSetupViolation("current climate snapshot must be valid")
+    validate_contour_bindings(contours, registry)
+
+    candidates_payload = climate_device_candidates(registry, snapshot)
+    source_ids = _ordered_candidate_source_ids(registry, snapshot)
+    candidate_id_by_source = {
+        source_id: f"candidate_{index:04d}"
+        for index, source_id in enumerate(source_ids, start=1)
+    }
+    candidates = candidates_payload["candidates"]
+    if not isinstance(candidates, list):
+        raise ClimateSetupViolation("current climate candidates are invalid")
+    candidate_by_id = {
+        candidate["candidate_id"]: candidate
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and isinstance(candidate.get("candidate_id"), str)
+    }
+    setup_revision = _json_safe_revision(
+        {
+            "registry": registry_to_payload(registry),
+            "contours": contour_registry_to_payload(contours),
+        }
+    )
+    display_names = {
+        "statuses": dict(_CURRENT_SETUP_STATUS_NAMES),
+        "modes": {
+            "disabled": "Выключен в HASC",
+            **_DRAFT_MODE_NAMES,
+        },
+        "strategies": dict(_DRAFT_STRATEGY_NAMES),
+        "profiles": {"day": "День", "night": "Ночь"},
+        "issues": dict(_CURRENT_SETUP_ISSUE_NAMES),
+    }
+    contour = contours.contour("climate")
+    if contour is None:
+        return {
+            "contract": {
+                "name": CLIMATE_CURRENT_SETUP_CONTRACT_NAME,
+                "version": CLIMATE_CURRENT_SETUP_CONTRACT_VERSION,
+            },
+            "generated_at": snapshot.generated_at,
+            "snapshot_revision": candidates_payload["snapshot_revision"],
+            "setup_revision": setup_revision,
+            "status": "not_configured",
+            "editing_allowed": False,
+            "display_names": display_names,
+            "name": None,
+            "mode": None,
+            "schedule": None,
+            "rooms": [],
+            "issues": [
+                {
+                    "code": "not_configured",
+                    "room_id": None,
+                    "candidate_id": None,
+                    "message": _CURRENT_SETUP_ISSUE_NAMES["not_configured"],
+                }
+            ],
+            "summary": {"room_count": 0, "device_count": 0},
+        }
+
+    issues: list[dict[str, object]] = []
+    if not snapshot.runtime_fresh:
+        issues.append(
+            {
+                "code": "data_stale",
+                "room_id": None,
+                "candidate_id": None,
+                "message": _CURRENT_SETUP_ISSUE_NAMES["data_stale"],
+            }
+        )
+    rooms: list[dict[str, object]] = []
+    device_count = 0
+    device_kind_names = public_climate_display_names()["device_kinds"]
+    for assignment in contour.rooms:
+        room = registry.room(assignment.room_id)
+        if room is None:  # pragma: no cover - checked by contour bindings
+            raise ClimateSetupViolation("current climate room is unavailable")
+        devices: list[dict[str, object]] = []
+        for device_id in assignment.device_ids:
+            device = registry.device(device_id)
+            if device is None:  # pragma: no cover - checked by contour bindings
+                raise ClimateSetupViolation("current climate device is unavailable")
+            candidate_id = candidate_id_by_source[device.source_id]
+            candidate = candidate_by_id.get(candidate_id)
+            if candidate is None:  # pragma: no cover - registry sources are candidates
+                raise ClimateSetupViolation("current climate candidate is unavailable")
+            if snapshot.runtime_fresh and candidate["status"] != "already_configured":
+                issue_code = {
+                    "source_missing": "source_missing",
+                    "unavailable": "device_unavailable",
+                    "registry_mismatch": "registry_mismatch",
+                    "unsupported": "unsupported_device",
+                }.get(candidate["status"], "registry_mismatch")
+                issues.append(
+                    {
+                        "code": issue_code,
+                        "room_id": assignment.room_id,
+                        "candidate_id": candidate_id,
+                        "message": _CURRENT_SETUP_ISSUE_NAMES[issue_code],
+                    }
+                )
+            devices.append(
+                {
+                    "candidate_id": candidate_id,
+                    "name": device.name,
+                    "type": device.kind.value,
+                    "type_name": device_kind_names[device.kind.value],
+                }
+            )
+            device_count += 1
+        rooms.append(
+            {
+                "id": room.room_id,
+                "name": room.name,
+                "devices": sorted(
+                    devices,
+                    key=lambda item: item["candidate_id"],  # type: ignore[return-value]
+                ),
+                "profiles": {
+                    "day": {
+                        "target_temperature": (
+                            assignment.day_profile.target_temperature
+                        ),
+                        "target_humidity": assignment.day_profile.target_humidity,
+                        "strategy": assignment.day_profile.strategy.value,
+                    },
+                    "night": {
+                        "target_temperature": (
+                            assignment.night_profile.target_temperature
+                        ),
+                        "target_humidity": assignment.night_profile.target_humidity,
+                        "strategy": assignment.night_profile.strategy.value,
+                    },
+                    "active_profile": assignment.active_profile.value,
+                },
+                "temporary_temperature": (
+                    None
+                    if assignment.temporary_override is None
+                    else assignment.temporary_override.target_temperature
+                ),
+            }
+        )
+
+    rooms.sort(key=lambda item: item["id"])  # type: ignore[arg-type]
+    return {
+        "contract": {
+            "name": CLIMATE_CURRENT_SETUP_CONTRACT_NAME,
+            "version": CLIMATE_CURRENT_SETUP_CONTRACT_VERSION,
+        },
+        "generated_at": snapshot.generated_at,
+        "snapshot_revision": candidates_payload["snapshot_revision"],
+        "setup_revision": setup_revision,
+        "status": "ready" if not issues else "attention",
+        "editing_allowed": not issues,
+        "display_names": display_names,
+        "name": contour.name,
+        "mode": contour.mode.value,
+        "schedule": {
+            "enabled": contour.schedule.enabled,
+            "day_start": contour.schedule.day_start,
+            "night_start": contour.schedule.night_start,
+            "last_applied_profile": (
+                None
+                if contour.schedule.last_applied_profile is None
+                else contour.schedule.last_applied_profile.value
+            ),
+        },
+        "rooms": rooms,
+        "issues": issues,
+        "summary": {
+            "room_count": len(rooms),
+            "device_count": device_count,
+        },
     }
 
 

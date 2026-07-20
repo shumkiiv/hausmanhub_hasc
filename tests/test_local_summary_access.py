@@ -771,6 +771,33 @@ class LocalSummaryAccessTest(unittest.TestCase):
             ).status,
         )
 
+        current_path = "/api/hausman_hub/v1/admin/climate-drafts/current"
+        current_view = views[current_path]
+        self.assertEqual(
+            503,
+            asyncio.run(
+                current_view.get(
+                    FakeRequest(
+                        "127.0.0.1",
+                        admin,
+                        path=current_path,
+                    )
+                )
+            ).status,
+        )
+        self.assertEqual(
+            403,
+            asyncio.run(
+                current_view.get(
+                    FakeRequest(
+                        "127.0.0.1",
+                        tablet,
+                        path=current_path,
+                    )
+                )
+            ).status,
+        )
+
         save_path = "/api/hausman_hub/v1/admin/climate-drafts/save"
         save_view = views[save_path]
         self.assertEqual(
@@ -1326,6 +1353,45 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual([], bridge.executed)
         serialized = json.dumps(save_response.payload, ensure_ascii=True)
         self.assertNotIn("synthetic-ac-source-living", serialized)
+        current_path = "/api/hausman_hub/v1/admin/climate-drafts/current"
+        current_view = {
+            item.url: item for item in self.hass.http.views
+        }[current_path]
+        current_response = asyncio.run(
+            current_view.get(
+                FakeRequest(
+                    "192.168.1.20",
+                    owner,
+                    path=current_path,
+                )
+            )
+        )
+        self.assertEqual(200, current_response.status)
+        self.assertEqual("ready", current_response.payload["status"])
+        self.assertTrue(current_response.payload["editing_allowed"])
+        self.assertEqual("Климат", current_response.payload["name"])
+        self.assertEqual(
+            25.0,
+            current_response.payload["rooms"][0]["profiles"]["day"][
+                "target_temperature"
+            ],
+        )
+        self.assertEqual(1, len(store.saved))
+        self.assertEqual(1, len(contour_store.saved))
+        self.assertEqual([], bridge.executed)
+        for remote, user in (
+            ("192.168.1.20", reader_user("system-users")),
+            ("8.8.8.8", reader_user("system-admin", admin=True)),
+        ):
+            with self.subTest(current_remote=remote):
+                self.assertEqual(
+                    403,
+                    asyncio.run(
+                        current_view.get(
+                            FakeRequest(remote, user, path=current_path)
+                        )
+                    ).status,
+                )
 
     def test_managed_contour_routes_apply_once_and_confirm_engine_state(self) -> None:
         """The tablet may apply only saved settings through the managed contour."""
@@ -1669,7 +1735,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(18, len(self.hass.http.views))
+        self.assertEqual(19, len(self.hass.http.views))
         self.assertEqual(
             1,
             sum(
@@ -1958,7 +2024,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual(17, len(closed_hass.http.views))
+        self.assertEqual(18, len(closed_hass.http.views))
         self.assertEqual(
             {
                 "/api/hausman_hub/v1/capabilities",
@@ -1970,6 +2036,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 "/api/hausman_hub/v1/actions",
                 "/api/hausman_hub/v1/admin/climate-import",
                 "/api/hausman_hub/v1/admin/climate-drafts",
+                "/api/hausman_hub/v1/admin/climate-drafts/current",
                 "/api/hausman_hub/v1/admin/climate-drafts/validate",
                 "/api/hausman_hub/v1/admin/climate-drafts/save",
                 "/api/hausman_hub/v1/admin/climate-registry",

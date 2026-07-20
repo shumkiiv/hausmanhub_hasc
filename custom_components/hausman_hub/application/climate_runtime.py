@@ -39,6 +39,7 @@ from .climate_setup import (
     climate_draft_save_receipt,
     climate_setup_options,
     create_climate_contour_draft,
+    current_climate_contour_setup,
     validate_climate_contour_draft,
 )
 from .contours import (
@@ -270,6 +271,20 @@ class ClimateRuntime:
                 record_evidence=False,
             )
             return climate_setup_options(self._registry, snapshot)
+
+    async def async_current_contour_setup(self) -> dict[str, object]:
+        """Return saved editor values without persistence or commands."""
+
+        async with self._lock:
+            snapshot = await self._async_refresh_unlocked(
+                persist_evidence=False,
+                record_evidence=False,
+            )
+            return current_climate_contour_setup(
+                self._registry,
+                self._contours,
+                snapshot,
+            )
 
     async def async_validate_contour_draft(
         self,

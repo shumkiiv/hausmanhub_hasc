@@ -1,0 +1,414 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/climate-current-setup.schema.json",
+  "title": "Текущая настройка климатического контура HASC v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "generated_at",
+    "snapshot_revision",
+    "setup_revision",
+    "status",
+    "editing_allowed",
+    "display_names",
+    "name",
+    "mode",
+    "schedule",
+    "rooms",
+    "issues",
+    "summary"
+  ],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "hausman-hasc-climate-current-setup"},
+        "version": {"const": 1}
+      }
+    },
+    "generated_at": {"type": "integer", "minimum": 0},
+    "snapshot_revision": {"$ref": "#/$defs/revision"},
+    "setup_revision": {"$ref": "#/$defs/revision"},
+    "status": {"enum": ["not_configured", "ready", "attention"]},
+    "editing_allowed": {"type": "boolean"},
+    "display_names": {"$ref": "#/$defs/display_names"},
+    "name": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/name"}
+      ]
+    },
+    "mode": {
+      "oneOf": [
+        {"type": "null"},
+        {"enum": ["disabled", "observe", "automatic"]}
+      ]
+    },
+    "schedule": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/schedule"}
+      ]
+    },
+    "rooms": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/room"}
+    },
+    "issues": {
+      "type": "array",
+      "maxItems": 513,
+      "items": {"$ref": "#/$defs/issue"}
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["room_count", "device_count"],
+      "properties": {
+        "room_count": {"type": "integer", "minimum": 0, "maximum": 128},
+        "device_count": {"type": "integer", "minimum": 0, "maximum": 512}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "ready"}}},
+      "then": {
+        "properties": {
+          "editing_allowed": {"const": true},
+          "name": {"$ref": "#/$defs/name"},
+          "mode": {"enum": ["disabled", "observe", "automatic"]},
+          "schedule": {"$ref": "#/$defs/schedule"},
+          "rooms": {"minItems": 1},
+          "issues": {"maxItems": 0}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "attention"}}},
+      "then": {
+        "properties": {
+          "editing_allowed": {"const": false},
+          "name": {"$ref": "#/$defs/name"},
+          "mode": {"enum": ["disabled", "observe", "automatic"]},
+          "schedule": {"$ref": "#/$defs/schedule"},
+          "rooms": {"minItems": 1},
+          "issues": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "not_configured"}}},
+      "then": {
+        "properties": {
+          "editing_allowed": {"const": false},
+          "name": {"type": "null"},
+          "mode": {"type": "null"},
+          "schedule": {"type": "null"},
+          "rooms": {"maxItems": 0},
+          "issues": {
+            "minItems": 1,
+            "contains": {
+              "type": "object",
+              "required": ["code"],
+              "properties": {"code": {"const": "not_configured"}}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "stable_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^candidate_[0-9]{4}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "device_type": {
+      "enum": [
+        "air_conditioner",
+        "radiator_thermostat",
+        "humidifier",
+        "floor_heating",
+        "temperature_sensor",
+        "humidity_sensor"
+      ]
+    },
+    "strategy": {"enum": ["soft", "normal", "aggressive"]},
+    "comfort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_temperature", "target_humidity", "strategy"],
+      "properties": {
+        "target_temperature": {
+          "type": "number",
+          "minimum": 18,
+          "maximum": 28,
+          "multipleOf": 0.5
+        },
+        "target_humidity": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 70,
+          "multipleOf": 5
+        },
+        "strategy": {"$ref": "#/$defs/strategy"}
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "name", "type", "type_name"],
+      "properties": {
+        "candidate_id": {"$ref": "#/$defs/candidate_id"},
+        "name": {"$ref": "#/$defs/name"},
+        "type": {"$ref": "#/$defs/device_type"},
+        "type_name": {"$ref": "#/$defs/name"}
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["day", "night", "active_profile"],
+      "properties": {
+        "day": {"$ref": "#/$defs/comfort"},
+        "night": {"$ref": "#/$defs/comfort"},
+        "active_profile": {"enum": ["day", "night"]}
+      }
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "devices",
+        "profiles",
+        "temporary_temperature"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/stable_id"},
+        "name": {"$ref": "#/$defs/name"},
+        "devices": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "items": {"$ref": "#/$defs/device"}
+        },
+        "profiles": {"$ref": "#/$defs/profiles"},
+        "temporary_temperature": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "number",
+              "minimum": 18,
+              "maximum": 28,
+              "multipleOf": 0.5
+            }
+          ]
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "day_start",
+        "night_start",
+        "last_applied_profile"
+      ],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "day_start": {"type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "night_start": {"type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "last_applied_profile": {
+          "oneOf": [
+            {"type": "null"},
+            {"enum": ["day", "night"]}
+          ]
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "room_id", "candidate_id", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "not_configured",
+            "data_stale",
+            "source_missing",
+            "device_unavailable",
+            "registry_mismatch",
+            "unsupported_device"
+          ]
+        },
+        "room_id": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/stable_id"}
+          ]
+        },
+        "candidate_id": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/candidate_id"}
+          ]
+        },
+        "message": {"$ref": "#/$defs/name"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"code": {"const": "not_configured"}}},
+          "then": {
+            "properties": {
+              "room_id": {"type": "null"},
+              "candidate_id": {"type": "null"},
+              "message": {"const": "Климатический контур ещё не настроен."}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"code": {"const": "data_stale"}}},
+          "then": {
+            "properties": {
+              "room_id": {"type": "null"},
+              "candidate_id": {"type": "null"},
+              "message": {"const": "Данные об устройствах устарели. Обновите экран."}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"code": {"const": "source_missing"}}},
+          "then": {
+            "properties": {
+              "room_id": {"$ref": "#/$defs/stable_id"},
+              "candidate_id": {"$ref": "#/$defs/candidate_id"},
+              "message": {"const": "Настроенное устройство больше не найдено."}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"code": {"const": "device_unavailable"}}},
+          "then": {
+            "properties": {
+              "room_id": {"$ref": "#/$defs/stable_id"},
+              "candidate_id": {"$ref": "#/$defs/candidate_id"},
+              "message": {"const": "Настроенное устройство сейчас недоступно."}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"code": {"const": "registry_mismatch"}}},
+          "then": {
+            "properties": {
+              "room_id": {"$ref": "#/$defs/stable_id"},
+              "candidate_id": {"$ref": "#/$defs/candidate_id"},
+              "message": {"const": "Привязка настроенного устройства изменилась."}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"code": {"const": "unsupported_device"}}},
+          "then": {
+            "properties": {
+              "room_id": {"$ref": "#/$defs/stable_id"},
+              "candidate_id": {"$ref": "#/$defs/candidate_id"},
+              "message": {"const": "Тип настроенного устройства больше не поддерживается."}
+            }
+          }
+        }
+      ]
+    },
+    "display_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statuses", "modes", "strategies", "profiles", "issues"],
+      "properties": {
+        "statuses": {"$ref": "#/$defs/status_names"},
+        "modes": {"$ref": "#/$defs/mode_names"},
+        "strategies": {"$ref": "#/$defs/strategy_names"},
+        "profiles": {"$ref": "#/$defs/profile_names"},
+        "issues": {"$ref": "#/$defs/issue_names"}
+      }
+    },
+    "status_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["not_configured", "ready", "attention"],
+      "properties": {
+        "not_configured": {"const": "Ещё не настроен"},
+        "ready": {"const": "Можно редактировать"},
+        "attention": {"const": "Нужно проверить устройства"}
+      }
+    },
+    "mode_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disabled", "observe", "automatic"],
+      "properties": {
+        "disabled": {"const": "Выключен в HASC"},
+        "observe": {"const": "Только наблюдение"},
+        "automatic": {"const": "Автоматическое управление"}
+      }
+    },
+    "strategy_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["soft", "normal", "aggressive"],
+      "properties": {
+        "soft": {"const": "Плавно"},
+        "normal": {"const": "Обычно"},
+        "aggressive": {"const": "Быстро"}
+      }
+    },
+    "profile_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["day", "night"],
+      "properties": {
+        "day": {"const": "День"},
+        "night": {"const": "Ночь"}
+      }
+    },
+    "issue_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "not_configured",
+        "data_stale",
+        "source_missing",
+        "device_unavailable",
+        "registry_mismatch",
+        "unsupported_device"
+      ],
+      "properties": {
+        "not_configured": {"const": "Климатический контур ещё не настроен."},
+        "data_stale": {"const": "Данные об устройствах устарели. Обновите экран."},
+        "source_missing": {"const": "Настроенное устройство больше не найдено."},
+        "device_unavailable": {"const": "Настроенное устройство сейчас недоступно."},
+        "registry_mismatch": {"const": "Привязка настроенного устройства изменилась."},
+        "unsupported_device": {"const": "Тип настроенного устройства больше не поддерживается."}
+      }
+    }
+  }
+}

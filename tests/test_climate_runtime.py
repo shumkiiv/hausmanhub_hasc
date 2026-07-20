@@ -349,6 +349,13 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             [24.0, 25.0],
             [room.day_profile.target_temperature for room in contour.rooms],  # type: ignore[union-attr]
         )
+        current = await runtime.async_current_contour_setup()
+        self.assertEqual("ready", current["status"])
+        self.assertTrue(current["editing_allowed"])
+        self.assertEqual("Климат дома", current["name"])
+        self.assertEqual(2, current["summary"]["room_count"])  # type: ignore[index]
+        self.assertEqual(saves_before + 1, len(registry_store.saved))
+        self.assertEqual(contour_saves_before + 1, len(contour_store.saved))
         self.assertEqual([], bridge.executed)
         serialized = json.dumps(receipt, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("synthetic-ac-source-living", serialized)

@@ -270,6 +270,23 @@ Last updated: 2026-07-20.
   `ses_081d77549ffe5piZVGFmOgJuGd` failed before review with server reference
   `err_4169f40f`. The final Codex audit added direct stale-save and
   blocked-draft regression checks and found no remaining issue.
+- Version 1.7.6 completed the seventeenth HASC-only roadmap item. A local-admin
+  GET at `/api/hausman_hub/v1/admin/climate-drafts/current` projects the exact
+  saved climate contour into a strict private-id-free editor model. It keeps
+  per-room day and night profiles, active profile, temporary temperature,
+  schedule, mode, and assigned device kinds separate, so transient engine or
+  override values cannot replace saved comfort settings. `setup_revision`
+  fingerprints the complete stored registry and contour while
+  `snapshot_revision` fingerprints current device bindings. Missing, stale,
+  unavailable, or mismatched devices remain visible but set
+  `editing_allowed: false` with a fixed Russian reason; an absent contour is an
+  explicit `not_configured` result. Reading refreshes discovery without
+  persistence, commands, or shadow-evidence changes. The final staged tree
+  passed 352 local tests, package/boundary/Android checks, and Home Assistant
+  Core 2026.6.4 and 2026.7.0. Kimi provider session
+  `ses_081c8eff3ffe1X2SVwve701Amw` failed before review with server reference
+  `err_9d1c65ec`. The final Codex audit bound every issue code to its exact
+  Russian message and correct global/device scope and found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through
