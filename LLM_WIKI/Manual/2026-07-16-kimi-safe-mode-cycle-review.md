@@ -5,8 +5,8 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable Home Assistant Core check for
-two consecutive allowed HASC settings: `read-only` to `shadow`, then back to
-`read-only`. The check must prove that each save reloads only HASC once and
+two consecutive allowed HausmanHub settings: `read-only` to `shadow`, then back to
+`read-only`. The check must prove that each save reloads only HausmanHub once and
 that the final safe mode remains consistent through later lifecycle checks.
 
 ## Result
@@ -27,7 +27,7 @@ GET-only page after each allowed save.
 - Disposable empty Home Assistant Core checks passed with 2026.6.4 and
   2026.7.0.
 - The existing safe-options helper records and requires exactly one reload of
-  the same HASC entry for each save.
+  the same HausmanHub entry for each save.
 - No integration runtime file, HACS metadata, device command, service,
   proxy, direct execution path, secret, live identifier, or real-home access
   was added.

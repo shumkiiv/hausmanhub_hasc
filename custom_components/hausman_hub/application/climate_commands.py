@@ -1,4 +1,4 @@
-"""Translate typed HASC climate intents into the existing Climate API.
+"""Translate typed HausmanHub climate intents into the existing Climate API.
 
 Callers can never supply a backend command type, service, source identifier,
 or Home Assistant entity identifier.  Every private value is resolved from a
@@ -25,7 +25,7 @@ from ..domain.climate_bridge import ClimateBridgeMode
 from .climate_import import ClimateImportSnapshot
 
 
-CLIMATE_ACTION_REQUEST_CONTRACT_NAME = "hausman-hasc-climate-action-request"
+CLIMATE_ACTION_REQUEST_CONTRACT_NAME = "hausman-hub-climate-action-request"
 CLIMATE_ACTION_REQUEST_CONTRACT_VERSION = 1
 
 

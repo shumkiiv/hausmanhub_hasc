@@ -1,4 +1,4 @@
-"""Pure tests for confirmed HASC contour settings application."""
+"""Pure tests for confirmed HausmanHub contour settings application."""
 
 from __future__ import annotations
 

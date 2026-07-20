@@ -1,6 +1,6 @@
 """Public Android and private administrator climate projections.
 
-The normal tablet contract deliberately contains only stable HASC identifiers.
+The normal tablet contract deliberately contains only stable HausmanHub identifiers.
 Private Climate API device identifiers and Home Assistant entity bindings are
 available only through the separate administrator projection.
 """
@@ -37,7 +37,7 @@ from .public_climate_values import (
 )
 
 
-ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hasc-home"
+ANDROID_CLIMATE_CONTRACT_NAME = "hausman-hub-home"
 ANDROID_CLIMATE_CONTRACT_VERSION = 12
 ANDROID_STATE_REVISION_MAXIMUM = 9_007_199_254_740_991
 ANDROID_ROOM_CONTROL_ACTIONS = (

@@ -6,14 +6,14 @@ Date: 2026-07-15.
 
 The disposable Core lifecycle gained one more invalid main saved setting. It
 looks safe at first, but contains one extra synthetic field. This is a test
-only: HASC runtime code and its approved nine-count surface did not change.
+only: HausmanHub runtime code and its approved nine-count surface did not change.
 
 ## What the check proves
 
-For the extra-field case, the empty test configuration must show that HASC:
+For the extra-field case, the empty test configuration must show that HausmanHub:
 
 - closes immediately after reload;
-- stays closed through a restart with no HASC state, record, device, service,
+- stays closed through a restart with no HausmanHub state, record, device, service,
   runtime data, or local page;
 - returns only the same nine aggregate counts after the exact safe setting is
   restored; and

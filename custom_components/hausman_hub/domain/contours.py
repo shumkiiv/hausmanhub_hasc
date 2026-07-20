@@ -1,4 +1,4 @@
-"""Universal automatic-contour model owned by HASC.
+"""Universal automatic-contour model owned by HausmanHub.
 
 The first supported contour is climate.  It deliberately delegates the actual
 climate algorithm to the existing ``hausman-climate`` engine instead of
@@ -40,7 +40,7 @@ class ContourViolation(ValueError):
 
 
 class ContourKind(StrEnum):
-    """Contour kinds supported by the current HASC package."""
+    """Contour kinds supported by the current HausmanHub package."""
 
     CLIMATE = "climate"
 
@@ -54,13 +54,13 @@ class ContourMode(StrEnum):
 
 
 class ContourEngine(StrEnum):
-    """Typed engine implementations hidden behind the HASC contour."""
+    """Typed engine implementations hidden behind the HausmanHub contour."""
 
     EXISTING_CLIMATE_CORE = "existing_climate_core"
 
 
 class ClimateStrategy(StrEnum):
-    """Existing climate-core target strategies exposed in plain HASC UI."""
+    """Existing climate-core target strategies exposed in plain HausmanHub UI."""
 
     SOFT = "soft"
     NORMAL = "normal"
@@ -68,7 +68,7 @@ class ClimateStrategy(StrEnum):
 
 
 class ClimateProfile(StrEnum):
-    """Two simple comfort profiles understood by the HASC 1.x UI."""
+    """Two simple comfort profiles understood by the HausmanHub 1.x UI."""
 
     DAY = "day"
     NIGHT = "night"
@@ -292,7 +292,7 @@ class ContourDefinition:
 
 @dataclass(frozen=True, slots=True)
 class ContourRegistry:
-    """Complete versioned collection of HASC-owned contours."""
+    """Complete versioned collection of HausmanHub-owned contours."""
 
     contours: tuple[ContourDefinition, ...] = ()
     version: int = CONTOUR_REGISTRY_VERSION

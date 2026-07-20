@@ -1,4 +1,4 @@
-"""Pure tests for HASC logical climate rooms and devices."""
+"""Pure tests for HausmanHub logical climate rooms and devices."""
 
 from __future__ import annotations
 

@@ -22,7 +22,7 @@ class ClimateRegistryStorageError(RuntimeError):
 
 
 class HomeAssistantClimateRegistryStore:
-    """Persist one complete registry per single HASC config entry."""
+    """Persist one complete registry per single HausmanHub config entry."""
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self._store: Store[dict[str, object]] = Store(

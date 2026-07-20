@@ -1,5 +1,5 @@
 name: Сообщить о проблеме
-description: Безопасное сообщение об ошибке в HASC без данных дома
+description: Безопасное сообщение об ошибке в HausmanHub без данных дома
 title: "[Проблема]: "
 labels:
   - bug
@@ -11,9 +11,9 @@ body:
         названия или идентификаторы устройств, архив диагностики, журналы с
         домашними данными, команды или снимки Node-RED.
   - type: input
-    id: hasc_version
+    id: hausmanhub_version
     attributes:
-      label: Версия HASC
+      label: Версия HausmanHub
       description: Например, 0.2.0.
     validations:
       required: true

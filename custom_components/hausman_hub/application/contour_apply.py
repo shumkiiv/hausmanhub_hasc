@@ -1,4 +1,4 @@
-"""Explicitly apply one HASC climate contour to the existing climate engine.
+"""Explicitly apply one HausmanHub climate contour to the existing climate engine.
 
 The existing ``hausman-climate`` runtime remains the algorithm and execution
 owner.  This module only builds a bounded set of its already supported typed
@@ -28,9 +28,9 @@ from .climate_commands import (
 from .climate_import import ClimateImportSnapshot
 
 
-CONTOUR_APPLY_REQUEST_CONTRACT_NAME = "hausman-hasc-contour-apply-request"
-CONTOUR_APPLY_PREVIEW_CONTRACT_NAME = "hausman-hasc-contour-apply-preview"
-CONTOUR_APPLY_RECEIPT_CONTRACT_NAME = "hausman-hasc-contour-apply-receipt"
+CONTOUR_APPLY_REQUEST_CONTRACT_NAME = "hausman-hub-contour-apply-request"
+CONTOUR_APPLY_PREVIEW_CONTRACT_NAME = "hausman-hub-contour-apply-preview"
+CONTOUR_APPLY_RECEIPT_CONTRACT_NAME = "hausman-hub-contour-apply-receipt"
 CONTOUR_APPLY_CONTRACT_VERSION = 1
 MAX_CONTOUR_APPLY_RECORDS = 256
 MAX_CONTOUR_APPLY_COMMANDS = 128 * 3
@@ -156,7 +156,7 @@ class _ContourApplyRecord:
 
 
 class _ContourApplyLedger:
-    """Keep bounded idempotency records for the lifetime of one HASC entry."""
+    """Keep bounded idempotency records for the lifetime of one HausmanHub entry."""
 
     def __init__(
         self,

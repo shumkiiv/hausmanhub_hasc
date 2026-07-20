@@ -1,4 +1,4 @@
-"""Versioned Home Assistant storage adapter for HASC contour definitions."""
+"""Versioned Home Assistant storage adapter for HausmanHub contour definitions."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class _MigratingContourStore(Store[dict[str, object]]):
 
 
 class HomeAssistantContourStore:
-    """Persist one complete contour registry per HASC config entry."""
+    """Persist one complete contour registry per HausmanHub config entry."""
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self._store: Store[dict[str, object]] = _MigratingContourStore(

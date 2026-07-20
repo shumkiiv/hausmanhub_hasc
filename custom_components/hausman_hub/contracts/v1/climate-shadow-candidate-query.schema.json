@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-shadow-candidate-query.schema.json",
-  "title": "HASC climate shadow candidate query v1",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-shadow-candidate-query.schema.json",
+  "title": "HausmanHub climate shadow candidate query v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["room_id"],

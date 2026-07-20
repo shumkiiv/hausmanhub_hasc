@@ -4,7 +4,7 @@ Date: 2026-07-15.
 
 ## Scope
 
-Independent review of the local guard that requires a higher HASC version when
+Independent review of the local guard that requires a higher HausmanHub version when
 a prepared change touches the integration package or `hacs.json`.
 
 ## Review and correction

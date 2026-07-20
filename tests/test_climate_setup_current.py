@@ -1,4 +1,4 @@
-"""Safe read model for editing the currently saved HASC climate setup."""
+"""Safe read model for editing the currently saved HausmanHub climate setup."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ SCHEMA = (
     / "v1"
     / "climate-current-setup.schema.json"
 )
-FIXTURE = ROOT / "fixtures" / "hasc_climate_current_setup_v1" / "current.json"
+FIXTURE = ROOT / "fixtures" / "hausmanhub_climate_current_setup_v1" / "current.json"
 
 
 def load_json(path: Path) -> object:

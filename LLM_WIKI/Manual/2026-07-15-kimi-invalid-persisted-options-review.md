@@ -5,17 +5,17 @@ Date: 2026-07-15.
 ## Scope
 
 Only the disposable Home Assistant Core lifecycle check, its structural local
-test, and its documentation changed. HASC runtime code, the fixed nine-count
+test, and its documentation changed. HausmanHub runtime code, the fixed nine-count
 boundary, and all execution boundaries remain unchanged.
 
 ## What changed
 
 The disposable lifecycle now separately covers a bad saved mode choice in
-HASC's options:
+HausmanHub's options:
 
 1. a temporary safe entry selects the approved `shadow` choice;
 2. only its temporary saved option is replaced with `proxy`;
-3. reload and a temporary restart must keep HASC closed;
+3. reload and a temporary restart must keep HausmanHub closed;
 4. restoring the original safe option must recover the same nine sensor names,
    fixed diagnostics, and authenticated GET-only page;
 5. another empty restart must preserve that corrected option before removal,

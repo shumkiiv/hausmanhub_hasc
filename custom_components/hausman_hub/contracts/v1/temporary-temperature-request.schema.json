@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/temporary-temperature-request.schema.json",
-  "title": "HASC temporary temperature request v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/temporary-temperature-request.schema.json",
+  "title": "HausmanHub temporary temperature request v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["request_id", "contour_id", "room_id", "action", "target_temperature", "confirm"],

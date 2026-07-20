@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 The disposable Home Assistant lifecycle now separately covers a
-user-disabled HASC entry whose saved main data lacks the required `mode`.
+user-disabled HausmanHub entry whose saved main data lacks the required `mode`.
 Explicit activation must fail closed.  A manual exact repair must remain
 closed until one explicit reload restores only the approved nine-count
 surface.

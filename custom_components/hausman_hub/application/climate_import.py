@@ -52,7 +52,7 @@ class ImportedClimateRoom:
 
 @dataclass(frozen=True, slots=True)
 class ImportedClimateDevice:
-    """A source device candidate that still requires explicit HASC binding."""
+    """A source device candidate that still requires explicit HausmanHub binding."""
 
     source_id: str
     name: str

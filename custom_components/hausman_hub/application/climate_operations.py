@@ -1,4 +1,4 @@
-"""Bounded public lifecycle for typed HASC climate operations."""
+"""Bounded public lifecycle for typed HausmanHub climate operations."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from .climate_commands import ClimateCommandPlan, ClimateCommandViolation
 from .climate_import import ClimateImportSnapshot
 
 
-OPERATION_QUERY_CONTRACT_NAME = "hausman-hasc-climate-operation-query"
-OPERATION_CONTRACT_NAME = "hausman-hasc-operation"
+OPERATION_QUERY_CONTRACT_NAME = "hausman-hub-climate-operation-query"
+OPERATION_CONTRACT_NAME = "hausman-hub-operation"
 OPERATION_CONTRACT_VERSION = 1
 MAX_OPERATION_RECORDS = 256
 OPERATION_TIMEOUT_MS = 30_000
@@ -39,7 +39,7 @@ class ClimateOperationStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ClimateOperationReceipt:
-    """Versioned Android receipt containing public HASC identifiers only."""
+    """Versioned Android receipt containing public HausmanHub identifiers only."""
 
     operation_id: str
     request_id: str | None

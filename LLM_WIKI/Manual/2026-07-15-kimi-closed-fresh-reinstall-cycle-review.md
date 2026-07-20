@@ -9,11 +9,11 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-The fresh `read-only` HASC setup created after cleanup is now removed too. Its
+The fresh `read-only` HausmanHub setup created after cleanup is now removed too. Its
 retained local page must immediately return only an unavailable response with
 no count keys, and the external temporary record must remain unchanged. A
 fourth empty Home Assistant instance using the same temporary configuration
-then requires HASC to remain fully absent.
+then requires HausmanHub to remain fully absent.
 
 ## Review outcome
 

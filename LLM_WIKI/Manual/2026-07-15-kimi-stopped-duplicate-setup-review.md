@@ -1,18 +1,18 @@
-# Kimi review: duplicate setup while HASC is stopped
+# Kimi review: duplicate setup while HausmanHub is stopped
 
 Date: 2026-07-15.
 
 ## Scope
 
-This change extends the disposable Home Assistant lifecycle check. A safe HASC
+This change extends the disposable Home Assistant lifecycle check. A safe HausmanHub
 setup is ordinarily stopped but remains user-enabled and saved. The empty test
-then tries to add HASC again and must receive the usual one-setup refusal.
+then tries to add HausmanHub again and must receive the usual one-setup refusal.
 
 ## What the check proves
 
-The existing saved setup remains the one and only HASC setup. Its data and
+The existing saved setup remains the one and only HausmanHub setup. Its data and
 safe mode choice stay unchanged, it is not user-deactivated, and it remains
-ordinarily unloaded. The same nine HASC count records remain enabled but have
+ordinarily unloaded. The same nine HausmanHub count records remain enabled but have
 no current values, and the guarded page stays unavailable. The following
 temporary restart must still auto-load that same safe setup with exactly the
 nine permitted counts and no device, service, proxy, or execution path.

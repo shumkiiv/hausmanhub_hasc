@@ -106,7 +106,7 @@ class ClimateEvidenceStorage(Protocol):
 
 
 class ContourStorage(Protocol):
-    """Minimal versioned persistence boundary for HASC contour definitions."""
+    """Minimal versioned persistence boundary for HausmanHub contour definitions."""
 
     async def async_load(self) -> ContourRegistry:
         """Load a complete validated contour registry."""
@@ -116,7 +116,7 @@ class ContourStorage(Protocol):
 
 
 class ClimateRuntime:
-    """One loaded HASC entry's climate facade and rollout state."""
+    """One loaded HausmanHub entry's climate facade and rollout state."""
 
     def __init__(
         self,
@@ -211,7 +211,7 @@ class ClimateRuntime:
                 else:
                     self.last_error = None
             except Exception as error:
-                # Base HASC remains available; climate endpoints fail closed and
+                # Base HausmanHub remains available; climate endpoints fail closed and
                 # an administrator can replace a damaged local registry.
                 self.last_error = type(error).__name__
 
@@ -631,7 +631,7 @@ class ClimateRuntime:
         self,
         policy: NativeClimatePolicy,
     ) -> dict[str, object]:
-        """Calculate HASC's one-room decision without enabling any command."""
+        """Calculate HausmanHub's one-room decision without enabling any command."""
 
         async with self._lock:
             snapshot = self._snapshot
@@ -1120,7 +1120,7 @@ class ClimateRuntime:
     ) -> dict[str, object]:
         return {
             "contract": {
-                "name": "hausman-hasc-climate-readiness",
+                "name": "hausman-hub-climate-readiness",
                 "version": 1,
             },
             "bridge_mode": self.configuration.climate_bridge_mode.value,
@@ -1164,7 +1164,7 @@ def _registry_preview_payload(
 ) -> dict[str, object]:
     return {
         "contract": {
-            "name": "hausman-hasc-climate-registry-preview",
+            "name": "hausman-hub-climate-registry-preview",
             "version": 1,
         },
         "status": status,

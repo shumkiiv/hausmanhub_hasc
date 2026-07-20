@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, object]:
-    """Return counts only for the one active safe HASC setup."""
+    """Return counts only for the one active safe HausmanHub setup."""
 
     active_entry = _single_loaded_entry(hass, entry)
     if active_entry is None:
@@ -55,7 +55,7 @@ def _single_loaded_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> ConfigEntry | None:
-    """Return the one saved HASC entry only when it is currently loaded."""
+    """Return the one saved HausmanHub entry only when it is currently loaded."""
 
     saved_entries = hass.config_entries.async_entries(entry.domain)
     if len(saved_entries) != 1:

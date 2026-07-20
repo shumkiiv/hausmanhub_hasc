@@ -9,8 +9,8 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-After the third empty Home Assistant instance proves that removed HASC is
-absent, the same instance creates a new `read-only` HASC setup. The test
+After the third empty Home Assistant instance proves that removed HausmanHub is
+absent, the same instance creates a new `read-only` HausmanHub setup. The test
 requires a new internal entry identifier, exactly nine allowed count sensors,
 the fixed safe diagnostics report, the unchanged external temporary record,
 and the guarded authenticated local page. A distinct temporary user-name

@@ -13,7 +13,7 @@ nine-count viewing waits for a future setup step.
 Kimi session `ses_09849c4baffeaHqHpqAsHXLUai` using
 `kimi-for-coding/k2p7` returned **NO FINDINGS**.
 
-It confirmed that the Russian guide now clearly says that ordinary HASC counts
+It confirmed that the Russian guide now clearly says that ordinary HausmanHub counts
 and diagnostics work without another user, no action is needed when the extra
 page is unnecessary, and the optional page must not be configured manually
 when the exact read-only role is unavailable.

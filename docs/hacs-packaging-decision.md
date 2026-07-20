@@ -9,15 +9,15 @@ the public HACS catalog.
 
 ## Facts already fixed
 
-- The repository is public: `shumkiiv/hausmanhub_hasc`.
+- The repository is public: `shumkiiv/hausmanhub_hacs`.
 - The license is MIT and the supported baseline is Home Assistant Core 2026.6.4
   or newer.
 - The `custom_components/hausman_hub/` observation modes remain limited to
   `read-only` and `shadow`.
-- The nine approved diagnostic count sensors remain the default HASC entity
+- The nine approved diagnostic count sensors remain the default HausmanHub entity
   surface.
-- Version 0.4.0 adds one separately approved, off-by-default HASC switch for
-  one selected `input_boolean`. It registers no HASC service, creates no
+- Version 0.4.0 adds one separately approved, off-by-default HausmanHub switch for
+  one selected `input_boolean`. It registers no HausmanHub service, creates no
   device, and has no Node-RED, external, or physical-device execution path.
 - Proxy and general device execution remain unapproved and blocked.
 - Version 0.5.0 separately adds a disabled-by-default typed Climate API facade.
@@ -45,7 +45,7 @@ root-level metadata:
 
 ```json
 {
-  "name": "HASC — управление домом",
+  "name": "HausmanHub",
   "homeassistant": "2026.6.4"
 }
 ```
@@ -70,7 +70,7 @@ not add it to the public HACS catalog.
 
 This paragraph records the original 2026-07-14 metadata change. That
 implementation was one isolated metadata-only change. It did not modify
-the HASC integration's runtime behavior, alter Climate, Automation, Common,
+the HausmanHub integration's runtime behavior, alter Climate, Automation, Common,
 or Smart Home Center policy. Later approved runtime versions, including the
 0.4.0 helper canary, keep their own decision and review records.
 

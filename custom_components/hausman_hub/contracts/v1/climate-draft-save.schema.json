@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/climate-draft-save.schema.json",
-  "title": "Подтверждение сохранения климатического контура HASC v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/climate-draft-save.schema.json",
+  "title": "Подтверждение сохранения климатического контура HausmanHub v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,7 +25,7 @@
       ],
       "properties": {
         "name": {
-          "const": "hausman-hasc-climate-draft-save"
+          "const": "hausman-hub-climate-draft-save"
         },
         "version": {
           "const": 1

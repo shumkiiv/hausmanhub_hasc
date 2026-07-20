@@ -1,6 +1,6 @@
 # Static validation scope
 
-The files under `fixtures/`, `hasc_validation/`, and `tests/` are a local,
+The files under `fixtures/`, `hausmanhub_validation/`, and `tests/` are a local,
 synthetic schema-check harness. They are not a Home Assistant integration,
 runtime adapter, proxy, or deployment tool.
 

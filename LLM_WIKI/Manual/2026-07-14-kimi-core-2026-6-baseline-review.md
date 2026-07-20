@@ -25,7 +25,7 @@ repository files.
 
 ## Verification
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 24 passed
 - `python3 -m json.tool hacs.json`
 - isolated Core lifecycle check passed on 2026.6.4 and 2026.7.0

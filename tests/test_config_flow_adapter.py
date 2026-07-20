@@ -167,7 +167,7 @@ class FakeConfigFlow:
 
 
 class FakeOptionsFlow:
-    """Minimal options-flow base with the config-entry property used by HASC."""
+    """Minimal options-flow base with the config-entry property used by HausmanHub."""
 
     config_entry: FakeConfigEntry
 
@@ -492,7 +492,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(flow.unique_id_checked)
 
     async def test_forms_discard_extra_user_input(self) -> None:
-        """Only the approved mode may cross either HASC form boundary."""
+        """Only the approved mode may cross either HausmanHub form boundary."""
 
         extra_input = {
             "mode": "shadow",
@@ -750,7 +750,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         armed = await options_flow.async_step_test_switch(
             {
                 "canary_control_enabled": True,
-                "canary_control_target": "input_boolean.hasc_canary",
+                "canary_control_target": "input_boolean.hausmanhub_canary",
             }
         )
 
@@ -761,7 +761,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 "local_summary_enabled": True,
                 "summary_update_interval": "5m",
                 "canary_control_enabled": True,
-                "canary_control_target": "input_boolean.hasc_canary",
+                "canary_control_target": "input_boolean.hausmanhub_canary",
                 "climate_bridge_mode": "disabled",
             },
             armed["data"],
@@ -772,7 +772,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assert_test_switch_fields(
             armed_form["schema"],
             True,
-            "input_boolean.hasc_canary",
+            "input_boolean.hausmanhub_canary",
         )
 
         disarmed = await options_flow.async_step_test_switch(
@@ -841,7 +841,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("climate_canary_room_id", disabled["data"])
 
     async def test_options_preview_one_room_native_climate_without_commands(self) -> None:
-        """The built-in HASC controller stores targets only after preview."""
+        """The built-in HausmanHub controller stores targets only after preview."""
 
         from custom_components.hausman_hub.application.climate_import import (
             import_climate_state,

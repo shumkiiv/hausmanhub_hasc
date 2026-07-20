@@ -4,7 +4,7 @@ Date: 2026-07-15.
 
 ## Scope
 
-Version 0.3.6 makes the HASC mode-choice screen safe when old saved settings
+Version 0.3.6 makes the HausmanHub mode-choice screen safe when old saved settings
 are broken. The screen may show only a safe default; it must not write,
 repair, or otherwise change the saved setting merely because a person opened
 the screen.

@@ -1,4 +1,4 @@
-"""Safe creation of an unsaved HASC climate contour draft."""
+"""Safe creation of an unsaved HausmanHub climate contour draft."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from custom_components.hausman_hub.application.climate_setup import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FIXTURE = ROOT / "fixtures" / "climate_bridge" / "valid_state.json"
-DRAFT_FIXTURES = ROOT / "fixtures" / "hasc_climate_draft_v1"
+DRAFT_FIXTURES = ROOT / "fixtures" / "hausmanhub_climate_draft_v1"
 CONTRACTS = ROOT / "custom_components" / "hausman_hub" / "contracts" / "v1"
 
 
@@ -455,7 +455,7 @@ class ClimateSetupDraftTest(unittest.TestCase):
 
     def test_configured_candidate_and_extra_fields_are_not_silently_accepted(self) -> None:
         configured_registry = registry_from_payload(
-            load_json(ROOT / "fixtures" / "hasc_climate_v1" / "registry.json")
+            load_json(ROOT / "fixtures" / "hausmanhub_climate_v1" / "registry.json")
         )
         configured_request = copy.deepcopy(self.request)
         configured_request["snapshot_revision"] = climate_device_candidates(

@@ -2,7 +2,7 @@
 
 Date: 2026-07-13.
 
-The next HASC boundary is an explicit owner decision: either keep the project
+The next HausmanHub boundary is an explicit owner decision: either keep the project
 schema-only or approve a private read-only `hausman_hub` skeleton. The decision
 record is `docs/read-only-skeleton-decision.md`.
 

@@ -20,7 +20,7 @@ def collect_home_summary(
     hass: HomeAssistant,
     excluded_config_entry_id: str | None = None,
 ) -> HomeSummary:
-    """Return only approved local totals without counting HASC's own display."""
+    """Return only approved local totals without counting HausmanHub's own display."""
 
     areas = area_registry.async_get(hass)
     devices = device_registry.async_get(hass)

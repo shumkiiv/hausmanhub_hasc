@@ -17,7 +17,7 @@ devices, services, deployment, or network API access.
 - proves rejected options leave the loaded entry and persisted options intact;
 - accepts only a change between the two approved modes, then reloads the real
   Core entry;
-- requires direct execution to remain blocked, with no HASC service or
+- requires direct execution to remain blocked, with no HausmanHub service or
   config-entry entity; and
 - removes each temporary entry and checks that no entry or attached entity is
   left behind.
@@ -44,7 +44,7 @@ modify repository files.
 
 ## Verification to run before commit
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v`
-- `/tmp/hasc-core-2026.7.0/bin/python tools/check_home_assistant_core.py`
+- `/tmp/hausmanhub-core-2026.7.0/bin/python tools/check_home_assistant_core.py`
 - `git diff --check`

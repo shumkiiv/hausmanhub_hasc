@@ -1,1 +1,1 @@
-"""Use cases for the HausMan Hub read-only skeleton."""
+"""Use cases for the HausmanHub read-only skeleton."""

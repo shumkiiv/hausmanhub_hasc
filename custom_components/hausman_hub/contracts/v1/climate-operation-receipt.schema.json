@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-operation-receipt.schema.json",
-  "title": "HASC climate operation receipt v1",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-operation-receipt.schema.json",
+  "title": "HausmanHub climate operation receipt v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "operation_id", "request_id", "action", "room_id", "device_id", "status", "execution", "created_at", "updated_at", "known"],
@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-operation"},
+        "name": {"const": "hausman-hub-operation"},
         "version": {"const": 1}
       }
     },

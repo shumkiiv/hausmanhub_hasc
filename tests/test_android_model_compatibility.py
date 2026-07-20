@@ -20,7 +20,7 @@ def load_json(path: Path) -> object:
 
 
 class AndroidModelCompatibilityTest(unittest.TestCase):
-    """Keep HASC v12 representable by existing Kotlin model primitives."""
+    """Keep HausmanHub v12 representable by existing Kotlin model primitives."""
 
     def setUp(self) -> None:
         self.home = load_json(android_check.HOME_FIXTURE)
@@ -75,7 +75,7 @@ class AndroidModelCompatibilityTest(unittest.TestCase):
         with self.assertRaises(android_check.AndroidCompatibilityError):
             self.check(imprecise_revision)
 
-    def test_actions_require_russian_reasons_and_valid_hasc_requests(self) -> None:
+    def test_actions_require_russian_reasons_and_valid_hausmanhub_requests(self) -> None:
         missing_reason = copy.deepcopy(self.home)
         missing_reason["display_names"]["blocked_reasons"].pop("shadow_only")  # type: ignore[index]
         with self.assertRaises(android_check.AndroidCompatibilityError):
@@ -88,7 +88,7 @@ class AndroidModelCompatibilityTest(unittest.TestCase):
         with self.assertRaises(android_check.AndroidCompatibilityError):
             self.check(invalid_input)
 
-    def test_every_hasc_device_kind_requires_an_android_domain_mapping(self) -> None:
+    def test_every_hausmanhub_device_kind_requires_an_android_domain_mapping(self) -> None:
         expanded_schema = copy.deepcopy(self.home_schema)
         expanded_schema["$defs"]["device"]["properties"]["kind"][  # type: ignore[index]
             "enum"

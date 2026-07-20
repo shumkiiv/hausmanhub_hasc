@@ -1,4 +1,4 @@
-"""Stable HASC climate codes and their plain Russian names."""
+"""Stable HausmanHub climate codes and their plain Russian names."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class PublicClimateValuesTest(unittest.TestCase):
             public_climate_display_names(include_room_data_statuses=False),
         )
 
-    def test_private_engine_modes_are_normalized_to_hasc_codes(self) -> None:
+    def test_private_engine_modes_are_normalized_to_hausmanhub_codes(self) -> None:
         self.assertEqual("automatic", public_room_mode("auto"))
         self.assertEqual("automatic", public_room_mode("forced_auto_only"))
         self.assertEqual("manual", public_room_mode("manual"))

@@ -5,7 +5,7 @@ Date: 2026-07-14.
 ## Owner decision
 
 After HACS returned GitHub 404 for the private repository, the owner explicitly
-approved making `shumkiiv/hausmanhub_hasc` public. HACS does not support
+approved making `shumkiiv/hausmanhub_hacs` public. HACS does not support
 private GitHub repositories. The repository is not submitted to the public
 HACS catalog.
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v6/contours.schema.json",
-  "title": "HASC automatic contours with stable display names v6",
+  "$id": "https://hausman.local/hausmanhub/contracts/v6/contours.schema.json",
+  "title": "HausmanHub automatic contours with stable display names v6",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,7 +19,7 @@
       ],
       "properties": {
         "name": {
-          "const": "hausman-hasc-contours"
+          "const": "hausman-hub-contours"
         },
         "version": {
           "const": 6
@@ -186,7 +186,7 @@
           "required": [
             "owner",
             "automatic_active",
-            "hasc_direct_commands",
+            "hausmanhub_direct_commands",
             "settings_apply",
             "temporary_temperature"
           ],
@@ -197,7 +197,7 @@
             "automatic_active": {
               "type": "boolean"
             },
-            "hasc_direct_commands": {
+            "hausmanhub_direct_commands": {
               "const": false
             },
             "settings_apply": {
@@ -549,7 +549,7 @@
               "const": "Пробное управление"
             },
             "managed": {
-              "const": "Управление HASC"
+              "const": "Управление HausmanHub"
             }
           }
         },
@@ -740,7 +740,7 @@
           ],
           "properties": {
             "disabled": {
-              "const": "Выключен в HASC"
+              "const": "Выключен в HausmanHub"
             },
             "observe": {
               "const": "Наблюдение"

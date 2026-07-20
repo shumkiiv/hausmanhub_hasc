@@ -12,13 +12,13 @@ safe main setting.
 
 ## What the check proves
 
-The test coverage now shows that HASC:
+The test coverage now shows that HausmanHub:
 
 - rejects the incomplete main setting even when its separate safe option says
   `shadow`;
-- creates no HASC sensor or local page for that rejected setting and clears
+- creates no HausmanHub sensor or local page for that rejected setting and clears
   only its own old records;
-- stays closed through a temporary empty restart with no HASC state, record,
+- stays closed through a temporary empty restart with no HausmanHub state, record,
   device, service, runtime data, or local page; and
 - restores only the same nine aggregate counts after the exact main setting is
   returned while the safe `shadow` option remains in place.

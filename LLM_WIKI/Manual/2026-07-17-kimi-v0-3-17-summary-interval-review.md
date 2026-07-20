@@ -1,4 +1,4 @@
-# HASC 0.3.17 fixed summary interval review
+# HausmanHub 0.3.17 fixed summary interval review
 
 Date: 2026-07-17.
 
@@ -19,7 +19,7 @@ of this timer.
 - The Home Assistant options form uses a translated fixed select selector.
 - The sensor adapter maps the validated choice to 5, 15, or 30 minutes and
   passes it to the one coordinator shared by the same nine diagnostic sensors.
-- Active setting changes reload only the HASC entry. When HASC is ordinarily
+- Active setting changes reload only the HausmanHub entry. When HausmanHub is ordinarily
   stopped or user-disabled, the same option saves without a reload or a home
   summary read and applies only on the later explicit setup or activation.
 
@@ -29,7 +29,7 @@ of this timer.
 - `python tools/check_local_release.py` passed before the review fixes.
 - Disposable Home Assistant Core 2026.6.4 and 2026.7.0 both passed before the
   review fixes. They verified the real selector serialization, rejection of
-  `1m`, one HASC-only reload, the shared coordinator interval, inactive saves,
+  `1m`, one HausmanHub-only reload, the shared coordinator interval, inactive saves,
   restarts, and the unchanged local-page boundary.
 - After the review fixes, the focused 80 configuration/skeleton tests passed,
   both disposable Core 2026.6.4 and 2026.7.0 passed again, the complete fast

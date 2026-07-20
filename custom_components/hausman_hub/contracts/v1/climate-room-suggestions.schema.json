@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/climate-room-suggestions.schema.json",
-  "title": "HASC climate room suggestions v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/climate-room-suggestions.schema.json",
+  "title": "HausmanHub climate room suggestions v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,7 +20,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-climate-room-suggestions"},
+        "name": {"const": "hausman-hub-climate-room-suggestions"},
         "version": {"const": 1}
       }
     },
@@ -67,7 +67,7 @@
             "unsupported_device": {"const": "Тип устройства не поддерживается"},
             "data_stale": {"const": "Нужно обновить данные"},
             "device_missing": {"const": "Настроенное устройство больше не найдено"},
-            "registry_mismatch": {"const": "Текущая привязка не совпадает с настройкой HASC"},
+            "registry_mismatch": {"const": "Текущая привязка не совпадает с настройкой HausmanHub"},
             "room_unavailable": {"const": "Комната сейчас недоступна для выбора"}
           }
         }

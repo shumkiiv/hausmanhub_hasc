@@ -1,17 +1,17 @@
-# Kimi review: one HASC setup check
+# Kimi review: one HausmanHub setup check
 
 Date: 2026-07-15.
 
 ## Scope
 
 Only the isolated Home Assistant Core check, its local source guard, and its
-documentation changed. The HASC integration did not change. The check uses an
+documentation changed. The HausmanHub integration did not change. The check uses an
 empty temporary Home Assistant configuration only.
 
 ## What changed
 
-After the first safe HASC setup, the test tries a second safe setup. Home
-Assistant must refuse it because HASC allows only one setup. The check then
+After the first safe HausmanHub setup, the test tries a second safe setup. Home
+Assistant must refuse it because HausmanHub allows only one setup. The check then
 requires the first setup to remain loaded and unchanged, with exactly its nine
 approved count sensors.
 
@@ -19,7 +19,7 @@ approved count sensors.
 
 Kimi found no issues. It confirmed that `single_instance_allowed` is the
 expected Home Assistant result when a manifest permits only one setup. The
-change adds no HASC capability, no home data, no control, and no real Home
+change adds no HausmanHub capability, no home data, no control, and no real Home
 Assistant connection.
 
 ## Verification

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-registry-preview.schema.json",
-  "title": "HASC climate registry preview v1",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-registry-preview.schema.json",
+  "title": "HausmanHub climate registry preview v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "status", "save_allowed", "fresh", "registry", "reconciliation", "reasons"],
@@ -10,7 +10,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "version"],
-      "properties": {"name": {"const": "hausman-hasc-climate-registry-preview"}, "version": {"const": 1}}
+      "properties": {"name": {"const": "hausman-hub-climate-registry-preview"}, "version": {"const": 1}}
     },
     "status": {"enum": ["validated_offline", "unavailable", "not_ready", "ready"]},
     "save_allowed": {"type": "boolean"},

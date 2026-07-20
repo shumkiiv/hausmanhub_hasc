@@ -4,7 +4,7 @@ Date: 2026-07-15.
 
 ## Scope
 
-Independent read-only review of the upcoming HASC 0.3.11 change. The change
+Independent read-only review of the upcoming HausmanHub 0.3.11 change. The change
 makes the options screen choose `read-only` when any saved main setting or
 mode option is damaged. Opening the screen must leave the saved settings
 unchanged so repair remains a manual Home Assistant action.

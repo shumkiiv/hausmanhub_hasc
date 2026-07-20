@@ -4,9 +4,9 @@ Date: 2026-07-15.
 
 ## Scope
 
-Version 0.3.7 closes HASC when a damaged second saved setup appears, including
-while the first setup is already running. It stops only the active HASC
-display, clears only HASC count records, and retains both saved setups for
+Version 0.3.7 closes HausmanHub when a damaged second saved setup appears, including
+while the first setup is already running. It stops only the active HausmanHub
+display, clears only HausmanHub count records, and retains both saved setups for
 manual repair.
 
 ## Final result
@@ -15,7 +15,7 @@ Kimi session `ses_09907dabcffexFBNBQCG4bj5Zn` (model `k2p7`) returned
 `NO FINDINGS`.
 
 The review checked the live and restart paths, the fail-closed local GET route,
-manual reload or activation after repair, the HASC-only cleanup boundary, and
+manual reload or activation after repair, the HausmanHub-only cleanup boundary, and
 the absence of device control, services, commands, or home access.
 
 ## Verification

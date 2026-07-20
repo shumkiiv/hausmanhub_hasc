@@ -4,9 +4,9 @@ Date: 2026-07-15.
 
 ## Scope
 
-This change adds a disposable Home Assistant lifecycle check for a safe HASC
+This change adds a disposable Home Assistant lifecycle check for a safe HausmanHub
 setup that is still enabled but has been stopped in the ordinary way. The empty
-Home Assistant is then fully stopped and started again. HASC must return by
+Home Assistant is then fully stopped and started again. HausmanHub must return by
 itself with the same safe setup.
 
 ## What the check proves
@@ -17,7 +17,7 @@ page fail closed. After the new empty Home Assistant starts, it requires the
 same entry data and mode choice, exactly the same nine count sensors, fixed
 redacted diagnostics, one authenticated GET-only page, no device or service,
 and the unchanged direct-execution block. It separately retains the existing
-proof that a user-deactivated HASC setup stays inactive across a restart.
+proof that a user-deactivated HausmanHub setup stays inactive across a restart.
 
 ## Review outcome
 

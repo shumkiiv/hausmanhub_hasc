@@ -209,26 +209,26 @@ class HomeObservationAdapterTest(unittest.TestCase):
             asdict(summary),
         )
 
-    def test_adapter_does_not_count_hasc_display_sensors_against_the_home(self) -> None:
-        """The display must not make every later count include HASC itself."""
+    def test_adapter_does_not_count_hausmanhub_display_sensors_against_the_home(self) -> None:
+        """The display must not make every later count include HausmanHub itself."""
 
         hass = FakeHomeAssistant()
-        hass.entity_registry.entities["synthetic-hasc-count"] = SimpleNamespace(
+        hass.entity_registry.entities["synthetic-hausmanhub-count"] = SimpleNamespace(
             domain="sensor",
-            entity_id="sensor.hausman_hub_hasc_entities_count",
+            entity_id="sensor.hausman_hub_entities_count",
             disabled_by=None,
-            config_entry_id="synthetic-hasc-entry",
+            config_entry_id="synthetic-hausmanhub-entry",
         )
-        hass.states.values["sensor.hausman_hub_hasc_entities_count"] = SimpleNamespace(
+        hass.states.values["sensor.hausman_hub_entities_count"] = SimpleNamespace(
             state="5"
         )
 
-        summary = self.adapter.collect_home_summary(hass, "synthetic-hasc-entry")
+        summary = self.adapter.collect_home_summary(hass, "synthetic-hausmanhub-entry")
 
         self.assertEqual(5, summary.entities_count)
         self.assertEqual(2, summary.sensors_count)
         self.assertNotIn(
-            "sensor.hausman_hub_hasc_entities_count",
+            "sensor.hausman_hub_entities_count",
             hass.states.requested_entity_ids,
         )
 

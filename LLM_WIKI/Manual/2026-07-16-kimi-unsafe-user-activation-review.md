@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable Home Assistant check for a
-user-disabled HASC setup whose saved mode is deliberately changed to the
+user-disabled HausmanHub setup whose saved mode is deliberately changed to the
 unapproved `proxy` value before the user attempts to enable it.
 
 ## Result
@@ -19,20 +19,20 @@ Final Kimi session `ses_09812fcfbffeYfHZwDoegKxHCC` using
 
 It confirmed that the guard restores all three temporary readers even if the
 checked action fails. The activation API must return `False`, attempt exactly
-one reload of the same HASC entry, and leave it in `SETUP_ERROR` with direct
+one reload of the same HausmanHub entry, and leave it in `SETUP_ERROR` with direct
 execution still blocked. The unsafe saved option is retained for manual
-repair, rather than silently repaired or used to start HASC.
+repair, rather than silently repaired or used to start HausmanHub.
 
 ## Evidence
 
 - 115 local synthetic and boundary checks passed.
 - The disposable empty Home Assistant check passed with 2026.6.4 and
   2026.7.0.
-- The scenario replaces every HASC home-summary reader with a failure before
+- The scenario replaces every HausmanHub home-summary reader with a failure before
   the unsafe save and activation. It then requires closed diagnostics, an
-  unavailable local page, no count states, no HASC registry rows, and no HASC
+  unavailable local page, no count states, no HausmanHub registry rows, and no HausmanHub
   services.
-- After removal and a fresh empty restart, the temporary HASC setup remains
+- After removal and a fresh empty restart, the temporary HausmanHub setup remains
   absent while the unrelated temporary collision record is unchanged.
 
 The review and checks use only repository files, synthetic fixtures, and

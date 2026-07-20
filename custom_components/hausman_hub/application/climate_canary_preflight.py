@@ -15,7 +15,7 @@ from .climate_import import (
 from .climate_registry import reconcile_climate_registry
 
 
-CANARY_PREFLIGHT_CONTRACT_NAME = "hausman-hasc-climate-canary-preflight"
+CANARY_PREFLIGHT_CONTRACT_NAME = "hausman-hub-climate-canary-preflight"
 CANARY_PREFLIGHT_CONTRACT_VERSION = 1
 
 _SHADOW_STATUSES = frozenset({"ready", "collecting", "blocked"})

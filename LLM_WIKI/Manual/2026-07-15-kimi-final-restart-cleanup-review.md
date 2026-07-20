@@ -9,9 +9,9 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-After the final HASC removal, the check stops its current empty Home Assistant
+After the final HausmanHub removal, the check stops its current empty Home Assistant
 instance and starts a third one using the same temporary configuration. The
-third instance must not restore any HASC setup, entity, device, service, count
+third instance must not restore any HausmanHub setup, entity, device, service, count
 state, runtime data, or local route. The unrelated temporary external record
 must remain unchanged.
 

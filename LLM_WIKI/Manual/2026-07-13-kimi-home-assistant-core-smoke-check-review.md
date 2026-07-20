@@ -18,7 +18,7 @@ The first Kimi review found no blocking issue and three test-quality gaps:
 - the created entry was not explicitly checked as loaded;
 - the text should identify Python 3.14.2 as a minimum version.
 
-The smoke check now looks only for entities attached to the created HASC config
+The smoke check now looks only for entities attached to the created HausmanHub config
 entry, requires `ConfigEntryState.LOADED`, and the guide says Python 3.14.2 or
 newer.
 
@@ -35,7 +35,7 @@ Assistant Core API. Review sessions were `ses_0a3b6cb18ffegOaoAcKpTmzu7b` and
 
 ## Verification
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 21 passed
 - `Python 3.14.3 + Home Assistant Core 2026.7.0` —
   `tools/check_home_assistant_core.py` passed
@@ -43,6 +43,6 @@ Assistant Core API. Review sessions were `ses_0a3b6cb18ffegOaoAcKpTmzu7b` and
 
 The Core check creates and removes a temporary local configuration directory.
 It verifies rejection of `proxy`, safe `shadow` creation, blocked direct
-execution, a loaded entry, safe options, no HASC service, no entity attached
+execution, a loaded entry, safe options, no HausmanHub service, no entity attached
 to the entry, and clean removal. It does not prove shadow parity or grant any
 runtime authority.

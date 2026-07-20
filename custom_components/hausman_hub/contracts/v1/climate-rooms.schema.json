@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/climate-rooms.schema.json",
-  "title": "HASC available climate rooms v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/climate-rooms.schema.json",
+  "title": "HausmanHub available climate rooms v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,7 +18,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-climate-rooms"},
+        "name": {"const": "hausman-hub-climate-rooms"},
         "version": {"const": 1}
       }
     },

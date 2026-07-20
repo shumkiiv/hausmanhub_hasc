@@ -5,7 +5,7 @@ Date: 2026-07-15.
 ## Scope
 
 Only the disposable Home Assistant Core lifecycle check, its structural local
-test, and its documentation changed. HASC runtime code, the fixed nine-count
+test, and its documentation changed. HausmanHub runtime code, the fixed nine-count
 boundary, and every execution boundary remain unchanged.
 
 ## What changed

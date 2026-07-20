@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-action-request.schema.json",
-  "title": "HASC climate action request v1",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-action-request.schema.json",
+  "title": "HausmanHub climate action request v1",
   "oneOf": [
     {"$ref": "#/$defs/set_room_target"},
     {"$ref": "#/$defs/set_room_mode"},

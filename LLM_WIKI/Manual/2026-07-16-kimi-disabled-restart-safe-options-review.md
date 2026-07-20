@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable Home Assistant Core check for
-saving `shadow` after a full temporary restart while the HASC setup is still
+saving `shadow` after a full temporary restart while the HausmanHub setup is still
 deliberately disabled by its user, before that user explicitly activates it.
 
 ## Result
@@ -13,9 +13,9 @@ deliberately disabled by its user, before that user explicitly activates it.
 Kimi session `ses_09821d41dffe8VG8gpV75J9cFn` using
 `kimi-for-coding/k2p7` returned **NO FINDINGS**.
 
-It confirmed that saving the allowed option keeps HASC user-disabled and not
+It confirmed that saving the allowed option keeps HausmanHub user-disabled and not
 loaded, with no runtime data, local page, or count values. The Core check
-records no reload and makes each HASC home-summary reader fail if called. The
+records no reload and makes each HausmanHub home-summary reader fail if called. The
 following explicit activation preserves the saved `shadow` mode and restores
 only the existing nine count sensors with direct execution still blocked.
 
@@ -25,7 +25,7 @@ only the existing nine count sensors with direct execution still blocked.
 - The disposable empty Home Assistant Core check passed with 2026.6.4 and
   2026.7.0.
 - During the disabled-after-restart save, the Core check requires zero calls
-  to HASC reload, a `NOT_LOADED` HASC entry, and `disabled_by=USER`.
+  to HausmanHub reload, a `NOT_LOADED` HausmanHub entry, and `disabled_by=USER`.
 - No integration runtime file, HACS metadata, device command, service,
   proxy, direct execution path, secret, live identifier, or real-home access
   was added.

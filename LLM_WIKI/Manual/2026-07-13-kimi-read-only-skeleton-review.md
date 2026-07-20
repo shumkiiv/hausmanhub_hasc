@@ -29,7 +29,7 @@ result types can be considered later as a non-blocking style improvement.
 
 ## Verification
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 17 passed
 - JSON syntax checks for manifest and both translations
 - no `hacs.json`, service definition, entity platform, or execution surface

@@ -6,7 +6,7 @@ Date: 2026-07-14.
 
 The owner explicitly approved direct local observation of Home Assistant by
 Codex through a dedicated local non-administrator account. This is separate
-from HASC itself: it does not give the public HASC integration any new
+from HausmanHub itself: it does not give the public HausmanHub integration any new
 authority, device-control capability, service, proxy, or direct-execution
 path.
 
@@ -14,7 +14,7 @@ path.
 
 - The credential stays in a local non-repository file with owner-only file
   permissions. It is never sent in chat, committed, logged, or copied into
-  HASC configuration.
+  HausmanHub configuration.
 - Codex may send only HTTP GET requests to a local-network Home Assistant
   address. It must not call service, action, configuration-changing, or other
   mutating endpoints.
@@ -30,6 +30,6 @@ path.
 
 The local address and credential passed a harmless Home Assistant availability
 check and a version-only check. A count-only current-state snapshot was then
-read without retaining raw objects. HASC's own nine-count route correctly
+read without retaining raw objects. HausmanHub's own nine-count route correctly
 refused this ordinary account, confirming that the integration's stricter
 `system-read-only` guard remains active.

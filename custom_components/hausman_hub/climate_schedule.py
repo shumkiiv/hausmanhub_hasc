@@ -32,7 +32,7 @@ async def async_start_climate_schedule(
             await runtime.async_run_climate_schedule(now)
         except Exception as error:
             _LOGGER.warning(
-                "HASC could not apply the scheduled climate profile: %s",
+                "HausmanHub could not apply the scheduled climate profile: %s",
                 type(error).__name__,
             )
 

@@ -5,21 +5,21 @@ Date: 2026-07-15.
 ## Scope
 
 Only the isolated Home Assistant Core lifecycle check, its structural local
-test, and its documentation changed. HASC runtime code, the nine-count data
+test, and its documentation changed. HausmanHub runtime code, the nine-count data
 boundary, and every execution boundary remain unchanged.
 
 ## What changed
 
 The disposable lifecycle now proves the full safe-recovery sequence:
 
-1. a temporary HASC entry receives deliberately unsafe saved data;
+1. a temporary HausmanHub entry receives deliberately unsafe saved data;
 2. it fails closed through a temporary restart;
 3. the same temporary entry receives its original approved data again and
    reloads safely;
 4. one further empty temporary restart keeps that corrected entry installed
    and proves that its approved data and options, the same nine sensor names,
    fixed diagnostics, and authenticated GET-only page return safely;
-5. the corrected entry is removed and one last empty restart proves that HASC
+5. the corrected entry is removed and one last empty restart proves that HausmanHub
    has no remaining setup, state, device, service, runtime data, or page.
 
 An earlier independent local audit found that the first version had no restart
@@ -33,7 +33,7 @@ Direct Kimi session `ses_09a050a9effeu0eOEyWqjpAzzp`
 
 It confirmed that all deliberate changes occur only in the disposable
 temporary configuration, that recovered data and options persist, and that the
-same exact nine aggregate sensors remain the only HASC entities. It also
+same exact nine aggregate sensors remain the only HausmanHub entities. It also
 confirmed the collision fixture, no-device/no-service boundary, GET-only
 authenticated page, and final removal checks.
 

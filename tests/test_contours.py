@@ -1,4 +1,4 @@
-"""Pure tests for the universal HASC contour model and climate adapter."""
+"""Pure tests for the universal HausmanHub contour model and climate adapter."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ class ContoursTest(unittest.TestCase):
         self.assertEqual(7, result["contract"]["version"])  # type: ignore[index]
         self.assertEqual("hausman-climate", contour["engine"]["name"])
         self.assertTrue(contour["execution"]["automatic_active"])
-        self.assertFalse(contour["execution"]["hasc_direct_commands"])
+        self.assertFalse(contour["execution"]["hausmanhub_direct_commands"])
         self.assertEqual(
             {
                 "enabled": False,

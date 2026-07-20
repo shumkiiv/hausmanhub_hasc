@@ -1,12 +1,30 @@
-# HASC AI Context
+# HausmanHub AI Context
 
 Last updated: 2026-07-20.
 
 ## Project state
 
-- Repository: `shumkiiv/hausmanhub_hasc` (public, MIT, `main`).
-- Local checkout: `/home/ivsh/projects/hausmanhub_hasc`.
-- Workspace boundary: this thread may change only HASC and its integration
+- Product and Home Assistant integration name: **HausmanHub**. **HACS** is only
+  the installation/update mechanism and is never the product name. The old
+  temporary four-letter product label must not return to UI, contracts, docs,
+  tests, or GitHub presentation.
+- Repository: `shumkiiv/hausmanhub_hacs` (public, MIT, `main`).
+- Local checkout remains at the legacy filesystem path
+  `/home/ivsh/projects/hausmanhub_hasc`; this local folder name is not a public
+  product identifier and must not be copied into documentation or URLs.
+- Version 1.7.7 performs the one-time naming correction before the Android app
+  has a live decoder: display/package name `HausmanHub`, repository
+  `shumkiiv/hausmanhub_hacs`, and public contracts `hausman-hub-*`. HACS is
+  documented only as the installer. The HA domain `hausman_hub`, config-entry
+  unique ID, and entity unique IDs remain unchanged so existing installations
+  upgrade in place. New suggested entity IDs no longer contain the old label;
+  HA retains registry names for existing entities with the same unique IDs.
+  A release check prevents the old public names from returning. The change
+  passed 355 local tests and disposable Core 2026.6.4/2026.7.0. Kimi k2p7
+  failed before review (`ses_08191e6cdffeZFO3U7kFPu1jNi`, `err_7c5c5f07`)
+  and Kimi k3 timed out; the independent fallback review passed in OpenCode
+  session `ses_0818e4910ffeNoKwAj0QEiB030`.
+- Workspace boundary: this thread may change only HausmanHub and its integration
   wrapper. The Android application is developed separately in
   `/home/ivsh/projects/УД-android`; it may be inspected only read-only for
   contract compatibility. Never edit, format, generate files, build, commit,
@@ -15,7 +33,7 @@ Last updated: 2026-07-20.
   thread: never edit its source, Node-RED flows, configuration, repository, or
   live runtime. The current bridge may call only its fixed Climate API. The
   final product must reimplement the proven climate behavior and device
-  adapters entirely inside HASC, verify parity without double commands, and
+  adapters entirely inside HausmanHub, verify parity without double commands, and
   then remove the external module as an installation requirement.
 - Home Assistant baseline: Core 2026.6.4 or newer.
 - Version 1.0.0 established the product as a platform of automatic contours.
@@ -23,18 +41,18 @@ Last updated: 2026-07-20.
   several rooms/devices; old registry/bridge/native-preview and helper-canary
   tools are hidden under advanced settings.
 - The current 1.6 climate contour deliberately reuses the existing
-  `hausman-climate` algorithm and executor while the public HASC surface is
+  `hausman-climate` algorithm and executor while the public HausmanHub surface is
   stabilized. This is a migration bridge, not the final architecture. Roadmap
   points 21–40 capture the behavior, build the internal engine and strict Home
   Assistant device adapters, compare both implementations, transfer control
   room by room, and finally remove the external API dependency. Private
   registry plus public contour storage already save atomically.
 - Public `GET /api/hausman_hub/v1/contours` returns strict
-  `hausman-hasc-contours` v1 state without source/entity IDs. Automatic status
+  `hausman-hub-contours` v1 state without source/entity IDs. Automatic status
   requires fresh engine state, auto mode, authority, device availability, and
   matching targets. Version 1.0.0 sends no climate POST and does not sync
   parameters into the engine; mismatches are explicit `attention`. See the
-  [1.0.0 contour decision](LLM_WIKI/Manual/2026-07-18-hasc-v1-0-0-universal-contours.md).
+  [1.0.0 contour decision](LLM_WIKI/Manual/2026-07-18-hausmanhub-v1-0-0-universal-contours.md).
 - Version 1.1.0 adds the first normal contour-settings execution path while
   keeping the existing `hausman-climate` algorithm and executor. A saved
   automatic contour uses a distinct `managed` bridge mode; legacy `shadow`
@@ -47,7 +65,7 @@ Last updated: 2026-07-20.
   current engine has no shared room-humidity command. Contour contract v2 adds
   observed strategy and apply capability; local tablet preview/apply routes
   expose no private binding or backend payload. See the
-  [1.1.0 apply decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-1-0-confirmed-contour-apply.md).
+  [1.1.0 apply decision](LLM_WIKI/Manual/2026-07-19-hausmanhub-v1-1-0-confirmed-contour-apply.md).
 - Version 1.2.0 replaced the shared
   multi-room comfort fields with one short parameters step per selected room.
   Each room stores its own validated temperature, humidity, and strategy using
@@ -59,7 +77,7 @@ Last updated: 2026-07-20.
   public room names and their targets. Setup/save remain zero-command; the
   separate confirmed 1.1 apply path is unchanged, including unsupported
   humidity. See the
-  [1.2.0 room-parameters decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-2-0-room-parameters.md).
+  [1.2.0 room-parameters decision](LLM_WIKI/Manual/2026-07-19-hausmanhub-v1-2-0-room-parameters.md).
 - Version 1.3.0 gave every contour room
   exact `day` and `night` comfort bundles and an approved active profile.
   Existing v1 contour storage is migrated once to storage v2 by copying the
@@ -68,11 +86,11 @@ Last updated: 2026-07-20.
   Russian options flow separately configures both profiles, selects one
   profile for all rooms, and then reuses the existing explicit apply preview
   and confirmation. Configuring or selecting a profile only atomically saves
-  HASC state; only the apply step may call the existing `hausman-climate`
+  HausmanHub state; only the apply step may call the existing `hausman-climate`
   executor. Ordinary contour editing updates the active bundle and preserves
   the inactive bundle. Public contour contract v3 exposes active/day/night
   comfort values without private bindings. See the
-  [1.3.0 profile decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-3-0-day-night-profiles.md).
+  [1.3.0 profile decision](LLM_WIKI/Manual/2026-07-19-hausmanhub-v1-3-0-day-night-profiles.md).
 - Version 1.4.0 established the first options page and
   ordinary climate workflow use plain Russian labels, with `strings.json` and
   the English-locale fallback intentionally mirroring Russian so a locale
@@ -88,8 +106,8 @@ Last updated: 2026-07-20.
   next minute because the selected profile is already persisted. Storage v3
   migrates v1/v2 with a disabled 07:00/23:00 schedule. Tablet contour contract
   v4 exposes only enabled/day/night times. See the
-  [1.4.0 schedule decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-4-0-russian-schedule.md).
-- Version 1.5.0 is the published HASC release. One room may receive a
+  [1.4.0 schedule decision](LLM_WIKI/Manual/2026-07-19-hausmanhub-v1-4-0-russian-schedule.md).
+- Version 1.5.0 is the published HausmanHub release. One room may receive a
   temporary 18–28 °C target in 0.5 °C steps while an automatic schedule is
   armed for the current local-time period. The override is stored separately
   from the saved day/night bundles, persists before the first POST, and is
@@ -99,48 +117,48 @@ Last updated: 2026-07-20.
   automatically reposted. Storage v4 migrates v1–v3 with no override; public
   contour contract v5 and the strict local tablet temporary-temperature route
   expose no private bindings. See the
-  [1.5.0 temporary-temperature decision](LLM_WIKI/Manual/2026-07-19-hasc-v1-5-0-temporary-temperature.md).
+  [1.5.0 temporary-temperature decision](LLM_WIKI/Manual/2026-07-19-hausmanhub-v1-5-0-temporary-temperature.md).
 - The 1.5.0 release candidate passed 289 local tests, isolated Home Assistant
   2026.6.4 and 2026.7.0 checks, and a final read-only Kimi review with no
   significant findings (session `ses_084f948c2ffee4C3vSqj22zKaT`).
-- Version 1.6.0 completed the first HASC-only roadmap item. It adds
+- Version 1.6.0 completed the first HausmanHub-only roadmap item. It adds
   `GET /api/hausman_hub/v1/capabilities`, a local-tablet discovery
-  response containing only installed HASC features, public paths, and contract
+  response containing only installed HausmanHub features, public paths, and contract
   versions. It is independent of current climate command readiness and exposes
   no home data, private binding, or climate-module address.
-- Version 1.6.1 completed the second HASC-only roadmap item. It advances
-  `hausman-hasc-home` to v5 and embeds the
+- Version 1.6.1 completed the second HausmanHub-only roadmap item. It advances
+  `hausman-hub-home` to v5 and embeds the
   public contour projection in the same response as live rooms and devices.
   Both projections use one imported Climate API snapshot; the legacy
   `/contours` route remains available. Android and the climate module are not
   changed. The final staged review passed after fixture reachability was made
   explicit (Kimi session `ses_084b63f0bffeaYv70SAOrV4Jqu`).
-- Version 1.6.2 completed the third HASC-only roadmap item. Public home and
+- Version 1.6.2 completed the third HausmanHub-only roadmap item. Public home and
   contour contracts v6 carry one immutable Russian `display_names` catalog.
   Private engine room modes and arbitrary device states are normalized to a
-  bounded set of HASC codes before projection; unknown external text is never
+  bounded set of HausmanHub codes before projection; unknown external text is never
   echoed to the tablet. The catalog also covers every bounded room-control and
   contour reason, and the schema allow-lists all device capability codes. The
   final read-only Kimi review passed after those completeness checks were added
   (session `ses_0849e5c55ffesSAtzPiPLoPqe2`).
-- Version 1.6.3 completed the fourth HASC-only roadmap item. Home contract v7
+- Version 1.6.3 completed the fourth HausmanHub-only roadmap item. Home contract v7
   gives every registered room an explicit factual `actual` block with current,
   stale, or unavailable data status, temperature, humidity, and normalized
   engine mode. Missing source data stays null/unknown; legacy flat fields remain
   temporarily for Android compatibility. The final read-only Kimi review passed
   (session `ses_084881905ffeftJ53HfmP6RXTu`).
-- Version 1.6.4 completed the fifth HASC-only roadmap item. Home contract v8
-  separates the imported engine `active_target` from HASC `saved_profiles` for
+- Version 1.6.4 completed the fifth HausmanHub-only roadmap item. Home contract v8
+  separates the imported engine `active_target` from HausmanHub `saved_profiles` for
   day and night. An unconfigured contour keeps all saved profile values null
   instead of copying the current engine target. The final read-only Kimi review
   passed (session `ses_0847a2b90ffe5Z4brgW45Gy2m2`).
-- Version 1.6.5 completed the sixth HASC-only roadmap item. Home contract v9
+- Version 1.6.5 completed the sixth HausmanHub-only roadmap item. Home contract v9
   and contour contract v7 expose the exact next real local schedule transition
   and the exact end of an active temporary temperature. Production projection
   uses Home Assistant local time, and the schedule calculation follows real UTC
   minutes across daylight-saving changes. The final read-only Kimi review
   passed (session `ses_0824c7fa7ffe02CSROzGL3CO5h`).
-- Version 1.6.6 completed the seventh HASC-only roadmap item. Home contract v10
+- Version 1.6.6 completed the seventh HausmanHub-only roadmap item. Home contract v10
   adds `allowed_actions` to every room. Existing `actions` remain the device's
   supported controls, while `allowed_actions` contains only commands executable
   now for that exact room. Runtime and schema both require aggregate
@@ -148,37 +166,37 @@ Last updated: 2026-07-20.
   Both configured OpenCode review profiles failed before review with token
   refresh `401`; the final Codex audit found no remaining issue after adding the
   strict aggregate-to-room schema relation.
-- Version 1.6.7 completed the eighth HASC-only roadmap item. Home contract v11
+- Version 1.6.7 completed the eighth HausmanHub-only roadmap item. Home contract v11
   adds `action_availability` for every advertised room action. Each entry has an
   exact allowed flag and bounded blocked-reason codes whose Russian labels are
   supplied by the existing `display_names` catalog. The schema requires action,
   permission, and reason lists to stay consistent. OpenCode review again failed
   before reading the change because token refresh returned `401`; the final
   Codex audit found no remaining issue.
-- Version 1.6.8 completed the ninth HASC-only roadmap item. Home contract v12
+- Version 1.6.8 completed the ninth HausmanHub-only roadmap item. Home contract v12
   adds a deterministic JSON-safe integer `state_revision` over all public home
   content except `generated_at`. Equal public content keeps the same revision;
   any visible state, configuration, or permission change produces a new opaque
   value. Clients compare equality only; the value is not monotonic. OpenCode
   review again stopped before reading the change because token refresh returned
   `401`; the final Codex audit found no remaining issue.
-- Version 1.6.9 completed the tenth HASC-only roadmap item. A repository-local
+- Version 1.6.9 completed the tenth HausmanHub-only roadmap item. A repository-local
   compatibility check decodes the v12 home fixture into the scalar and
   collection types audited read-only in the existing Android `HomeRoom`,
-  `HomeDevice`, and `HomeAction` models. It also constructs strict HASC action
+  `HomeDevice`, and `HomeAction` models. It also constructs strict HausmanHub action
   requests, enforces Android `Long` and exact JSON-number limits, device-domain
   mappings, and Russian blocked-reason labels. The check reads and changes only
-  HASC files in CI. It proves model-level compatibility, not that the current
-  Android application already has a live HASC v12 network decoder. The final
+  HausmanHub files in CI. It proves model-level compatibility, not that the current
+  Android application already has a live HausmanHub v12 network decoder. The final
   staged tree passed 314 local tests and both supported Home Assistant Core
   checks. OpenCode stopped before review with token-refresh `401` in session
   `ses_08227e465ffekdVIgv90Up8d7b`; the final Codex audit added exact coverage
-  between all HASC device kinds and Android domain mappings and found no
+  between all HausmanHub device kinds and Android domain mappings and found no
   remaining issue.
-- Version 1.7.0 completed the eleventh HASC-only roadmap item. The new strict
-  `hausman-hasc-climate-rooms` v1 contract projects the union of discovered and
-  configured rooms using only stable HASC IDs. It sorts deterministically,
-  preserves the configured HASC name, disables all selection for stale data,
+- Version 1.7.0 completed the eleventh HausmanHub-only roadmap item. The new strict
+  `hausman-hub-climate-rooms` v1 contract projects the union of discovered and
+  configured rooms using only stable HausmanHub IDs. It sorts deterministically,
+  preserves the configured HausmanHub name, disables all selection for stale data,
   and keeps a configured-but-missing room visible and unselectable. Fixed
   Russian status labels ship in the payload. The contract contains no bridge
   origin, source device ID, entity ID, or command. It is intentionally an
@@ -188,10 +206,10 @@ Last updated: 2026-07-20.
   with token-refresh `401` in session `ses_0821dbbf9ffe3R4Ym2RCx1eFzu`; the
   final Codex audit added a schema rule forbidding stale per-room status inside
   a current snapshot and found no remaining issue.
-- Version 1.7.1 completed the twelfth HASC-only roadmap item. The strict
-  `hausman-hasc-climate-device-candidates` v1 contract projects discovered and
+- Version 1.7.1 completed the twelfth HausmanHub-only roadmap item. The strict
+  `hausman-hub-climate-device-candidates` v1 contract projects discovered and
   configured devices without source IDs, entity IDs, backend commands, or
-  bridge details. It carries bounded HASC kind codes with Russian names,
+  bridge details. It carries bounded HausmanHub kind codes with Russian names,
   response-local `candidate_0001` references, and an opaque JSON-safe snapshot
   revision that changes when private candidate bindings change. Freshness,
   current availability, already-configured, unsupported, missing-source, and
@@ -204,8 +222,8 @@ Last updated: 2026-07-20.
   `ses_082149289ffetmVMUsPAlvHXps`; the final Codex audit corrected unavailable
   configured-device status and timestamp-only revision churn and found no
   remaining issue.
-- Version 1.7.2 completed the thirteenth HASC-only roadmap item. The new strict
-  `hausman-hasc-climate-room-suggestions` v1 contract links response-local
+- Version 1.7.2 completed the thirteenth HausmanHub-only roadmap item. The new strict
+  `hausman-hub-climate-room-suggestions` v1 contract links response-local
   candidate references to rooms only through the explicit fresh source room
   relation. It never guesses from device names and never assigns or saves.
   Every suggestion requires confirmation and has fixed Russian confidence and
@@ -218,7 +236,7 @@ Last updated: 2026-07-20.
   with token-refresh `401` in session `ses_0820c85d8ffesZEl7NOXnUq5NF`; the
   final Codex audit strengthened schema relations among status, reason,
   confidence, suggested room, and acceptance and found no remaining issue.
-- Version 1.7.3 completed the fourteenth HASC-only roadmap item. One fixed
+- Version 1.7.3 completed the fourteenth HausmanHub-only roadmap item. One fixed
   local-admin route, `/api/hausman_hub/v1/admin/climate-drafts`, now exposes
   strict setup choices through GET and creates a deterministic unsaved draft
   through POST. The request binds response-local candidate references to an
@@ -235,14 +253,14 @@ Last updated: 2026-07-20.
   (`err_26c09fac`). The final Codex audit added the missing GET surface needed
   to obtain candidate references and prevented setup reads from changing
   shadow evidence; it found no remaining issue.
-- Version 1.7.4 completed the fifteenth HASC-only roadmap item. A local-admin
+- Version 1.7.4 completed the fifteenth HausmanHub-only roadmap item. A local-admin
   POST at `/api/hausman_hub/v1/admin/climate-drafts/validate` accepts the exact
   draft response, re-creates it against one fresh discovery snapshot, rejects
   stale candidate revisions and any material draft change, and resolves
   private source bindings only after those checks. Deep validation preserves
   an explicitly selected suggested device kind, requires a controllable device
   in every room, and verifies that imported capabilities can construct the
-  existing HASC registry and contour model. Its strict Russian result is either
+  existing HausmanHub registry and contour model. Its strict Russian result is either
   `ready` with future `save_allowed`, or `blocked` with bounded issue codes;
   `command_allowed` is always false. Validation performs no persistence,
   command, or shadow-evidence update. Setup bodies have a separate 256 KiB
@@ -253,10 +271,10 @@ Last updated: 2026-07-20.
   `err_6718dd9d`. The final Codex audit strengthened blocked-result schema
   consistency and explicit request-size regression coverage and found no
   remaining issue.
-- Version 1.7.5 completed the sixteenth HASC-only roadmap item. A local-admin
+- Version 1.7.5 completed the sixteenth HausmanHub-only roadmap item. A local-admin
   POST at `/api/hausman_hub/v1/admin/climate-drafts/save` refreshes discovery,
   deeply revalidates the exact unchanged draft, resolves private device
-  bindings only after validation, and builds the existing HASC climate
+  bindings only after validation, and builds the existing HausmanHub climate
   registry and `existing_climate_core` contour model under one runtime lock.
   Registry, contour, and shadow-evidence stores use the existing
   rollback-protected setup transaction: a failed later write restores the
@@ -270,7 +288,7 @@ Last updated: 2026-07-20.
   `ses_081d77549ffe5piZVGFmOgJuGd` failed before review with server reference
   `err_4169f40f`. The final Codex audit added direct stale-save and
   blocked-draft regression checks and found no remaining issue.
-- Version 1.7.6 completed the seventeenth HASC-only roadmap item. A local-admin
+- Version 1.7.6 completed the seventeenth HausmanHub-only roadmap item. A local-admin
   GET at `/api/hausman_hub/v1/admin/climate-drafts/current` projects the exact
   saved climate contour into a strict private-id-free editor model. It keeps
   per-room day and night profiles, active profile, temporary temperature,
@@ -287,24 +305,24 @@ Last updated: 2026-07-20.
   `ses_081c8eff3ffe1X2SVwve701Amw` failed before review with server reference
   `err_9d1c65ec`. The final Codex audit bound every issue code to its exact
   Russian message and correct global/device scope and found no remaining issue.
-- The final architecture was clarified on 2026-07-20: HASC must ultimately
+- The final architecture was clarified on 2026-07-20: HausmanHub must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through
-  its fixed API. After parity, HASC must work from its own selected Home
+  its fixed API. After parity, HausmanHub must work from its own selected Home
   Assistant devices and the separate climate module must no longer be required.
   Progress is tracked in the
-  [50-item HASC roadmap](LLM_WIKI/Manual/2026-07-19-hasc-50-point-roadmap.md).
+  [50-item HausmanHub roadmap](LLM_WIKI/Manual/2026-07-19-hausmanhub-50-point-roadmap.md).
 - Version 0.4.0 was committed as `2e8cda3` and pushed to `origin/main` after
   its 153 tests, disposable Core 2026.6.4/2026.7.0 checks, and final Kimi
   review passed. This source push did not create a tag, release, HACS
   publication, deployment, or live-home change. The boundary is recorded in
-  the [0.4.0 canary note](LLM_WIKI/Manual/2026-07-17-hasc-v0-4-0-input-boolean-canary-control.md).
+  the [0.4.0 canary note](LLM_WIKI/Manual/2026-07-17-hausmanhub-v0-4-0-input-boolean-canary-control.md).
 - Version 0.5.0 implements the first complete climate facade in
-  HASC. It adds a versioned logical Device Registry for rooms, ACs, TRVs,
+  HausmanHub. It adds a versioned logical Device Registry for rooms, ACs, TRVs,
   humidifiers, floor heating, sensors, private endpoint roles, capabilities,
   control owner, and observed/canary/managed scope. Import from the current
   `hausman-climate` v1 state is read-only and never auto-registers a device.
-- The Android-facing HASC contract exposes only stable HASC IDs and provides
+- The Android-facing HausmanHub contract exposes only stable HausmanHub IDs and provides
   local authenticated state/actions routes. Separate local-admin routes expose
   private import candidates and atomically replace the registry. Android never
   receives raw HA entity IDs, Climate API source IDs, Node-RED details, vendor
@@ -316,13 +334,13 @@ Last updated: 2026-07-20.
   capability, climate-core ownership, and canary/managed device scope before
   POST. The current climate-core remains responsible for auto/manual policy,
   cooldown, safety, authority, physical feedback, and actual execution.
-- Typed HASC intents now cover room target/mode/minimum/strategy/off and
+- Typed HausmanHub intents now cover room target/mode/minimum/strategy/off and
   device power/temperature/humidity/HVAC/fan contracts for AC, TRV,
   humidifier, and floor-heating kinds. No generic proxy, caller-provided
   service, private source/entity ID, backend type, arbitrary URL, or payload is
   accepted. The architecture and rollout are in
   [the climate guide](docs/climate-control-architecture.md) and the durable
-  [0.5.0 decision](LLM_WIKI/Manual/2026-07-17-hasc-v0-5-0-climate-facade.md).
+  [0.5.0 decision](LLM_WIKI/Manual/2026-07-17-hausmanhub-v0-5-0-climate-facade.md).
 - Version 0.5.0 was committed as `5ac09c5` and pushed to `origin/main` after
   it passed 191 local tests, the HACS/version/repository
   safety checks, and disposable Home Assistant Core 2026.6.4 and 2026.7.0
@@ -332,28 +350,28 @@ Last updated: 2026-07-20.
   review in session `ses_09070e1c2ffeeTgDvZ3A3kiLUu` with no substantial
   findings. The verified `cc04029` tree was published as the non-prerelease
   latest GitHub Release `v0.5.0`; its tag resolves to that exact commit and
-  both GitHub source archives were reachable. Publication did not deploy HASC
+  both GitHub source archives were reachable. Publication did not deploy HausmanHub
   to a live home, enable either canary, or modify the Android repository.
-- Version 0.5.1 implements the first operator-ready HASC climate workflow.
+- Version 0.5.1 implements the first operator-ready HausmanHub climate workflow.
   Home Assistant options now contain a guided local-admin draft for rooms and
   typed devices, a separate preview/reconciliation step, and explicit atomic
   save confirmation. An advanced JSON editor remains optional. Eight JSON
   Schema v1 files ship inside the integration for the Android and admin
   contracts.
 - Android climate actions in 0.5.1 require a bounded public `request_id` and
-  return a bounded versioned receipt with an opaque HASC `operation_id`.
+  return a bounded versioned receipt with an opaque HausmanHub `operation_id`.
   Identical retries return the same receipt without another GET or POST;
   conflicting reuse is rejected. Canary HTTP acceptance is only `pending`,
   an explicit negative backend answer is terminal `rejected`, and transport
   ambiguity remains unavailable. HTTP acceptance is never physical success.
   Only an observable later state can become
-  `confirmed`; a room cannot have two pending HASC canary submissions.
+  `confirmed`; a room cannot have two pending HausmanHub canary submissions.
 - The disposable Core check now includes a temporary loopback Climate API and
   real Home Assistant owner/tablet authentication. It previews and saves a
   synthetic registry, reads the Android home contract, retries a shadow
   action, queries its receipt, and asserts a measured zero command POST count
   before restoring `disabled` and removing only the temporary registry.
-- HASC 0.5.1 was published from `494ae94` as the non-prerelease GitHub Release
+- HausmanHub 0.5.1 was published from `494ae94` as the non-prerelease GitHub Release
   `v0.5.1` after 204 local tests, disposable Core 2026.6.4/2026.7.0 checks,
   successful GitHub Actions, and a final Kimi review with no findings. HACS
   installed it on the live Core 2026.6.4 home and the owner completed the
@@ -366,7 +384,7 @@ Last updated: 2026-07-20.
 - Version 0.5.2 persists a
   redacted rolling 24-hour evidence window with a five-minute sample interval,
   bounded matched/missing/moved/stale observations and rejected/translated
-  intents. The window stores only timestamps, public HASC room IDs, and
+  intents. The window stores only timestamps, public HausmanHub room IDs, and
   approved action labels; it is bound to the exact registry fingerprint and
   resets on any registry change. Private origin, source/entity identifiers,
   payloads, backend responses, and tokens never enter its Store or API shape.
@@ -379,8 +397,8 @@ Last updated: 2026-07-20.
   executable climate canary scope to those two room actions. This code does
   not authorize or activate a live physical canary; live deployment must keep
   the climate bridge `disabled`. The durable decision is in
-  [the 0.5.2 evidence note](LLM_WIKI/Manual/2026-07-17-hasc-v0-5-2-shadow-evidence.md).
-- HASC 0.5.2 was committed as `f3ec8ad`, passed 212 local tests, disposable
+  [the 0.5.2 evidence note](LLM_WIKI/Manual/2026-07-17-hausmanhub-v0-5-2-shadow-evidence.md).
+- HausmanHub 0.5.2 was committed as `f3ec8ad`, passed 212 local tests, disposable
   Core 2026.6.4/2026.7.0 checks, two final Kimi reviews, GitHub Actions, and was
   published as the non-prerelease release `v0.5.2`. HACS installed it on the
   live Core 2026.6.4 home. After the owner restarted Core, installed/latest
@@ -388,12 +406,12 @@ Last updated: 2026-07-20.
   correctly forbidden to the non-admin verification account, and climate
   home/action remained unavailable because the bridge was still `disabled`.
   No physical command or canary was attempted.
-- Version 0.5.3 added the HASC-only operator-import workflow. The options
+- Version 0.5.3 added the HausmanHub-only operator-import workflow. The options
   wizard obtains fresh Climate API candidates read-only and exposes only
   ephemeral `candidate_NNN` selector values plus device/room labels. The
   private source ID is neither displayed nor accepted from the form. The
-  operator supplies a public HASC ID and chooses a control entity with Home
-  Assistant's native selector; HASC re-reads the snapshot, rejects drift, and
+  operator supplies a public HausmanHub ID and chooses a control entity with Home
+  Assistant's native selector; HausmanHub re-reads the snapshot, rejects drift, and
   infers only capabilities supported by the candidate's typed command list.
   The selected room/device remain in an unsaved draft until the existing
   preview and separate atomic confirmation. It never auto-imports another
@@ -411,7 +429,7 @@ Last updated: 2026-07-20.
   remained `disabled`; no physical command or canary was attempted.
   A non-activating supervised one-room checklist is documented in
   [the rollout checklist](docs/climate-canary-rollout-checklist.md).
-- Version 0.5.4 adds the HASC-only one-room preflight. Its guided options
+- Version 0.5.4 adds the HausmanHub-only one-room preflight. Its guided options
   flow selects one room strictly from the saved registry and combines exact
   reconciliation, redacted shadow evidence, the fixed `set_room_target` plus
   `turn_room_off` scope, per-room pending state, and disabled rollback
@@ -430,7 +448,7 @@ Last updated: 2026-07-20.
   climate home/action remained unavailable because the bridge stayed
   `disabled`. No physical command or canary was attempted. The
   implementation decision is recorded in
-  [the 0.5.4 preflight note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-4-canary-preflight.md).
+  [the 0.5.4 preflight note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-4-canary-preflight.md).
 - Version 0.5.5 exposed the canonical
   saved-room preflight through one local-admin-only POST route and adds
   explicit checked/generated/valid-until freshness timestamps. Expired state
@@ -448,7 +466,7 @@ Last updated: 2026-07-20.
   present and forbidden to the non-admin verification account, and climate
   home/action remained unavailable because the bridge stayed `disabled`. No
   physical command or canary was attempted. The decision is recorded in
-  [the 0.5.5 contract note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-5-preflight-admin-contract.md).
+  [the 0.5.5 contract note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-5-preflight-admin-contract.md).
 - Version 0.5.6 published the tablet home contract v2. It
   explicitly v2 and adds one public `control` result per room: whether commands
   are enabled, the evidence-qualified target/off actions, and a closed set of
@@ -466,7 +484,7 @@ Last updated: 2026-07-20.
   latest stable release `v0.5.6`. HACS installed it on the live home while the
   climate bridge and action path stayed closed; the owner restart remained
   pending when the next development slice began. The decision is recorded in
-  [the 0.5.6 room-control note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-6-android-room-control.md).
+  [the 0.5.6 room-control note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-6-android-room-control.md).
 - Version 0.5.7 replaced mixed Russian
   and internal English operator text with plain Russian names, descriptions,
   errors, statuses, reasons, actions, and room names. Fixed selectors now pass
@@ -479,7 +497,7 @@ Last updated: 2026-07-20.
   Commit `979c4c5` was published as latest stable release `v0.5.7`; HACS
   installed it on the live home without configuring a registry or enabling
   the bridge. See the
-  [0.5.7 Russian interface note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-7-russian-interface.md).
+  [0.5.7 Russian interface note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-7-russian-interface.md).
 - Version 0.5.8 was released on 2026-07-18. Android home contract v3
   keeps the v2 room action and blocked-reason shape and adds `action_inputs`.
   The target-temperature input is numeric and required, with an exact public
@@ -493,7 +511,7 @@ Last updated: 2026-07-20.
   model `kimi-for-coding/k2p7` completed the final read-only staged review in
   session `ses_08b312059ffedrMEVGxBLevcNI` with PASS and no substantial
   findings. See
-  the [0.5.8 input-contract note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-8-action-inputs.md).
+  the [0.5.8 input-contract note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-8-action-inputs.md).
 - Version 0.5.9 was published and installed through HACS. Android home contract v4
   adds `action_presentations` for the two initial room actions. Each advertised
   action has fixed Russian title and description; the target-temperature field
@@ -507,7 +525,7 @@ Last updated: 2026-07-20.
   zero climate command POSTs. Kimi model `kimi-for-coding/k2p7` completed the
   final read-only staged review in session `ses_08a6b28e4ffeLp6u9BYpGw1F4O`
   with PASS and no substantial findings. See the
-  [0.5.9 action presentation note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-9-action-presentations.md).
+  [0.5.9 action presentation note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-9-action-presentations.md).
 - Version 0.5.10 was published and installed through HACS. The single nine-field
   options form is replaced by a one-choice settings menu with four separate
   areas: rooms/devices, climate-controller connection, aggregate information,
@@ -523,9 +541,9 @@ Last updated: 2026-07-20.
   `ses_08a36c03bffeXybMbvHK4IPj8g` with PASS and no substantial findings.
   Commit, publication, and HACS installation completed; the owner has not yet
   confirmed the post-install Home Assistant restart. See the
-  [0.5.10 settings-menu note](LLM_WIKI/Manual/2026-07-18-hasc-v0-5-10-simple-settings-menu.md).
+  [0.5.10 settings-menu note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-5-10-simple-settings-menu.md).
 - Version 0.6.0 started moving climate
-  policy into HASC. A validated one-room policy stores temperature and humidity
+  policy into HausmanHub. A validated one-room policy stores temperature and humidity
   targets. A pure decision engine uses fresh transitional Climate API state,
   fixed ±0.5 °C/±5% deadbands, registered device kinds, and availability to
   report heating, cooling, humidifying, hold, stale, or unavailable. A fifth
@@ -533,7 +551,7 @@ Last updated: 2026-07-20.
   confirmation. Execution is structurally `preview_only` with commands always
   false; a disabled bridge performs no state I/O. Existing installations
   default to the disabled native policy. Existing climate-core remains the
-  transitional observation/execution adapter while native HASC observation,
+  transitional observation/execution adapter while native HausmanHub observation,
   planning, cooldown, manual override, and later separately authorized
   execution are developed. All 244 local tests, the release checks, and the
   disposable Core 2026.6.4/2026.7.0 checks pass. The staged implementation and
@@ -541,19 +559,19 @@ Last updated: 2026-07-20.
   findings. Commit `a765cc7` was pushed, release `v0.6.0` was published, and
   HACS reports installed/latest `v0.6.0`; the owner still needs to restart Home
   Assistant before using the new fifth settings area. See the
-  [0.6.0 native preview note](LLM_WIKI/Manual/2026-07-18-hasc-v0-6-0-native-climate-preview.md).
-- The owner clarified the end product after 0.6.0: HASC is a platform of
+  [0.6.0 native preview note](LLM_WIKI/Manual/2026-07-18-hausmanhub-v0-6-0-native-climate-preview.md).
+- The owner clarified the end product after 0.6.0: HausmanHub is a platform of
   autonomous contours, not a technical climate bridge or a collection of
   manual device controls. A user adds a contour, assigns rooms, observations,
-  and actuator devices, sets comfort parameters and safety limits, then HASC
+  and actuator devices, sets comfort parameters and safety limits, then HausmanHub
   continuously owns its decisions and operation. Climate is the first contour;
   later contours reuse a shared device registry, lifecycle, status, override,
   and conflict model. Transitional climate-core, shadow, canary, private
   bindings, and migration details must move out of the ordinary user path.
   The 0.6.0 one-room preview is an internal foundation, not the target UX. See
-  the [contour-platform product direction](LLM_WIKI/Manual/2026-07-18-hasc-contour-platform-direction.md).
-- Further HASC-only development is tracked in the
-  [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hasc-post-v0-5-0-roadmap.md):
+  the [contour-platform product direction](LLM_WIKI/Manual/2026-07-18-hausmanhub-contour-platform-direction.md).
+- Further HausmanHub-only development is tracked in the
+  [post-0.5 roadmap](LLM_WIKI/Manual/2026-07-17-hausmanhub-post-v0-5-0-roadmap.md):
   the operator registry, formal Android contract, measurable shadow, command
   receipts, confirmation, and non-activating one-room preflight now exist.
   Physical canary execution remains a separate explicitly authorized phase.
@@ -583,31 +601,31 @@ Last updated: 2026-07-20.
   configurations only; no device, Node-RED, Home Assistant service, or live
   API work was performed. The smoke check also loads the installed diagnostics
   adapter and verifies its fixed redacted report after each approved mode
-  change. It also reserves one HASC-like sensor name only in that temporary
-  configuration, then proves that a new HASC setup keeps all nine count
+  change. It also reserves one HausmanHub-like sensor name only in that temporary
+  configuration, then proves that a new HausmanHub setup keeps all nine count
   sensors, does not overwrite the occupied name, and leaves the other eight
-  protected names unchanged. After HASC is removed, that temporary external
+  protected names unchanged. After HausmanHub is removed, that temporary external
   record must still be unchanged. The same isolated check then creates and
-  removes HASC once more, requiring the same nine sensors and the unchanged
-  external record again. It requires no HASC device record and requires each of
-  the nine HASC sensors to remain unattached to a device. It also requires Home
-  Assistant to refuse a second HASC setup while keeping the existing setup
-  unchanged and limited to its nine sensors. After each HASC removal, an
+  removes HausmanHub once more, requiring the same nine sensors and the unchanged
+  external record again. It requires no HausmanHub device record and requires each of
+  the nine HausmanHub sensors to remain unattached to a device. It also requires Home
+  Assistant to refuse a second HausmanHub setup while keeping the existing setup
+  unchanged and limited to its nine sensors. After each HausmanHub removal, an
   authenticated temporary exact read-only user must receive only an unavailable
   response from the retained local summary route, with none of the nine counts.
-  It also requires every removed HASC count state to be absent from the
+  It also requires every removed HausmanHub count state to be absent from the
   temporary state machine. After the final removal, a third empty Home
   Assistant instance uses the same temporary configuration and must not restore
-  any HASC setup, object, state, runtime data, or local route; the unrelated
+  any HausmanHub setup, object, state, runtime data, or local route; the unrelated
   temporary external record must still be unchanged. Only after that absence
-  proof, the third instance creates a fresh `read-only` HASC setup with a new
+  proof, the third instance creates a fresh `read-only` HausmanHub setup with a new
   entry identifier, exactly nine count sensors, unchanged safe diagnostics,
   unchanged external record, and a newly authenticated local route. That fresh
   setup is removed too, its route immediately fails closed, and a fourth empty
-  Home Assistant instance must again contain no HASC data while preserving the
+  Home Assistant instance must again contain no HausmanHub data while preserving the
   external record.
-- Version 0.3.5 clears the current state values of only the nine HASC count
-  sensors after a successful HASC unload. A deactivation therefore no longer
+- Version 0.3.5 clears the current state values of only the nine HausmanHub count
+  sensors after a successful HausmanHub unload. A deactivation therefore no longer
   leaves old aggregate values in memory; reactivation restores only the same
   nine counts. It does not alter a device, service, external state, or
   home-control boundary.
@@ -616,33 +634,33 @@ Last updated: 2026-07-20.
   saved mode, without repairing, saving, or otherwise changing that setting.
   It does not add a device, service, home-data path, or home-control boundary.
 - Version 0.3.7 fails closed if a damaged saved configuration contains more
-  than one HASC entry, including a user-deactivated one. If another saved
-  entry appears while HASC is already working, it first closes the active
-  summary and ordinarily unloads the existing HASC display before it clears
-  only the captured HASC entries' stale count records. The retained local
+  than one HausmanHub entry, including a user-deactivated one. If another saved
+  entry appears while HausmanHub is already working, it first closes the active
+  summary and ordinarily unloads the existing HausmanHub display before it clears
+  only the captured HausmanHub entries' stale count records. The retained local
   route then returns only unavailable, never counts. Both saved records remain
-  for manual repair; HASC never chooses, deletes, or activates one
+  for manual repair; HausmanHub never chooses, deletes, or activates one
   automatically. A disposable Core lifecycle covers both an enabled pair and
   an enabled plus user-deactivated pair, before and after restart: after
   removal, a remaining enabled entry requires an explicit reload, while a
   remaining disabled entry requires explicit activation before it can recreate
   exactly nine safe counts. If every saved duplicate is already
-  user-deactivated, Core does not start HASC at all, so no count state or page
+  user-deactivated, Core does not start HausmanHub at all, so no count state or page
   exists; its disabled registry rows remain until the owner repairs the saved
   pair.
 - Version 0.3.8 closes diagnostics on the same boundary. It returns only the
   fixed unavailable status, without calling the local home-summary reader,
-  unless exactly one saved HASC entry is currently loaded and safely
+  unless exactly one saved HausmanHub entry is currently loaded and safely
   configured. The isolated Core check covers ordinary unload, user
   deactivation before and after restart, removal through a stale object, and
   both malformed duplicate pairs. It patches the temporary diagnostics reader
   to fail if a closed report attempts to observe the home.
 - Versions 0.3.8 and 0.3.9 keep diagnostics and the local summary page closed
   if they ever encounter a saved setting that is unsafe. Those defensive
-  boundaries remain even though version 0.3.13 now closes the whole HASC
+  boundaries remain even though version 0.3.13 now closes the whole HausmanHub
   display immediately after such a saved change.
 - Version 0.3.10 also requires the authenticated local page to find exactly
-  one saved HASC entry that Home Assistant still reports as loaded. A stale
+  one saved HausmanHub entry that Home Assistant still reports as loaded. A stale
   in-memory page pointer after an ordinary stop therefore returns only
   unavailable and does not read the nine-count summary. The disposable Core
   check deliberately restores that stale pointer only after the ordinary stop,
@@ -659,49 +677,49 @@ Last updated: 2026-07-20.
   safety net if an unsafe setting somehow reaches a running display.
 - Version 0.3.13 uses Home Assistant's standard saved-setting listener after
   the nine sensors and local page are safely registered. A permitted mode
-  change reloads only the same HASC entry and takes effect immediately. An
-  unsafe saved main setting or mode choice automatically unloads that HASC
-  display, clears its nine count states and its HASC-only registry records, and
+  change reloads only the same HausmanHub entry and takes effect immediately. An
+  unsafe saved main setting or mode choice automatically unloads that HausmanHub
+  display, clears its nine count states and its HausmanHub-only registry records, and
   rejects setup before any home-summary reader can run. The disposable Core
   check covers all five unsafe main-setting variants and both unsafe
   mode-choice variants, verifies the closed diagnostics and local page, and
-  records exactly one reload of the same HASC entry for a normal safe mode
+  records exactly one reload of the same HausmanHub entry for a normal safe mode
   change. Before each unsafe save, it replaces the sensor, diagnostics, and
   local-page home readers with a failure, so any read during the automatic
   closing interval fails the Core check. A saved entry that failed setup
-  remains available for manual repair; because no running HASC remains to
-  listen, its owner then explicitly reloads HASC after correcting it.
-- The disposable Core lifecycle now changes one safe HASC setting twice:
+  remains available for manual repair; because no running HausmanHub remains to
+  listen, its owner then explicitly reloads HausmanHub after correcting it.
+- The disposable Core lifecycle now changes one safe HausmanHub setting twice:
   `read-only` to `shadow` and back to `read-only`. Each save must reload only
-  that one HASC entry exactly once, retain exactly nine aggregate sensors and
+  that one HausmanHub entry exactly once, retain exactly nine aggregate sensors and
   one authenticated GET-only local page, and preserve blocked direct
   execution. Every later stop, reactivation, and restart assertion expects the
   final `read-only` choice. Kimi found no remaining issue in the final review;
   see the [safe mode cycle review
   note](LLM_WIKI/Manual/2026-07-16-kimi-safe-mode-cycle-review.md).
-- The disposable Core lifecycle also saves `shadow` while HASC is ordinarily
-  stopped but still user-enabled. That save must neither reload HASC nor read
+- The disposable Core lifecycle also saves `shadow` while HausmanHub is ordinarily
+  stopped but still user-enabled. That save must neither reload HausmanHub nor read
   a home summary, and its nine values, diagnostics, and local page stay
   closed. Only an explicit start restores the same nine sensors and safe
   `shadow` diagnostics. Kimi found no issue; see the [stopped safe-options
   review note](LLM_WIKI/Manual/2026-07-16-kimi-stopped-safe-options-review.md).
-- The same disposable lifecycle also saves `read-only` while HASC is
+- The same disposable lifecycle also saves `read-only` while HausmanHub is
   deliberately disabled by its user. It remains disabled and not loaded: no
   home summary is read, no reload occurs, and its nine values, diagnostics,
   and local page stay closed. Only the user's explicit activation restores the
   same nine sensors with the saved `read-only` mode. Kimi found no issue; see
   the [user-deactivated safe-options review
   note](LLM_WIKI/Manual/2026-07-16-kimi-user-deactivated-safe-options-review.md).
-- After a full temporary Home Assistant restart, the same user-disabled HASC
+- After a full temporary Home Assistant restart, the same user-disabled HausmanHub
   setup may also save `shadow` without starting itself. It still has no runtime
   data, page, or count values, and it cannot read a home summary or reload
-  HASC. Only the user's explicit activation restores the same nine sensors in
+  HausmanHub. Only the user's explicit activation restores the same nine sensors in
   the newly saved `shadow` mode. Kimi found no issue; see the [disabled
   restart safe-options review
   note](LLM_WIKI/Manual/2026-07-16-kimi-disabled-restart-safe-options-review.md).
-- A separate disposable check now gives a user-disabled HASC setup a deliberately
+- A separate disposable check now gives a user-disabled HausmanHub setup a deliberately
   unsafe saved `proxy` option and then attempts explicit user activation. Home
-  Assistant rejects the activation, leaves HASC closed with a setup error, and
+  Assistant rejects the activation, leaves HausmanHub closed with a setup error, and
   keeps direct execution blocked. The broken option remains only for manual
   repair; no home summary is read and no count values, diagnostics, or local
   page become available. The check then removes the temporary setup and proves
@@ -710,7 +728,7 @@ Last updated: 2026-07-20.
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-user-activation-review.md).
 - After that rejected proxy-mode activation, a separate disposable repair
   restores the exact safe options. The correction cannot read the home or
-  start HASC by itself; only one explicit reload returns the same nine counts,
+  start HausmanHub by itself; only one explicit reload returns the same nine counts,
   fixed diagnostics, and guarded page with direct execution blocked. Kimi
   found no issue; see the [unsafe proxy-option repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-proxy-option-repair-review.md).
@@ -722,42 +740,42 @@ Last updated: 2026-07-20.
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-extra-field-option-repair-review.md).
 - The same disposable activation check now separately uses damaged main data
   whose direct-execution marker says `allowed`. The user activation is still
-  rejected before any home read; HASC stays in a setup-error state with no
+  rejected before any home read; HausmanHub stays in a setup-error state with no
   counts, diagnostics, local page, service, device, or execution surface. The
   deliberately bad data remains only for manual repair. Kimi found no issue;
   see the [unsafe direct-execution activation review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-activation-review.md).
-- A user-disabled HASC entry whose main data lacks the required execution
+- A user-disabled HausmanHub entry whose main data lacks the required execution
   block follows the same safe manual-repair path. It cannot start or read the
   home during correction; one explicit reload restores the exact safe data,
   same nine counts, and direct-execution block. Kimi found no issue; see the
   [unsafe missing-execution-block repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-missing-execution-block-repair-review.md).
-- A user-disabled HASC entry whose main data lacks the required safe mode also
+- A user-disabled HausmanHub entry whose main data lacks the required safe mode also
   remains closed. Safe options cannot fill the missing main value; only a
   manual exact repair followed by one explicit reload restores the same nine
   counts. Kimi found no issue; see the [unsafe missing-mode repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-missing-mode-repair-review.md).
-- A user-disabled HASC entry whose main data has an unknown extra field also
+- A user-disabled HausmanHub entry whose main data has an unknown extra field also
   remains closed. The entry needs a manual exact repair and one explicit
   reload before the same nine counts can return. Kimi found no issue; see the
   [unsafe extra-field data repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-extra-field-data-repair-review.md).
-- A user-disabled HASC entry whose main data asks for prohibited proxy mode
+- A user-disabled HausmanHub entry whose main data asks for prohibited proxy mode
   also remains closed. It can return only after a manual exact repair and one
   explicit reload, without enabling proxy. Kimi found no issue; see the
   [unsafe proxy-data repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-proxy-data-repair-review.md).
-- A user-disabled HASC entry whose main data attempts to unblock direct
+- A user-disabled HausmanHub entry whose main data attempts to unblock direct
   execution remains closed even without an intervening Home Assistant restart.
   Manual exact repair and one explicit reload restore only the same nine
   counts with direct execution still blocked. Kimi found no issue; see the
   [unsafe direct-execution repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repair-review.md).
-- A user-disabled HASC entry with both an unblocked direct-execution marker
+- A user-disabled HausmanHub entry with both an unblocked direct-execution marker
   and a prohibited proxy option remains closed after only one part is repaired.
   It cannot reload or read the home until the remaining part is repaired and
-  the owner explicitly reloads HASC. Repeated partial recovery is explicitly
+  the owner explicitly reloads HausmanHub. Repeated partial recovery is explicitly
   rejected. Kimi found no issue after an independent review found and closed
   that edge case; see the [unsafe partial-repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-partial-repair-review.md).
@@ -768,8 +786,8 @@ Last updated: 2026-07-20.
   summary read. Kimi found no issue; see the [local access-revocation review
   note](LLM_WIKI/Manual/2026-07-16-kimi-local-access-revocation-review.md).
 - Version 0.3.14 tells browsers not to store every JSON response generated by
-  HASC's local nine-count page: the allowed summary, HASC's access refusal,
-  and HASC's unavailable response. It deliberately does not alter `401`,
+  HausmanHub's local nine-count page: the allowed summary, HausmanHub's access refusal,
+  and HausmanHub's unavailable response. It deliberately does not alter `401`,
   `405`, stopping, or other responses created by Home Assistant outside that
   page. Empty Core 2026.6.4 and 2026.7.0 checks confirm the header on the
   approved and closed paths. Kimi found no issue; see the [local no-store
@@ -798,15 +816,15 @@ Last updated: 2026-07-20.
   `local_summary_enabled` option. It lets the owner close or restore the
   already-approved optional local nine-count page without adding a URL, data,
   command, service, device, proxy, or execution right. With the page closed,
-  the existing nine HASC count rows and fixed diagnostics intentionally remain
+  the existing nine HausmanHub count rows and fixed diagnostics intentionally remain
   available and may refresh the same approved aggregates; a request to the
   closed old page itself fails before it can read them. After a full temporary
-  Home Assistant restart while closed, neither HASC page runtime data nor its
+  Home Assistant restart while closed, neither HausmanHub page runtime data nor its
   route is registered. Strings, numbers, and other truth-like values are
-  rejected. The disposable lifecycle now also changes this boolean while HASC
+  rejected. The disposable lifecycle now also changes this boolean while HausmanHub
   is ordinarily stopped, user-disabled, and user-disabled after a restart. Each
-  save must leave HASC `NOT_LOADED`, record no reload, and fail immediately if
-  any HASC home-summary reader runs. Only the following explicit setup or user
+  save must leave HausmanHub `NOT_LOADED`, record no reload, and fail immediately if
+  any HausmanHub home-summary reader runs. Only the following explicit setup or user
   activation may apply the saved page choice; the after-restart case performs a
   real `True` to `False` change and then keeps the page runtime and route absent
   through activation, ordinary unload, another restart, and removal. The final
@@ -843,7 +861,7 @@ Last updated: 2026-07-20.
   No review authorizes a commit, push, release, deployment, publication, or
   live-home change.
 - Version 0.3.18 adds only the effective validated
-  HASC settings to the existing redacted diagnostics `entry_summary`: safe
+  HausmanHub settings to the existing redacted diagnostics `entry_summary`: safe
   mode, the optional local-page boolean, and the exact `5m`, `15m`, or `30m`
   nine-count refresh choice. It never copies raw entry data or options. Legacy
   empty options report the safe enabled-page and `5m` defaults. Unsafe,
@@ -853,7 +871,7 @@ Last updated: 2026-07-20.
   repair, or authority is added. All 144 fast tests, the complete local
   release check, and disposable Core 2026.6.4/2026.7.0 checks passed. The
   implementation boundary and verification record are in the [0.3.18 safe
-  settings diagnostics note](LLM_WIKI/Manual/2026-07-17-hasc-v0-3-18-safe-settings-diagnostics.md).
+  settings diagnostics note](LLM_WIKI/Manual/2026-07-17-hausmanhub-v0-3-18-safe-settings-diagnostics.md).
   A bounded Kimi `k2p7` review of the 0.3.18 delta returned `NO FINDINGS` after
   its completed child session was resumed with the Kimi model explicitly
   pinned. The review itself did not authorize a commit, push, release,
@@ -877,27 +895,27 @@ Last updated: 2026-07-20.
   direct-execution restart review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-restart-review.md).
 - After that rejected activation, a separate temporary recovery check restores
-  the exact original safe data and explicitly reloads HASC. It returns only
+  the exact original safe data and explicitly reloads HausmanHub. It returns only
   the same nine safe counts, fixed diagnostics, and guarded local page with
   direct execution blocked; it creates no service or device. The saved repair
-  itself cannot read the home or start HASC before the explicit reload. Kimi
+  itself cannot read the home or start HausmanHub before the explicit reload. Kimi
   found no issue; see the [unsafe direct-execution recovery review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-recovery-review.md).
 - The same disposable recovery then deliberately receives the unsafe
   direct-execution marker once more. The restored saved-setting guard closes
-  HASC again before any home read: it clears all nine counts, diagnostics, and
+  HausmanHub again before any home read: it clears all nine counts, diagnostics, and
   the local page, while retaining the bad saved value for a future manual
   repair. Kimi found no issue; see the [unsafe direct-execution repeat-closure
   review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-closure-review.md).
 - A second exact safe manual repair after that repeat closure also remains
   closed until one separate explicit reload. It cannot read the home or
-  restart HASC while the saved value is being corrected; the explicit reload
+  restart HausmanHub while the saved value is being corrected; the explicit reload
   restores only the same nine counts and safe display. Kimi found no issue;
   see the [unsafe direct-execution repeat-repair review
   note](LLM_WIKI/Manual/2026-07-16-kimi-unsafe-direct-execution-repeat-repair-review.md).
 - A full empty restart after that second repair preserves only the exact safe
-  HASC entry and its same nine counts, fixed diagnostics, and guarded page.
+  HausmanHub entry and its same nine counts, fixed diagnostics, and guarded page.
   The direct-execution block remains saved and no control surface appears.
   Kimi found no issue; see the [unsafe direct-execution repeat-repair restart
   review
@@ -931,19 +949,19 @@ Last updated: 2026-07-20.
 - Kimi independently reviewed the options-screen closure for damaged saved
   settings with no findings. It confirmed that the selected default now uses
   the complete saved configuration, keeps manual repair possible, and neither
-  writes nor expands HASC's read-only/shadow boundary. See the [damaged
+  writes nor expands HausmanHub's read-only/shadow boundary. See the [damaged
   options-screen review
   note](LLM_WIKI/Manual/2026-07-15-kimi-damaged-options-screen-review.md).
 - Kimi independently reviewed the final live and restart duplicate-entry
   closure with no findings. See the [live duplicate fail-closed review
   note](LLM_WIKI/Manual/2026-07-15-kimi-live-duplicate-fail-closed-review.md).
-- The local HASC adapter check also covers a failed ordinary unload with one
-  saved HASC setup. In that case it keeps the current safe display intact
+- The local HausmanHub adapter check also covers a failed ordinary unload with one
+  saved HausmanHub setup. In that case it keeps the current safe display intact
   rather than partly clearing its values or local page while Home Assistant
-  still has HASC loaded. This is separate from the damaged multi-entry case,
+  still has HausmanHub loaded. This is separate from the damaged multi-entry case,
   which must close the display.
 - The disposable Core lifecycle separately unloads and starts one safe,
-  still-user-enabled HASC setup. In the gap, its saved setup and nine enabled
+  still-user-enabled HausmanHub setup. In the gap, its saved setup and nine enabled
   records remain but all count states and the guarded page fail closed; starting
   the same setup restores only the same nine safe counts, diagnostics, and
   GET-only page. This runs in a temporary empty configuration only.
@@ -973,49 +991,49 @@ Last updated: 2026-07-20.
   with no findings. See the [ordinary-stop reactivation review
   note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-stop-reactivation-review.md).
 - While that user-enabled setup is ordinarily stopped before its temporary
-  restart, the same lifecycle tries to add HASC again. Home Assistant must
+  restart, the same lifecycle tries to add HausmanHub again. Home Assistant must
   refuse the duplicate, retain exactly one still-enabled saved setup and its
   nine unloaded count records, and keep values and the guarded page closed.
   It creates no extra sensor, device, service, or control path.
-- Both HASC setup forms now have an isolated input-boundary check: even if a
+- Both HausmanHub setup forms now have an isolated input-boundary check: even if a
   form receives invented extra fields beside a safe mode, it persists only the
   fixed approved data shape. This is local test coverage only and adds no
   runtime authority.
 - Before its first temporary restart, the same isolated lifecycle check also
   uses Home Assistant's ordinary user deactivation and reactivation path. While
-  deactivated, the saved HASC setup is not loaded, its nine registry entries
+  deactivated, the saved HausmanHub setup is not loaded, its nine registry entries
   are marked disabled by that setup, their temporary state values are absent,
   and the guarded local page returns only an unavailable response with no count
   keys. Reactivation must restore the same nine enabled count sensors, safe
   diagnostics, and authenticated GET-only page, still with no device, service,
   proxy, or execution capability.
 - One later temporary reinstallation is deliberately deactivated, persisted
-  through an empty restart, and then removed. Its nine HASC registry records,
+  through an empty restart, and then removed. Its nine HausmanHub registry records,
   temporary states, and guarded local page must stay cleared through the
   following empty restart, while the unrelated temporary external record is
   preserved.
 - The first safe setup is also deactivated immediately before a temporary
-  restart that replaces only the temporary HASC copy. It must stay disabled and
+  restart that replaces only the temporary HausmanHub copy. It must stay disabled and
   not restore runtime data, count states, or the guarded page on its own.
   Explicit reactivation must restore only its existing nine safe count sensors,
   diagnostics, and authenticated GET-only page.
 - While that saved setup remains user-deactivated after the temporary restart,
-  the lifecycle tries to add HASC again. Home Assistant must refuse the
+  the lifecycle tries to add HausmanHub again. Home Assistant must refuse the
   duplicate, retain exactly one disabled saved setup and its nine disabled
   records, and keep runtime data, count values, and the guarded page closed
   until the owner explicitly activates the same setup.
-- The same disposable lifecycle now counts every local HASC page instead of
+- The same disposable lifecycle now counts every local HausmanHub page instead of
   merely finding the first one. An active safe setup must have exactly one
   guarded page; after an in-process deactivation or removal that one retained
   page must fail closed without counts; after a full temporary restart while
   disabled or removed, no such page may exist.
-- Version 0.3.4 requires both fixed fields in saved HASC main data. Even a
+- Version 0.3.4 requires both fixed fields in saved HausmanHub main data. Even a
   safe `shadow` mode in the separate options cannot fill in a missing main
   mode, so an incomplete saved setup stays closed until its exact data is
   restored. This does not add any home-control feature.
-- Version 0.3.3 keeps a bad saved HASC setup closed. If its saved data violates
-  the fixed safety contract, HASC rejects a reload and removes only its own
-  restored count states and stale HASC records, both after startup and during a
+- Version 0.3.3 keeps a bad saved HausmanHub setup closed. If its saved data violates
+  the fixed safety contract, HausmanHub rejects a reload and removes only its own
+  restored count states and stale HausmanHub records, both after startup and during a
   running-system reload. Its delayed startup cleanup is explicitly scheduled
   on Home Assistant's main loop, and the local test fake rejects an unmarked
   startup callback. It does not alter devices, services, other entities,
@@ -1028,12 +1046,12 @@ Last updated: 2026-07-20.
   restored, and keep the unrelated temporary record unchanged.
 - The same disposable lifecycle now corrects only its own deliberately bad
   saved data back to the exact original safe data, then starts one more empty
-  Home Assistant while the corrected HASC setup remains installed. That restart
+  Home Assistant while the corrected HausmanHub setup remains installed. That restart
   must restore the same nine count-sensor names, fixed diagnostics, and the
   authenticated GET-only page with no devices or services. Only then is the
-  temporary HASC setup removed and checked through a final empty restart.
+  temporary HausmanHub setup removed and checked through a final empty restart.
 - The same disposable lifecycle separately covers two bad saved mode choices
-  in HASC options: a temporary `proxy` choice and an otherwise safe `shadow`
+  in HausmanHub options: a temporary `proxy` choice and an otherwise safe `shadow`
   choice with one extra synthetic field. Each rejects reload and remains closed
   after restart; restoring the exact original safe choice must preserve the
   same nine count-sensor names, safe diagnostics, and GET-only page through its
@@ -1050,8 +1068,8 @@ Last updated: 2026-07-20.
   has no current state. The adapter reduces each permitted local fact
   immediately to a category; it exports no name, identifier, reading, history,
   address, secret, or raw state. Version 0.3.1 shows the same fixed payload as
-  exactly nine HASC diagnostic number sensors. They share one redacted local
-  snapshot, exclude HASC's own sensors from the house totals, create no HASC
+  exactly nine HausmanHub diagnostic number sensors. They share one redacted local
+  snapshot, exclude HausmanHub's own sensors from the house totals, create no HausmanHub
   device or service, and do not call Home Assistant services.
 - The owner explicitly approved a local count-only access path on 2026-07-14.
   It may expose the same fixed nine counts only after Home Assistant
@@ -1059,9 +1077,9 @@ Last updated: 2026-07-20.
   origin check. It must have GET only, no outgoing connection, no token
   storage, no raw data, and no external or device-control capability. See the
   [local-access decision](LLM_WIKI/Manual/2026-07-14-local-read-only-access-decision.md).
-- The Russian guides now make clear that ordinary HASC counts and diagnostics
+- The Russian guides now make clear that ordinary HausmanHub counts and diagnostics
   need no extra user. The optional local account belongs only to a viewer;
-  HASC never receives or stores its password, key, or Home Assistant
+  HausmanHub never receives or stores its password, key, or Home Assistant
   connection address, and only checks an incoming request origin momentarily.
   Kimi reviewed that clarification with no findings. See the [local viewer
   wording review](LLM_WIKI/Manual/2026-07-16-kimi-local-viewer-clarity-review.md).
@@ -1071,15 +1089,15 @@ Last updated: 2026-07-20.
   this repository or this context.
 - On 2026-07-14, the owner separately approved Codex direct local Home
   Assistant observation through a dedicated local non-administrator account.
-  This is outside HASC's runtime boundary: Codex sends GET only, keeps the
+  This is outside HausmanHub's runtime boundary: Codex sends GET only, keeps the
   credential outside GitHub and chat, and does not retain raw home data. The
   access account is not a technical read-only role, so the no-command rule is
   an operating constraint. See the [direct local observation decision](LLM_WIKI/Manual/2026-07-14-direct-local-read-observation-decision.md).
 
 ## Durable decisions
 
-- HASC is a separate repository and has no authority over the existing
-  HausMan Hub runtime.
+- HausmanHub is a separate repository and has no authority over the existing
+  HausmanHub runtime.
 - Initial modes are read-only and shadow only.
 - Proxy requires separate owner approval and rollback notes.
 - On 2026-07-17 the owner asked development to move toward working control.
@@ -1095,7 +1113,7 @@ Last updated: 2026-07-20.
   Architecture. Kimi must review the final current diff before the
   change is considered complete or before a commit, push, release, deployment,
   or publication. If Kimi is temporarily unavailable, another
-  independent review may support every change permitted by the HASC boundaries,
+  independent review may support every change permitted by the HausmanHub boundaries,
   including code, tests, documentation, and local checks or fixes. It must be
   recorded. It does not authorize a commit, push, release, deployment,
   publication, or new authority. Documentation-only edits do not require Kimi
@@ -1106,7 +1124,7 @@ Last updated: 2026-07-20.
   `hacs.json` and manual HACS custom-repository installation. It does not
   approve inclusion in the public HACS catalog, live testing, proxy, or direct
   execution.
-- The owner also explicitly approved local, read-only HASC access to home
+- The owner also explicitly approved local, read-only HausmanHub access to home
   data on 2026-07-14. That approval is limited to the v0.2.0 aggregate
   `home_summary`, including a separate disabled-entry count and the guarded
   local count-only path; it does not grant remote assistant access, proxy,
@@ -1115,22 +1133,22 @@ Last updated: 2026-07-20.
   in this repository.
 - The owner later approved a separate, local Codex read-observation path after
   the Home Assistant UI did not offer the exact `system-read-only` role. It
-  does not relax HASC's own strict route guard or grant HASC any device
+  does not relax HausmanHub's own strict route guard or grant HausmanHub any device
   authority; see the direct local observation decision above.
 - On 2026-07-15 the owner explicitly approved showing only the existing nine
-  aggregate HASC counts in Home Assistant. This authorizes exactly nine
+  aggregate HausmanHub counts in Home Assistant. This authorizes exactly nine
   diagnostic number sensors, not devices, controls, new home data, proxy, or
   execution. The decision is recorded in
   [the summary-display decision](docs/read-only-home-summary-display-decision.md).
 - Version `0.3.1` has a public GitHub release at
-  https://github.com/shumkiiv/hausmanhub_hasc/releases/tag/v0.3.1. It keeps the
-  approved nine diagnostic count sensors only. New installations use a HASC
+  https://github.com/shumkiiv/hausmanhub_hacs/releases/tag/v0.3.1. It keeps the
+  approved nine diagnostic count sensors only. New installations use a HausmanHub
   prefix for their internal names; an existing Home Assistant registry keeps
   the same names through its unchanged permanent keys.
 - On 2026-07-15, after the owner updated and restarted Home Assistant, a direct
   local Codex check used only GET requests and HTTP status codes. It confirmed
-  that Home Assistant responded, HASC's guarded read-only path was active, and
-  all nine approved HASC count sensors were present. No count value, raw home
+  that Home Assistant responded, HausmanHub's guarded read-only path was active, and
+  all nine approved HausmanHub count sensors were present. No count value, raw home
   payload, name, identifier, credential, or other home data was printed or
   stored.
 - A local repository safety check now scans Git-tracked files or exactly the
@@ -1144,7 +1162,7 @@ Last updated: 2026-07-20.
   both translations, the local icon, license, and release notes. It rejects a
   missing or linked required file, unapproved metadata or manifest field, bad
   JSON, mismatched translation shape, invalid icon, or missing version note.
-  It remains local-only and does not change the HASC runtime or home authority.
+  It remains local-only and does not change the HausmanHub runtime or home authority.
 - Kimi independently reviewed the local HACS-package check with no findings.
   See the [HACS-package check review
   note](LLM_WIKI/Manual/2026-07-15-kimi-hacs-package-check-review.md).
@@ -1215,7 +1233,7 @@ Last updated: 2026-07-20.
 - Kimi reviewed the isolated safe-update check. It found no issues: the check
   restarts only a disposable empty Home Assistant after replacing the local
   test copy, then requires the safe choice, the execution block, and the
-  absence of HASC objects to survive. See the [safe-update review
+  absence of HausmanHub objects to survive. See the [safe-update review
   note](LLM_WIKI/Manual/2026-07-14-kimi-safe-update-persistence-review.md).
 - Kimi reviewed the one-command local publication check with no findings. It
   confirmed the command runs only local tests, synthetic fixtures, and the
@@ -1251,20 +1269,20 @@ Last updated: 2026-07-20.
   [v0.3.1 review note](LLM_WIKI/Manual/2026-07-15-kimi-v0-3-1-review.md).
 - Kimi reviewed the isolated occupied-name check twice. The first pass noted
   that the test should not depend on Home Assistant's exact suffix choice;
-  the check now requires only a different protected HASC name and exact names
+  the check now requires only a different protected HausmanHub name and exact names
   for the other eight sensors. The final review found no issues. See the
   [occupied-name review note](LLM_WIKI/Manual/2026-07-15-kimi-occupied-name-check-review.md).
 - Kimi reviewed the no-device runtime check with no findings. It confirmed
-  that the isolated check requires both an empty HASC device list and no
+  that the isolated check requires both an empty HausmanHub device list and no
   device attachment for each of the nine sensors. See the [no-device review
   note](LLM_WIKI/Manual/2026-07-15-kimi-no-device-check-review.md).
 - Kimi reviewed the real-Core one-setup check with no findings. It confirmed
   that `single_instance_allowed` is the Home Assistant result for a second
-  attempt when the manifest permits only one HASC setup. See the [one-setup
+  attempt when the manifest permits only one HausmanHub setup. See the [one-setup
   review note](LLM_WIKI/Manual/2026-07-15-kimi-one-setup-check-review.md).
 - Kimi reviewed the isolated external-name cleanup check with no findings. It
-  confirmed that after HASC removal, the temporary external entry still has the
-  same identity and no HASC or device ownership. See the [external-cleanup
+  confirmed that after HausmanHub removal, the temporary external entry still has the
+  same identity and no HausmanHub or device ownership. See the [external-cleanup
   review note](LLM_WIKI/Manual/2026-07-15-kimi-external-collision-cleanup-review.md).
 - Kimi reviewed the isolated repeat-install check with no findings. It
   confirmed that the second safe setup creates the same nine count sensors,
@@ -1277,12 +1295,12 @@ Last updated: 2026-07-20.
   read-only user. See the [local-summary closure review
   note](LLM_WIKI/Manual/2026-07-15-kimi-local-summary-closed-after-removal-review.md).
 - Kimi reviewed the isolated state-cleanup check with no findings. It confirmed
-  that the test remembers only HASC's temporary internal state names before
+  that the test remembers only HausmanHub's temporary internal state names before
   removal, then rejects any state left afterward without reading or printing a
   count value. See the [state-cleanup review
   note](LLM_WIKI/Manual/2026-07-15-kimi-state-cleanup-after-removal-review.md).
 - Kimi reviewed the isolated final-restart cleanup check with no findings. It
-  confirmed that a third empty Home Assistant instance keeps HASC absent after
+  confirmed that a third empty Home Assistant instance keeps HausmanHub absent after
   removal while preserving the unrelated external record, without HTTP or home
   access. See the [final-restart cleanup review
   note](LLM_WIKI/Manual/2026-07-15-kimi-final-restart-cleanup-review.md).
@@ -1294,35 +1312,35 @@ Last updated: 2026-07-20.
   note](LLM_WIKI/Manual/2026-07-15-kimi-fresh-reinstall-after-cleanup-review.md).
 - Kimi reviewed the isolated closed fresh-reinstall cycle with no findings. It
   confirmed that the fresh setup is removed, its route fails closed without
-  count data, and a fourth empty Home Assistant instance remains HASC-free
+  count data, and a fourth empty Home Assistant instance remains HausmanHub-free
   while the external record survives. See the [closed-cycle review
   note](LLM_WIKI/Manual/2026-07-15-kimi-closed-fresh-reinstall-cycle-review.md).
 - Kimi reviewed the ordinary deactivation/reactivation lifecycle check with no
-  findings. It confirmed that deactivation marks only HASC's nine temporary
+  findings. It confirmed that deactivation marks only HausmanHub's nine temporary
   count entries disabled and closes the guarded page, while reactivation
   restores only the same safe observation surface. See the [deactivation
   review note](LLM_WIKI/Manual/2026-07-15-kimi-deactivation-reactivation-review.md).
-- Kimi reviewed the removal of a deactivated temporary HASC setup with no
+- Kimi reviewed the removal of a deactivated temporary HausmanHub setup with no
   findings. It confirmed that the test closes the page before removal, clears
-  only HASC's own temporary records, and preserves the unrelated external
+  only HausmanHub's own temporary records, and preserves the unrelated external
   record. See the [deactivated-removal review
   note](LLM_WIKI/Manual/2026-07-15-kimi-deactivated-removal-review.md).
 - Kimi reviewed the persisted-deactivation check with no findings. It confirmed
-  that a temporary restart/update cannot silently reactivate HASC or restore
+  that a temporary restart/update cannot silently reactivate HausmanHub or restore
   its page or state values, while explicit reactivation remains limited to the
   same nine safe counts. See the [deactivation-persistence review
   note](LLM_WIKI/Manual/2026-07-15-kimi-deactivation-persistence-review.md).
 - Kimi reviewed the local-page uniqueness check with no findings. It confirmed
-  that an active HASC requires exactly one page, while the retained in-process
+  that an active HausmanHub requires exactly one page, while the retained in-process
   page remains safely unavailable after deactivation or removal and no page
   returns after a full empty restart. See the [local-page uniqueness review
   note](LLM_WIKI/Manual/2026-07-15-kimi-local-summary-route-uniqueness-review.md).
 - Kimi reviewed the invalid-saved-settings fail-closed fix with no findings. It
-  confirmed that HASC clears only its own restored state placeholders after
+  confirmed that HausmanHub clears only its own restored state placeholders after
   startup, immediately clears them on a reload, and does not touch a device,
   service, external entity, or home-control boundary. See the [invalid-settings
   review note](LLM_WIKI/Manual/2026-07-15-kimi-invalid-persisted-settings-review.md).
-- The v0.3.3 Kimi review cycle first found stale HASC registry records and a
+- The v0.3.3 Kimi review cycle first found stale HausmanHub registry records and a
   startup callback that needed the Home Assistant loop-safety marker. Both
   were corrected, with a local test that rejects an unmarked callback. The
   final focused Kimi review found no issues; see the [invalid-record cleanup
@@ -1344,8 +1362,8 @@ Last updated: 2026-07-20.
   rejected setup cannot create a page, sensor, device, service, or execution
   path. See the [missing-main-mode review
   note](LLM_WIKI/Manual/2026-07-15-kimi-missing-main-mode-review.md).
-- Kimi reviewed the v0.3.5 cleanup of HASC state values after a successful
-  unload, with no findings. It confirmed that HASC removes only its own nine
+- Kimi reviewed the v0.3.5 cleanup of HausmanHub state values after a successful
+  unload, with no findings. It confirmed that HausmanHub removes only its own nine
   displayed values, keeps its registry records, preserves an external state,
   and restores only the same nine counts after reactivation. See the
   [unload-state-cleanup review
@@ -1361,40 +1379,40 @@ Last updated: 2026-07-20.
   empty Home Assistant only. See the [ordinary unload/setup review
   note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-unload-setup-review.md).
 - Kimi reviewed the ordinary-unload full-restart recovery check with no
-  findings. It confirmed that an enabled HASC setup auto-loads after the next
+  findings. It confirmed that an enabled HausmanHub setup auto-loads after the next
   empty Home Assistant starts, while preserving exactly the same nine counts,
   fixed diagnostics, GET-only local page, and all control prohibitions. See the
   [ordinary unload/restart review
   note](LLM_WIKI/Manual/2026-07-15-kimi-ordinary-unload-restart-review.md).
-- Kimi reviewed removal of an ordinarily stopped, still-user-enabled HASC
+- Kimi reviewed removal of an ordinarily stopped, still-user-enabled HausmanHub
   setup with no findings. It confirmed that the temporary test keeps the same
   nine-count and no-control boundary, closes both read paths before and after
   removal, preserves an unrelated similar-name record, and uses no real home.
   See the [ordinary stopped-removal review
   note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-removal-review.md).
-- Kimi reviewed user deactivation after an ordinary HASC stop with no findings.
+- Kimi reviewed user deactivation after an ordinary HausmanHub stop with no findings.
   It confirmed that the disposable lifecycle distinguishes this state from an
   active deactivation, preserves the nine-count/no-control boundary, and
   carries the disabled state through restart and removal. See the [ordinary
   stopped-deactivation review
   note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-deactivation-review.md).
-- Kimi reviewed the duplicate-setup guard while HASC is ordinarily stopped.
+- Kimi reviewed the duplicate-setup guard while HausmanHub is ordinarily stopped.
   Its first pass found a test that depended on exact source formatting; the
   check now uses semantic markers and order instead. The final direct Kimi
   review found no issues. See the [stopped duplicate-setup review
   note](LLM_WIKI/Manual/2026-07-15-kimi-stopped-duplicate-setup-review.md).
-- Kimi reviewed the duplicate-setup guard while a saved HASC setup stays
+- Kimi reviewed the duplicate-setup guard while a saved HausmanHub setup stays
   user-deactivated after restart, with no findings. It confirmed that the
   rejected second setup preserves the disabled state and that explicit
   activation restores only the same nine safe counts. See the [disabled
   duplicate-setup review
   note](LLM_WIKI/Manual/2026-07-15-kimi-disabled-duplicate-setup-review.md).
-- Kimi reviewed removal of a saved user-deactivated HASC setup after an empty
+- Kimi reviewed removal of a saved user-deactivated HausmanHub setup after an empty
   restart, with no findings. It confirmed the same collision-aware nine
   disabled records survive until removal and that the following restart remains
-  HASC-free. See the [disabled removal-after-restart review
+  HausmanHub-free. See the [disabled removal-after-restart review
   note](LLM_WIKI/Manual/2026-07-15-kimi-disabled-removal-after-restart-review.md).
-- Kimi reviewed the isolated extra-input boundary check for both HASC setup
+- Kimi reviewed the isolated extra-input boundary check for both HausmanHub setup
   forms with no findings. It confirmed that the test preserves the fixed safe
   saved shape and adds no runtime, device, service, network, or home-data
   access. See the [extra config-form-input review
@@ -1416,7 +1434,7 @@ Last updated: 2026-07-20.
   note](LLM_WIKI/Manual/2026-07-15-kimi-invalid-persisted-options-review.md).
 - Kimi reviewed the shared lifecycle for both an unsafe saved mode and a
   safe-looking mode with an extra field, with no findings. It confirmed the
-  exact settings shape closes HASC through reload and restart, and that only the
+  exact settings shape closes HausmanHub through reload and restart, and that only the
   original safe choice restores the same nine counts before cleanup. See the
   [extra-option review
   note](LLM_WIKI/Manual/2026-07-15-kimi-extra-saved-option-review.md).
@@ -1435,32 +1453,32 @@ The isolated Core lifecycle check is documented in `docs/read-only-skeleton.md`;
 on 2026-07-15 it passed with the aggregate summary, exactly nine diagnostic
 count sensors, and guarded authenticated loopback route on Core 2026.6.4 and
 2026.7.0 using disposable configurations only. It also now starts from a
-temporary v0.3.0-style registry, replaces only the temporary HASC copy, and
+temporary v0.3.0-style registry, replaces only the temporary HausmanHub copy, and
 requires the old names to survive while a new entry receives the protected
 v0.3.1 names. Before that new entry, the check reserves one protected-looking
 name only in the disposable registry and requires the occupied name to remain
-external while all nine HASC sensors still appear. After HASC removal, it
+external while all nine HausmanHub sensors still appear. After HausmanHub removal, it
 requires that external record to remain unchanged. It then creates and removes
-another safe HASC setup, requiring its nine sensors and the same external
+another safe HausmanHub setup, requiring its nine sensors and the same external
 record again. After each removal it sends one authenticated loopback GET from a
 temporary exact read-only user to the retained local-summary route, requires an
 unavailable response, and rejects any returned count key. It proves neither
 live-home behaviour nor execution authority. It also records the temporary
-HASC state names before each removal and requires all of those states to be
-absent afterward, without reading their values. It also requires no HASC device
-registry entry and no device attachment for each HASC sensor. It also tries a
+HausmanHub state names before each removal and requires all of those states to be
+absent afterward, without reading their values. It also requires no HausmanHub device
+registry entry and no device attachment for each HausmanHub sensor. It also tries a
 second safe setup and requires Home Assistant to refuse it while preserving the
 original nine-sensor setup. After the final removal it starts a third empty
 Home Assistant instance with the same temporary configuration and requires no
-HASC entry, entity, device, service, state, runtime data, or local route to
+HausmanHub entry, entity, device, service, state, runtime data, or local route to
 return, while the unrelated temporary external record remains unchanged.
-Only after that absence proof, it creates a fresh `read-only` HASC setup in the
+Only after that absence proof, it creates a fresh `read-only` HausmanHub setup in the
 same third instance. The new setup must have a new entry identifier, exactly
 nine count sensors, the fixed safe diagnostics report, the unchanged external
 record, and the guarded authenticated local route.
 That fresh setup is then removed, its route must immediately fail closed
 without count data, and a fourth empty Home Assistant instance must contain no
-HASC data while the external record remains unchanged.
+HausmanHub data while the external record remains unchanged.
 
 Before its first restart, the check also deactivates the saved safe setup
 through Home Assistant's normal user path. The setup must become unloaded, its
@@ -1471,37 +1489,37 @@ diagnostics, and the authenticated GET-only route without any device, service,
 proxy, or execution capability.
 
 One later temporary reinstallation is deactivated before removal. The check
-then requires removal to clear its nine HASC records, temporary states, and
+then requires removal to clear its nine HausmanHub records, temporary states, and
 guarded page, while preserving the unrelated temporary external record through
 the next empty restart.
 
 Before the earlier temporary update restart, the first safe setup is also
 deactivated. The restarted empty Home Assistant must keep it disabled, with no
-HASC runtime data, count state, or guarded page. Only explicit reactivation
+HausmanHub runtime data, count state, or guarded page. Only explicit reactivation
 may restore the existing nine safe count sensors, diagnostics, and GET-only
 page.
 
-Throughout that temporary lifecycle, the check counts every local HASC page.
+Throughout that temporary lifecycle, the check counts every local HausmanHub page.
 An active setup must have exactly one. After a deactivation or removal in the
 same temporary process, that one retained page must fail closed without counts;
-after a full temporary restart while HASC is disabled or removed, no page may
+after a full temporary restart while HausmanHub is disabled or removed, no page may
 return.
 
-The same disposable Core check writes one deliberately unsafe saved HASC mode,
-rejects an immediate reload, then restarts. It requires no HASC runtime data,
-service, device, page, or count state to return. HASC clears only the restored
-states belonging to that invalid HASC entry after Home Assistant startup; it
+The same disposable Core check writes one deliberately unsafe saved HausmanHub mode,
+rejects an immediate reload, then restarts. It requires no HausmanHub runtime data,
+service, device, page, or count state to return. HausmanHub clears only the restored
+states belonging to that invalid HausmanHub entry after Home Assistant startup; it
 does not change other entities or any device-control surface.
 
 Separately, direct local Codex observation passed a harmless availability
 check, a version-only check, and a count-only current-state check on
 2026-07-14. It used no command or mutating request, retained no raw home data,
-and does not validate or expand HASC runtime authority.
+and does not validate or expand HausmanHub runtime authority.
 
 Before publishing, run `python3 tools/check_local_release.py` after staging
 the intended files. It runs the local tests, synthetic fixture checks, and the
 Git-file safety checks as one fixed list. It also requires a higher integration
-version if a staged change touches HASC itself or `hacs.json`. It does not
+version if a staged change touches HausmanHub itself or `hacs.json`. It does not
 inspect a live home or grant any authority.
 
 The repository also runs that same fixed command in GitHub after a change to
@@ -1510,7 +1528,7 @@ stored checkout credentials, and has no Home Assistant target, home data, or
 deployment step.
 Its first GitHub run completed successfully on 2026-07-14 for commit
 `a75f78b`; the recorded run is
-https://github.com/shumkiiv/hausmanhub_hasc/actions/runs/29352007883.
+https://github.com/shumkiiv/hausmanhub_hacs/actions/runs/29352007883.
 Public contribution guidance and a pull-request safety checklist are present.
 They require the local check, Kimi review for code, and an explicit statement
 that no home data or control capability is being introduced.
@@ -1521,12 +1539,12 @@ test-only changes do not need a new HACS version.
 
 ## Next decision gate
 
-The active 50-item roadmap changes only HASC. Android is already developed in a
-separate read-only repository; HASC must provide stable contracts for it without
+The active 50-item roadmap changes only HausmanHub. Android is already developed in a
+separate read-only repository; HausmanHub must provide stable contracts for it without
 editing or building the application here. The existing climate module is also
 read-only and remains the execution engine through its current fixed API. The
 first 1.6 milestone is API discovery and a combined climate projection; a
-readable decision journal, a continuous HASC dispatcher, and further contour
+readable decision journal, a continuous HausmanHub dispatcher, and further contour
 types follow. Generic proxying, arbitrary device execution, changes to the
 climate module, and unsupervised live deployment remain out of scope.
 
@@ -1542,6 +1560,6 @@ See [repository basics](docs/repository-basics.md) and
 [static validation](docs/static-validation.md),
 [shadow evidence](docs/shadow-evidence-contract.md),
 [diagnostics/repairs](docs/diagnostics-repairs-contract.md), and the
-[foundation handoff](LLM_WIKI/Manual/2026-07-13-hasc-repository-foundation.md).
+[foundation handoff](LLM_WIKI/Manual/2026-07-13-hausmanhub-repository-foundation.md).
 Engineering and review rules are in
 [engineering standards](docs/engineering-standards.md).

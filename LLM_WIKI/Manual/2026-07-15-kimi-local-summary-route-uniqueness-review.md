@@ -5,26 +5,26 @@ Date: 2026-07-15.
 ## Scope
 
 Only the disposable empty Home Assistant Core lifecycle check, its local source
-guard, and its documentation changed. The HASC integration package did not
+guard, and its documentation changed. The HausmanHub integration package did not
 change.
 
 ## What changed
 
-The isolated lifecycle check now collects every route that has HASC's fixed
+The isolated lifecycle check now collects every route that has HausmanHub's fixed
 local-summary address instead of stopping at the first one.
 
-- While a safe HASC setup is active, there must be exactly one authenticated
+- While a safe HausmanHub setup is active, there must be exactly one authenticated
   GET-only local-summary page.
 - After deactivation or removal in the same temporary Home Assistant process,
   that one retained page must remain unavailable and return no count values.
-- After a full temporary restart with HASC disabled or removed, no local-summary
+- After a full temporary restart with HausmanHub disabled or removed, no local-summary
   page may exist.
 
 ## Review outcome
 
 Kimi session `ses_09a31df42ffeju24YdMuCftyej` returned `NO FINDINGS`. It
 confirmed that the check counts every matching route, does not incorrectly
-require zero routes before a full restart, and does not expand HASC's
+require zero routes before a full restart, and does not expand HausmanHub's
 read-only boundary.
 
 ## Verification

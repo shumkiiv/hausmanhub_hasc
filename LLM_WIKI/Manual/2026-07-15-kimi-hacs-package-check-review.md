@@ -6,7 +6,7 @@ Date: 2026-07-15.
 
 The new local package check verifies the prepared Git package for manual HACS
 installation. It reads local Git-index blobs and modes only. It does not load
-HASC, contact HACS or Home Assistant, or access a home.
+HausmanHub, contact HACS or Home Assistant, or access a home.
 
 ## Final result
 

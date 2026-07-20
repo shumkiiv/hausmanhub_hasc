@@ -4,7 +4,7 @@ Date: 2026-07-14.
 
 ## Scope
 
-HASC 0.1.1 introduced a diagnostics-only `home_summary`. Version 0.1.2
+HausmanHub 0.1.1 introduced a diagnostics-only `home_summary`. Version 0.1.2
 extends the same approved boundary to nine aggregate counts: areas, devices,
 entities, sensors, and five availability categories. A disabled registry entry
 is counted separately before its state is read; `not_reported` now means an
@@ -49,7 +49,7 @@ shape and the updated project context.
 
 ## Checks before commit
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 33 tests passed.
 - JSON validation for `manifest.json` and `hacs.json`.
 - `python3 tools/validate_fixture.py diagnostics fixtures/diagnostics/valid_redacted.json`.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v4/climate-home.schema.json",
-  "title": "HASC Android climate home v4",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v4/climate-home.schema.json",
+  "title": "HausmanHub Android climate home v4",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "generated_at", "climate", "rooms", "reconciliation"],
@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-home"},
+        "name": {"const": "hausman-hub-home"},
         "version": {"const": 4}
       }
     },

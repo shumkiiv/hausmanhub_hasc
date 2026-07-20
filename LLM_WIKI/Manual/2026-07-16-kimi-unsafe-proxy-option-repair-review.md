@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable lifecycle where a user-disabled
-HASC entry has an unsafe saved `proxy` option, the user's activation is
+HausmanHub entry has an unsafe saved `proxy` option, the user's activation is
 rejected, and the exact safe options are then repaired manually.
 
 ## Result
@@ -18,7 +18,7 @@ helper: the repair changes options rather than main data, makes every
 home-summary reader fail during the saved correction, and records exactly one
 separate explicit reload. Only that reload may return exact safe data and
 options, the direct-execution block, nine count sensors, fixed diagnostics,
-and the guarded local page. No HASC service or device is created.
+and the guarded local page. No HausmanHub service or device is created.
 
 ## Evidence
 

@@ -121,9 +121,9 @@ def import_managed_climate_selection(
 ) -> ClimateRegistry:
     """Build an exact registry from devices already owned by climate-core.
 
-    The existing engine already owns the private device bindings. HASC therefore
+    The existing engine already owns the private device bindings. HausmanHub therefore
     needs only the selected source candidate, inferred kind, and stable public
-    HASC id; it does not ask the owner to bind the same Home Assistant entity a
+    HausmanHub id; it does not ask the owner to bind the same Home Assistant entity a
     second time.
     """
 

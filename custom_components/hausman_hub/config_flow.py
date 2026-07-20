@@ -176,7 +176,7 @@ _RUSSIAN_STATUS_LABELS = {
 }
 _RUSSIAN_REASON_LABELS = {
     "bridge_disabled": "климатический контур выключен",
-    "candidate_not_registered": "комната не добавлена в HASC",
+    "candidate_not_registered": "комната не добавлена в HausmanHub",
     "climate_state_unavailable": "текущее состояние климата недоступно",
     "state_stale": "данные о климате устарели",
     "registry_mismatch": "список устройств не совпадает с текущим состоянием",
@@ -220,7 +220,7 @@ _RUSSIAN_HUMIDITY_DEMAND_LABELS = {
 }
 _RUSSIAN_NATIVE_REASON_LABELS = {
     "controller_disabled": "встроенный расчёт выключен",
-    "room_not_registered": "комната не добавлена в HASC",
+    "room_not_registered": "комната не добавлена в HausmanHub",
     "climate_state_unavailable": "нет текущих данных из климатического контура",
     "room_state_unavailable": "для комнаты нет текущих показаний",
     "state_stale": "показания устарели",
@@ -231,7 +231,7 @@ _RUSSIAN_NATIVE_REASON_LABELS = {
     "humidity_above_target": "понижение влажности пока не автоматизировано",
 }
 _RUSSIAN_CONTOUR_STATUS_LABELS = {
-    "disabled": "выключен в HASC",
+    "disabled": "выключен в HausmanHub",
     "ready": "готов",
     "attention": "нужно проверить настройки",
     "unavailable": "система климата недоступна",
@@ -258,10 +258,10 @@ _RUSSIAN_CONTOUR_REASON_LABELS = {
     "device_unavailable": "одно из устройств недоступно",
     "engine_not_automatic": "подключённая система климата не в автоматическом режиме",
     "authority_not_ready": "подключённая система не подтвердила готовность управления",
-    "target_temperature_differs": "температура отличается от настройки HASC",
-    "target_humidity_differs": "влажность отличается от настройки HASC",
+    "target_temperature_differs": "температура отличается от настройки HausmanHub",
+    "target_humidity_differs": "влажность отличается от настройки HausmanHub",
     "target_strategy_unavailable": "подключённая система не сообщила характер работы",
-    "target_strategy_differs": "характер работы отличается от настройки HASC",
+    "target_strategy_differs": "характер работы отличается от настройки HausmanHub",
 }
 _RUSSIAN_CONTOUR_APPLY_STATUS_LABELS = {
     "pending": "команды приняты, подтверждение состояния ещё ожидается",
@@ -771,7 +771,7 @@ def _general_settings_schema(
     local_summary_enabled_default: bool,
     summary_update_interval_default: str,
 ) -> vol.Schema:
-    """Show only settings for HASC's aggregate informational display."""
+    """Show only settings for HausmanHub's aggregate informational display."""
 
     return vol.Schema(
         {
@@ -857,7 +857,7 @@ def _climate_endpoint_schema(
 
 
 def _native_climate_mode_schema(mode_default: str) -> vol.Schema:
-    """Choose whether HASC should calculate its own room decision."""
+    """Choose whether HausmanHub should calculate its own room decision."""
 
     return vol.Schema(
         {
@@ -897,7 +897,7 @@ def _native_climate_policy_schema(
 
 
 def _native_climate_confirm_schema() -> vol.Schema:
-    """Require a separate save after showing HASC's read-only decision."""
+    """Require a separate save after showing HausmanHub's read-only decision."""
 
     return vol.Schema(
         {
@@ -1238,7 +1238,7 @@ def _merged_safe_options(
 
 
 class HausmanHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Create the single safe HausMan Hub configuration entry."""
+    """Create the single safe HausmanHub configuration entry."""
 
     VERSION = 1
 
@@ -2881,7 +2881,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Enable only HASC's non-executing decision preview."""
+        """Enable only HausmanHub's non-executing decision preview."""
 
         mode_default, _, _, _ = _safe_native_climate_defaults(
             self.config_entry.data,
@@ -3123,7 +3123,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Configure public fields while HASC supplies the selected private binding."""
+        """Configure public fields while HausmanHub supplies the selected private binding."""
 
         source_id = self._selected_import_source_id
         snapshot = self._import_snapshot
@@ -3189,7 +3189,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Select one public HASC room for a read-only evidence result."""
+        """Select one public HausmanHub room for a read-only evidence result."""
 
         rooms = self._draft_rooms()
         if not rooms:
@@ -3933,7 +3933,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         }
 
     def _native_climate_preview_placeholders(self) -> dict[str, str]:
-        """Render the HASC-owned decision in plain Russian for confirmation."""
+        """Render the HausmanHub-owned decision in plain Russian for confirmation."""
 
         preview = self._native_climate_preview or {}
         current = preview.get("current")

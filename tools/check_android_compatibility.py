@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Decode the current HASC fixture into Android-compatible climate models.
+"""Decode the current HausmanHub fixture into Android-compatible climate models.
 
-The check is deliberately self-contained. It reads only committed HASC schemas
+The check is deliberately self-contained. It reads only committed HausmanHub schemas
 and synthetic fixtures; the read-only Android repository is not required in CI.
 """
 
@@ -17,7 +17,7 @@ from jsonschema import Draft202012Validator
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HOME_FIXTURE = ROOT / "fixtures" / "hasc_climate_v12" / "home.json"
+HOME_FIXTURE = ROOT / "fixtures" / "hausmanhub_climate_v12" / "home.json"
 HOME_SCHEMA = (
     ROOT
     / "custom_components"
@@ -48,12 +48,12 @@ _ANDROID_DOMAIN_BY_KIND = {
 
 
 class AndroidCompatibilityError(ValueError):
-    """The HASC fixture cannot be represented by the audited Android models."""
+    """The HausmanHub fixture cannot be represented by the audited Android models."""
 
 
 @dataclass(frozen=True, slots=True)
 class AndroidActionModel:
-    """HomeAction-compatible fields plus HASC availability metadata."""
+    """HomeAction-compatible fields plus HausmanHub availability metadata."""
 
     action_id: str
     title: str
@@ -91,7 +91,7 @@ class AndroidRoomModel:
 
 @dataclass(frozen=True, slots=True)
 class AndroidHomeModel:
-    """Synthetic HASC view using Kotlin-compatible scalar and collection types."""
+    """Synthetic HausmanHub view using Kotlin-compatible scalar and collection types."""
 
     generated_at: int
     state_revision: int
@@ -105,13 +105,13 @@ def check_android_payload(
     home_schema: object,
     action_schema: object,
 ) -> AndroidHomeModel:
-    """Validate and decode one HASC home payload into audited Android types."""
+    """Validate and decode one HausmanHub home payload into audited Android types."""
 
-    _validate_schema(payload, home_schema, "HASC home")
-    root = _object(payload, "HASC home")
-    contract = _object(root.get("contract"), "HASC home contract")
-    if contract.get("name") != "hausman-hasc-home" or contract.get("version") != 12:
-        raise AndroidCompatibilityError("Android check needs HASC home contract v12")
+    _validate_schema(payload, home_schema, "HausmanHub home")
+    root = _object(payload, "HausmanHub home")
+    contract = _object(root.get("contract"), "HausmanHub home contract")
+    if contract.get("name") != "hausman-hub-home" or contract.get("version") != 12:
+        raise AndroidCompatibilityError("Android check needs HausmanHub home contract v12")
 
     generated_at = _android_long(root.get("generated_at"), "generated_at")
     state_revision = _android_long(root.get("state_revision"), "state_revision")
@@ -121,7 +121,7 @@ def check_android_payload(
     schema_device_kinds = _schema_device_kinds(home_schema)
     if schema_device_kinds != set(_ANDROID_DOMAIN_BY_KIND):
         raise AndroidCompatibilityError(
-            "HASC device kinds and Android domain mappings are inconsistent"
+            "HausmanHub device kinds and Android domain mappings are inconsistent"
         )
 
     display_names = _object(root.get("display_names"), "display_names")

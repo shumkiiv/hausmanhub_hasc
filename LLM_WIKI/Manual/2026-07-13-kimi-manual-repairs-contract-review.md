@@ -28,7 +28,7 @@ modify repository files.
 
 ## Verification
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 24 passed
 - isolated Home Assistant Core 2026.7.0 smoke check — passed
 - `git diff --check`

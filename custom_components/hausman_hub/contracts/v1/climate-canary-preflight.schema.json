@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-canary-preflight.schema.json",
-  "title": "HASC climate canary preflight v1",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-canary-preflight.schema.json",
+  "title": "HausmanHub climate canary preflight v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "room_id", "status", "ready_for_authorization", "bridge_mode", "freshness", "registry", "shadow", "command_scope", "operation", "rollback", "activation", "reasons"],
@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-climate-canary-preflight"},
+        "name": {"const": "hausman-hub-climate-canary-preflight"},
         "version": {"const": 1}
       }
     },

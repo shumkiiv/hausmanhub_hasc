@@ -4,22 +4,22 @@ Date: 2026-07-15.
 
 ## Scope
 
-Version 0.3.3 makes an invalid saved HASC setup fail closed more completely.
-It may remove only the old HASC count states and old HASC entity records that
+Version 0.3.3 makes an invalid saved HausmanHub setup fail closed more completely.
+It may remove only the old HausmanHub count states and old HausmanHub entity records that
 belong to the same temporary setup. It does not add any home-control feature.
 
 ## Review findings and corrections
 
 The review cycle found and corrected three small but important details:
 
-- A rejected saved setup could leave nine empty HASC entity records behind.
-  Cleanup now removes both the HASC state and its matching HASC entity record.
+- A rejected saved setup could leave nine empty HausmanHub entity records behind.
+  Cleanup now removes both the HausmanHub state and its matching HausmanHub entity record.
 - The cleanup queued for Home Assistant startup needed the framework's
   loop-safety marker. It now uses `@callback`; the isolated local fake refuses
   an unmarked startup callback.
 - A no-longer-reachable test branch and an outdated callback name were removed
   or renamed. The restart check now separately confirms that the same old nine
-  HASC state IDs are absent.
+  HausmanHub state IDs are absent.
 
 The separate temporary lifecycle helpers for saved `data` and saved `options`
 remain intentionally explicit. They make it clear which saved block is made

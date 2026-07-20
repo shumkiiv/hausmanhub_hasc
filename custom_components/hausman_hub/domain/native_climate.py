@@ -1,4 +1,4 @@
-"""Pure preview policy for the climate controller being built inside HASC.
+"""Pure preview policy for the climate controller being built inside HausmanHub.
 
 The first native-controller stage deliberately calculates demand only.  It has
 no transport, Home Assistant service, or command dependency, so turning the
@@ -57,7 +57,7 @@ class NativeClimateSnapshot(Protocol):
 
 
 class NativeClimateMode(StrEnum):
-    """Approved rollout stages for decisions owned by HASC itself."""
+    """Approved rollout stages for decisions owned by HausmanHub itself."""
 
     DISABLED = "disabled"
     PREVIEW = "preview"
@@ -83,7 +83,7 @@ class HumidityDemand(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class NativeClimatePolicy:
-    """One-room target policy stored by HASC."""
+    """One-room target policy stored by HausmanHub."""
 
     mode: NativeClimateMode = NativeClimateMode.DISABLED
     room_id: str | None = None
@@ -138,7 +138,7 @@ class NativeClimateDecision:
 
         return {
             "contract": {
-                "name": "hausman-hasc-native-climate-preview",
+                "name": "hausman-hub-native-climate-preview",
                 "version": 1,
             },
             "status": self.status,

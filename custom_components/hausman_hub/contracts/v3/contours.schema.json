@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v3/contours.schema.json",
-  "title": "HASC automatic contours v3",
+  "$id": "https://hausman.local/hausmanhub/contracts/v3/contours.schema.json",
+  "title": "HausmanHub automatic contours v3",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "contours"],
@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-contours"},
+        "name": {"const": "hausman-hub-contours"},
         "version": {"const": 3}
       }
     },
@@ -60,11 +60,11 @@
         "execution": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["owner", "automatic_active", "hasc_direct_commands", "settings_apply"],
+          "required": ["owner", "automatic_active", "hausmanhub_direct_commands", "settings_apply"],
           "properties": {
             "owner": {"const": "existing_climate_core"},
             "automatic_active": {"type": "boolean"},
-            "hasc_direct_commands": {"const": false},
+            "hausmanhub_direct_commands": {"const": false},
             "settings_apply": {
               "type": "object",
               "additionalProperties": false,

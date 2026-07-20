@@ -1,4 +1,4 @@
-"""Stable, source-independent contracts for configuring climate in HASC."""
+"""Stable, source-independent contracts for configuring climate in HausmanHub."""
 
 from __future__ import annotations
 
@@ -23,24 +23,24 @@ from .climate_registry import registry_to_payload
 from .public_climate_values import public_climate_display_names
 
 
-CLIMATE_ROOMS_CONTRACT_NAME = "hausman-hasc-climate-rooms"
+CLIMATE_ROOMS_CONTRACT_NAME = "hausman-hub-climate-rooms"
 CLIMATE_ROOMS_CONTRACT_VERSION = 1
 MAX_AVAILABLE_CLIMATE_ROOMS = 256
-CLIMATE_DEVICE_CANDIDATES_CONTRACT_NAME = "hausman-hasc-climate-device-candidates"
+CLIMATE_DEVICE_CANDIDATES_CONTRACT_NAME = "hausman-hub-climate-device-candidates"
 CLIMATE_DEVICE_CANDIDATES_CONTRACT_VERSION = 1
 MAX_CLIMATE_DEVICE_CANDIDATES = 1024
 JSON_SAFE_INTEGER_MAXIMUM = 9_007_199_254_740_991
-CLIMATE_ROOM_SUGGESTIONS_CONTRACT_NAME = "hausman-hasc-climate-room-suggestions"
+CLIMATE_ROOM_SUGGESTIONS_CONTRACT_NAME = "hausman-hub-climate-room-suggestions"
 CLIMATE_ROOM_SUGGESTIONS_CONTRACT_VERSION = 1
-CLIMATE_DRAFT_CONTRACT_NAME = "hausman-hasc-climate-draft"
+CLIMATE_DRAFT_CONTRACT_NAME = "hausman-hub-climate-draft"
 CLIMATE_DRAFT_CONTRACT_VERSION = 1
-CLIMATE_SETUP_OPTIONS_CONTRACT_NAME = "hausman-hasc-climate-setup-options"
+CLIMATE_SETUP_OPTIONS_CONTRACT_NAME = "hausman-hub-climate-setup-options"
 CLIMATE_SETUP_OPTIONS_CONTRACT_VERSION = 1
-CLIMATE_DRAFT_VALIDATION_CONTRACT_NAME = "hausman-hasc-climate-draft-validation"
+CLIMATE_DRAFT_VALIDATION_CONTRACT_NAME = "hausman-hub-climate-draft-validation"
 CLIMATE_DRAFT_VALIDATION_CONTRACT_VERSION = 1
-CLIMATE_DRAFT_SAVE_CONTRACT_NAME = "hausman-hasc-climate-draft-save"
+CLIMATE_DRAFT_SAVE_CONTRACT_NAME = "hausman-hub-climate-draft-save"
 CLIMATE_DRAFT_SAVE_CONTRACT_VERSION = 1
-CLIMATE_CURRENT_SETUP_CONTRACT_NAME = "hausman-hasc-climate-current-setup"
+CLIMATE_CURRENT_SETUP_CONTRACT_NAME = "hausman-hub-climate-current-setup"
 CLIMATE_CURRENT_SETUP_CONTRACT_VERSION = 1
 MAX_CLIMATE_DRAFT_NAME_LENGTH = 120
 MAX_CLIMATE_DRAFT_ROOMS = 128
@@ -144,7 +144,7 @@ _SUGGESTION_REASON_NAMES = {
     "unsupported_device": "Тип устройства не поддерживается",
     "data_stale": "Нужно обновить данные",
     "device_missing": "Настроенное устройство больше не найдено",
-    "registry_mismatch": "Текущая привязка не совпадает с настройкой HASC",
+    "registry_mismatch": "Текущая привязка не совпадает с настройкой HausmanHub",
     "room_unavailable": "Комната сейчас недоступна для выбора",
 }
 
@@ -161,7 +161,7 @@ def climate_available_rooms(
     registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot,
 ) -> dict[str, object]:
-    """Return every discovered or configured room using only stable HASC IDs."""
+    """Return every discovered or configured room using only stable HausmanHub IDs."""
 
     if not isinstance(registry, ClimateRegistry):
         raise ValueError("climate room registry must be valid")
@@ -712,7 +712,7 @@ def current_climate_contour_setup(
     display_names = {
         "statuses": dict(_CURRENT_SETUP_STATUS_NAMES),
         "modes": {
-            "disabled": "Выключен в HASC",
+            "disabled": "Выключен в HausmanHub",
             **_DRAFT_MODE_NAMES,
         },
         "strategies": dict(_DRAFT_STRATEGY_NAMES),

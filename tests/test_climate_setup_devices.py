@@ -1,4 +1,4 @@
-"""Stable, understandable device candidates for HASC climate setup."""
+"""Stable, understandable device candidates for HausmanHub climate setup."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ from custom_components.hausman_hub.application.climate_setup import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FIXTURE = ROOT / "fixtures" / "climate_bridge" / "valid_state.json"
-REGISTRY_FIXTURE = ROOT / "fixtures" / "hasc_climate_v1" / "registry.json"
+REGISTRY_FIXTURE = ROOT / "fixtures" / "hausmanhub_climate_v1" / "registry.json"
 CANDIDATES_FIXTURE = (
     ROOT
     / "fixtures"
-    / "hasc_climate_device_candidates_v1"
+    / "hausmanhub_climate_device_candidates_v1"
     / "candidates.json"
 )
 CANDIDATES_SCHEMA = (
@@ -70,7 +70,7 @@ def remove_source_device(payload: object, source_id: str) -> None:
 
 
 class ClimateSetupDevicesTest(unittest.TestCase):
-    """Keep private discovery details behind stable HASC candidate fields."""
+    """Keep private discovery details behind stable HausmanHub candidate fields."""
 
     def setUp(self) -> None:
         schema = load_json(CANDIDATES_SCHEMA)

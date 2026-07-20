@@ -1,4 +1,4 @@
-"""Public discovery contract for the local HASC tablet API."""
+"""Public discovery contract for the local HausmanHub tablet API."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from .contour_override import (
 from .contours import CONTOUR_CONTRACT_NAME, CONTOUR_CONTRACT_VERSION
 
 
-API_CAPABILITIES_CONTRACT_NAME = "hausman-hasc-capabilities"
+API_CAPABILITIES_CONTRACT_NAME = "hausman-hub-capabilities"
 API_CAPABILITIES_CONTRACT_VERSION = 1
 API_MAJOR_VERSION = 1
 API_BASE_PATH = "/api/hausman_hub/v1"
@@ -43,7 +43,7 @@ OPERATION_PATH = f"{API_BASE_PATH}/operations"
 
 
 def api_capabilities_snapshot() -> dict[str, object]:
-    """Describe only the stable, local, tablet-facing HASC API surface."""
+    """Describe only the stable, local, tablet-facing HausmanHub API surface."""
 
     return {
         "contract": {

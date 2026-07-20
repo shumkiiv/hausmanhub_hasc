@@ -59,7 +59,7 @@ HOME_IPV6_NETWORK: Final[IPv6Network] = IPv6Network("fc00::/7")
 
 
 def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
-    """Register fixed routes once and point them at the loaded HASC runtime."""
+    """Register fixed routes once and point them at the loaded HausmanHub runtime."""
 
     data = hass.data.setdefault(DOMAIN, {})
     data[DATA_CLIMATE_RUNTIME] = runtime
@@ -125,14 +125,14 @@ class _ClimateView(HomeAssistantView):
 
     def _unavailable(self) -> Any:
         return self.json_message(
-            "The HASC climate API is unavailable.",
+            "The HausmanHub climate API is unavailable.",
             HTTPStatus.SERVICE_UNAVAILABLE,
             headers=NO_STORE_HEADERS,
         )
 
 
 class ClimateCapabilitiesView(_ClimateView):
-    """Advertise only installed, stable HASC tablet API capabilities."""
+    """Advertise only installed, stable HausmanHub tablet API capabilities."""
 
     url = CAPABILITIES_PATH
     name = "api:hausman_hub:capabilities"
@@ -628,7 +628,7 @@ class ClimateAdminReadinessView(_ClimateView):
 
 
 class ClimateAdminShadowEvidenceView(_ClimateView):
-    """Evaluate one public HASC room against redacted shadow evidence."""
+    """Evaluate one public HausmanHub room against redacted shadow evidence."""
 
     url = ADMIN_SHADOW_EVIDENCE_PATH
     name = "api:hausman_hub:climate_admin_shadow_evidence"
@@ -757,7 +757,7 @@ def _is_local_address(remote: object) -> bool:
 
 def _not_found(view: HomeAssistantView) -> Any:
     return view.json_message(
-        "The HASC climate API route was not found.",
+        "The HausmanHub climate API route was not found.",
         HTTPStatus.NOT_FOUND,
         headers=NO_STORE_HEADERS,
     )
@@ -765,7 +765,7 @@ def _not_found(view: HomeAssistantView) -> Any:
 
 def _forbidden(view: HomeAssistantView) -> Any:
     return view.json_message(
-        "Local HASC access is required.",
+        "Local HausmanHub access is required.",
         HTTPStatus.FORBIDDEN,
         headers=NO_STORE_HEADERS,
     )

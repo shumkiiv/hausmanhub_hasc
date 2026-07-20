@@ -4,8 +4,8 @@ Date: 2026-07-15.
 
 ## Scope
 
-This test-only change gives both HASC setup screens an isolated check for
-invented extra input. It does not change HASC runtime code, package metadata,
+This test-only change gives both HausmanHub setup screens an isolated check for
+invented extra input. It does not change HausmanHub runtime code, package metadata,
 or the approved read-only boundary.
 
 ## What the check proves

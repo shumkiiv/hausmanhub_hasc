@@ -4,7 +4,7 @@ Date: 2026-07-14.
 
 ## Scope
 
-Kimi reviewed the staged v0.2.0 change that adds the guarded local HASC
+Kimi reviewed the staged v0.2.0 change that adds the guarded local HausmanHub
 nine-count summary route. The review was read-only: it did not edit files,
 create credentials, contact a home, or make a commit or push.
 

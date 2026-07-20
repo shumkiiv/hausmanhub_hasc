@@ -9,8 +9,8 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-Before each safe HASC removal, the empty check remembers only the internal
-state names belonging to that HASC entry. After removal, it requires every one
+Before each safe HausmanHub removal, the empty check remembers only the internal
+state names belonging to that HausmanHub entry. After removal, it requires every one
 of those states to be absent. It never reads or prints a count value.
 
 ## Review outcome

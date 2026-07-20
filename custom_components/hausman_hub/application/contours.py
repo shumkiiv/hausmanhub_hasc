@@ -1,4 +1,4 @@
-"""Use cases for HASC-owned automatic contour definitions and status."""
+"""Use cases for HausmanHub-owned automatic contour definitions and status."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ from .public_climate_values import (
 
 
 CLIMATE_CONTOUR_ID = "climate"
-CONTOUR_CONTRACT_NAME = "hausman-hasc-contours"
+CONTOUR_CONTRACT_NAME = "hausman-hub-contours"
 CONTOUR_CONTRACT_VERSION = 7
 LEGACY_CONTOUR_REGISTRY_VERSION = 1
 PROFILE_CONTOUR_REGISTRY_VERSION = 2
@@ -968,7 +968,7 @@ def _contour_status(
         "execution": {
             "owner": contour.engine.value,
             "automatic_active": automatic_active,
-            "hasc_direct_commands": False,
+            "hausmanhub_direct_commands": False,
             "settings_apply": {
                 "available": settings_apply_available,
                 "requires_confirmation": True,

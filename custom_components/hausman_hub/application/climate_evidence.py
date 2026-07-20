@@ -1,6 +1,6 @@
 """Bounded, redacted shadow evidence for one future climate canary.
 
-The ledger stores only public HASC room IDs, approved action names, timestamps,
+The ledger stores only public HausmanHub room IDs, approved action names, timestamps,
 and coarse categories. Private source IDs, entity IDs, payloads, targets, and
 backend responses never enter either the persisted or administrator contract.
 """
@@ -21,7 +21,7 @@ from .climate_import import ClimateImportSnapshot
 from .climate_registry import reconcile_climate_registry, registry_to_payload
 
 
-SHADOW_EVIDENCE_CONTRACT_NAME = "hausman-hasc-climate-shadow-evidence"
+SHADOW_EVIDENCE_CONTRACT_NAME = "hausman-hub-climate-shadow-evidence"
 SHADOW_EVIDENCE_CONTRACT_VERSION = 1
 SHADOW_EVIDENCE_STORAGE_VERSION = 1
 SHADOW_EVIDENCE_WINDOW_MS = 24 * 60 * 60 * 1000

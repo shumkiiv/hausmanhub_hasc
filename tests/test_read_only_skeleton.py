@@ -61,7 +61,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("1.7.6", manifest["version"])
+        self.assertEqual("1.7.7", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
@@ -87,8 +87,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "сети: `10.x.x.x`, `172.16.x.x`–`172.31.x.x`, `192.168.x.x` или с "
             "домашнего IPv6-адреса, начинающегося с `fc` или `fd`. Пустые, "
             "служебные, тестовые, временные, внешние и другие специальные адреса "
-            "HASC не принимает. Иногда IPv4-адрес записывается внутри IPv6 как "
-            "`::ffff:…`; HASC примет такую запись только если адрес внутри неё сам "
+            "HausmanHub не принимает. Иногда IPv4-адрес записывается внутри IPv6 как "
+            "`::ffff:…`; HausmanHub примет такую запись только если адрес внутри неё сам "
             "относится к одному из перечисленных IPv4-адресов, включая `127.x.x.x`.",
             " ".join(local_access_rule.split()),
         )
@@ -102,7 +102,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "(`fc00::/7`). An IPv4 address written inside IPv6, including "
             "`::ffff:127.x.x.x`, follows the same IPv4 rule. It has no command "
             "method or outgoing connection. The owner may close this optional page "
-            "in HASC's settings without changing the nine diagnostic numbers or "
+            "in HausmanHub's settings without changing the nine diagnostic numbers or "
             "diagnostics. A previously opened address then returns only that the "
             "summary is unavailable.",
             " ".join(skeleton_access_rule.split()),
@@ -130,7 +130,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "Every code change needs independent review.",
             "Kimi must review the final current diff before the change is considered "
             "complete or before a commit, push, release, deployment, or publication.",
-            "another independent review may support every change permitted by the HASC "
+            "another independent review may support every change permitted by the HausmanHub "
             "boundaries, including code, tests, documentation, and local checks or fixes.",
             "It does not authorize a commit, push, release, deployment, publication, or "
             "new authority.",
@@ -141,7 +141,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "Kimi должен проверить окончательный текущий набор изменений до того, как "
             "изменение будет считаться завершённым или будут выполнены коммит, отправка, "
             "выпуск, развёртывание или публикация.",
-            "Он позволяет продолжать любые изменения внутри границ HASC: код, тесты, "
+            "Он позволяет продолжать любые изменения внутри границ HausmanHub: код, тесты, "
             "документацию, местные проверки и исправления.",
             "Он не разрешает коммит, отправку, выпуск, развёртывание, публикацию или новые "
             "права.",
@@ -173,7 +173,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             normalized_documents["engineering standards"],
         )
         self.assertIn(
-            "This alternative review lets every change already permitted by the HASC "
+            "This alternative review lets every change already permitted by the HausmanHub "
             "boundaries continue safely, including code, tests, documentation, and "
             "local checks or fixes. It does not authorize a commit, push, release, "
             "deployment, publication, or new authority.",
@@ -196,8 +196,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                 for policy_sentence in russian_policy:
                     self.assertIn(policy_sentence, normalized_documents[document_name])
 
-    def test_saved_settings_reload_only_this_hasc_entry(self) -> None:
-        """A saved HASC setting must apply without restarting the whole home."""
+    def test_saved_settings_reload_only_this_hausmanhub_entry(self) -> None:
+        """A saved HausmanHub setting must apply without restarting the whole home."""
 
         integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
@@ -216,7 +216,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             integration_source.index("register_local_summary_access(hass, entry)"),
             integration_source.index("entry.async_on_unload(entry.add_update_listener"),
         )
-        self.assertIn("saving safe options must reload only HASC", core_check_source)
+        self.assertIn("saving safe options must reload only HausmanHub", core_check_source)
 
     def test_optional_local_page_can_close_without_changing_the_nine_counts(self) -> None:
         """The new setting must only close the already-approved optional page."""
@@ -294,7 +294,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             ),
         )
         self.assertIn(
-            "HASC ordinary setup with its optional local page closed",
+            "HausmanHub ordinary setup with its optional local page closed",
             lifecycle_source,
         )
         self.assertIn(
@@ -322,7 +322,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         legacy_restart_check = """assert_result(
                 legacy_default_entry_options,
                 {},
-                "a legacy HASC entry must begin without the new interval option",
+                "a legacy HausmanHub entry must begin without the new interval option",
             )
             await hass.async_stop()
             hass = await async_start_empty_home_assistant(config_directory)"""
@@ -377,7 +377,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("SERVICE_TURN_ON", core_check_source)
         self.assertIn("SERVICE_TURN_OFF", core_check_source)
         self.assertIn("canary rollback must delete its saved target", core_check_source)
-        self.assertIn("canary rollback must remove its HASC registry row", core_check_source)
+        self.assertIn("canary rollback must remove its HausmanHub registry row", core_check_source)
 
     def test_distribution_documents_mark_the_private_choice_as_history(self) -> None:
         """Keep current manual-HACS instructions separate from the old choice."""
@@ -628,7 +628,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         for forbidden_value in ("token", "entity_id", "device_id", "command", "payload"):
             self.assertNotIn(forbidden_value, serialized)
 
-    def test_diagnostics_show_only_effective_safe_hasc_settings(self) -> None:
+    def test_diagnostics_show_only_effective_safe_hausmanhub_settings(self) -> None:
         """Diagnostics expose canary status and scope without its target."""
 
         snapshot = diagnostics_snapshot(
@@ -728,7 +728,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             ClimateDiagnosticsSummary("fresh", 1, 513)
 
     def test_unavailable_diagnostics_never_include_home_data(self) -> None:
-        """An inactive HASC setup must return only one static status."""
+        """An inactive HausmanHub setup must return only one static status."""
 
         self.assertEqual(
             {"diagnostics_status": "unavailable"},
@@ -767,7 +767,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         self.assertIn("lambda: collect_home_summary", local_adapter_source)
 
-    def test_local_summary_requires_a_currently_loaded_hasc_entry(self) -> None:
+    def test_local_summary_requires_a_currently_loaded_hausmanhub_entry(self) -> None:
         """A stale local pointer must close before the adapter reads the home."""
 
         local_adapter_source = (INTEGRATION / "local_summary.py").read_text(
@@ -893,13 +893,13 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual(expected_keys, tuple(payload))
         self.assertEqual({key: 0 for key in expected_keys}, payload)
 
-    def test_new_summary_sensors_use_the_hasc_name_prefix(self) -> None:
+    def test_new_summary_sensors_use_the_hausmanhub_name_prefix(self) -> None:
         """New installations must not receive generic sensor names."""
 
         sensor_source = (INTEGRATION / "sensor.py").read_text(encoding="utf-8")
 
         self.assertIn(
-            'SENSOR_ENTITY_ID_PREFIX: Final = f"sensor.{DOMAIN}_hasc"',
+            'SENSOR_ENTITY_ID_PREFIX: Final = f"sensor.{DOMAIN}"',
             sensor_source,
         )
         self.assertIn(
@@ -922,11 +922,11 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         self.assertIn("SUMMARY_SENSOR_ICONS", core_check_source)
         self.assertIn(
-            "a HASC summary sensor must keep its fixed visual icon",
+            "a HausmanHub summary sensor must keep its fixed visual icon",
             core_check_source,
         )
 
-    def test_core_smoke_check_requires_no_hasc_devices(self) -> None:
+    def test_core_smoke_check_requires_no_hausmanhub_devices(self) -> None:
         """Keep the real-Core check aligned with the no-device promise."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
@@ -937,7 +937,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("the integration must not create devices", core_check_source)
         self.assertIn("entry.device_id", core_check_source)
 
-    def test_core_smoke_check_rejects_a_second_hasc_setup(self) -> None:
+    def test_core_smoke_check_rejects_a_second_hausmanhub_setup(self) -> None:
         """Keep the one-setup promise covered by the real-Core check."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
@@ -949,7 +949,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("the integration must retain exactly one setup", core_check_source)
 
     def test_core_smoke_check_keeps_an_external_collision_entry_after_removal(self) -> None:
-        """HASC cleanup must leave an unrelated similar name untouched."""
+        """HausmanHub cleanup must leave an unrelated similar name untouched."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -957,11 +957,11 @@ class ReadOnlySkeletonTest(unittest.TestCase):
 
         self.assertIn("ReservedCollisionEntry", core_check_source)
         self.assertIn("assert_reserved_collision_entry_is_unchanged", core_check_source)
-        self.assertIn("HASC removal must keep the external collision fixture", core_check_source)
-        self.assertIn("HASC removal must not change the external collision fixture", core_check_source)
+        self.assertIn("HausmanHub removal must keep the external collision fixture", core_check_source)
+        self.assertIn("HausmanHub removal must not change the external collision fixture", core_check_source)
 
     def test_core_smoke_check_can_reinstall_after_collision_cleanup(self) -> None:
-        """A clean removal must not block the next safe HASC setup."""
+        """A clean removal must not block the next safe HausmanHub setup."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -980,7 +980,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
     def test_core_smoke_check_closes_the_local_summary_after_removal(self) -> None:
-        """The retained route must not serve counts without an active HASC entry."""
+        """The retained route must not serve counts without an active HausmanHub entry."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -991,7 +991,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
-            '"HASC removal",',
+            '"HausmanHub removal",',
             core_check_source,
         )
         self.assertIn(
@@ -1005,10 +1005,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             4,
         )
 
-    def test_core_smoke_check_deactivates_hasc_without_leaving_counts_available(
+    def test_core_smoke_check_deactivates_hausmanhub_without_leaving_counts_available(
         self,
     ) -> None:
-        """The normal deactivation control must close and then safely restore HASC."""
+        """The normal deactivation control must close and then safely restore HausmanHub."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1019,13 +1019,13 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("ConfigEntryDisabler.USER", core_check_source)
         self.assertIn("async_enable_safe_entry", core_check_source)
         self.assertIn("assert_entry_has_disabled_summary_sensors", core_check_source)
-        self.assertIn('"HASC deactivation",', lifecycle_source)
+        self.assertIn('"HausmanHub deactivation",', lifecycle_source)
         self.assertIn(
-            "a deactivated HASC summary sensor must be disabled by its setup",
+            "a deactivated HausmanHub summary sensor must be disabled by its setup",
             core_check_source,
         )
         self.assertIn(
-            "a deactivated HASC summary sensor must not keep a state",
+            "a deactivated HausmanHub summary sensor must not keep a state",
             core_check_source,
         )
         self.assertLess(
@@ -1033,7 +1033,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index("await async_enable_safe_entry(hass, read_only_entry)"),
         )
 
-    def test_core_smoke_check_unloads_and_starts_hasc_without_user_deactivation(
+    def test_core_smoke_check_unloads_and_starts_hausmanhub_without_user_deactivation(
         self,
     ) -> None:
         """Ordinary unload must close values before the same entry starts again."""
@@ -1049,11 +1049,11 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "assert_entry_has_unloaded_summary_sensors",
             "hass.config_entries.async_unload(entry.entry_id)",
             "hass.config_entries.async_setup(entry.entry_id)",
-            "ordinary unload must not user-deactivate HASC",
-            "an unloaded HASC summary sensor must remain enabled",
-            "an unloaded HASC summary sensor must not keep a state",
-            '"HASC ordinary unload",',
-            '"HASC ordinary setup with its optional local page closed",',
+            "ordinary unload must not user-deactivate HausmanHub",
+            "an unloaded HausmanHub summary sensor must remain enabled",
+            "an unloaded HausmanHub summary sensor must not keep a state",
+            '"HausmanHub ordinary unload",',
+            '"HausmanHub ordinary setup with its optional local page closed",',
         ):
             self.assertIn(requirement, core_check_source)
 
@@ -1067,10 +1067,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
         self.assertLess(lifecycle_source.index(setup_call), lifecycle_source.index(disable_call))
 
-    def test_core_smoke_check_recovers_ordinary_unloaded_hasc_after_restart(
+    def test_core_smoke_check_recovers_ordinary_unloaded_hausmanhub_after_restart(
         self,
     ) -> None:
-        """An enabled HASC setup must return by itself after an ordinary stop."""
+        """An enabled HausmanHub setup must return by itself after an ordinary stop."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1079,12 +1079,12 @@ class ReadOnlySkeletonTest(unittest.TestCase):
 
         for requirement in (
             "async_assert_ordinary_unloaded_entry_recovers_after_restart",
-            "ordinary unload restart must keep HASC user-enabled",
-            "ordinary unload restart must auto-load HASC",
+            "ordinary unload restart must keep HausmanHub user-enabled",
+            "ordinary unload restart must auto-load HausmanHub",
             "ordinary unload restart must preserve safe entry data",
             "ordinary unload restart must preserve safe entry options",
-            '"ordinary HASC stop before restart with its optional local page closed",',
-            '"HASC ordinary-unload restart temporary",',
+            '"ordinary HausmanHub stop before restart with its optional local page closed",',
+            '"HausmanHub ordinary-unload restart temporary",',
             '"ordinary unload restart with its optional local page closed",',
         ):
             self.assertIn(requirement, core_check_source)
@@ -1099,8 +1099,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertLess(lifecycle_source.index(stop_call), lifecycle_source.index(restart_call))
         self.assertLess(lifecycle_source.index(restart_call), lifecycle_source.index(recovery_call))
 
-    def test_core_smoke_check_removes_ordinarily_stopped_hasc(self) -> None:
-        """An ordinary stopped, still-enabled HASC setup must remove cleanly."""
+    def test_core_smoke_check_removes_ordinarily_stopped_hausmanhub(self) -> None:
+        """An ordinary stopped, still-enabled HausmanHub setup must remove cleanly."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1108,14 +1108,14 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
         helper_source = core_check_source.split(
             "async def async_assert_ordinary_unloaded_entry_can_be_removed(", 1
-        )[1].split("\n\ndef assert_hasc_stays_removed_after_restart", 1)[0]
+        )[1].split("\n\ndef assert_hausmanhub_stays_removed_after_restart", 1)[0]
 
         for requirement in (
-            "ordinary stopped, still-enabled HASC entry to remove cleanly",
+            "ordinary stopped, still-enabled HausmanHub entry to remove cleanly",
             "ordinary unload before removal must preserve safe entry data",
             "ordinary unload before removal must preserve safe entry options",
-            '"HASC ordinary unload before removal",',
-            '"HASC removal after ordinary unload",',
+            '"HausmanHub ordinary unload before removal",',
+            '"HausmanHub removal after ordinary unload",',
         ):
             self.assertIn(requirement, helper_source)
 
@@ -1142,8 +1142,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index(preservation_call, stopped_removal_start),
         )
 
-    def test_core_smoke_check_deactivates_ordinarily_stopped_hasc(self) -> None:
-        """An ordinary stopped HASC setup must still deactivate cleanly."""
+    def test_core_smoke_check_deactivates_ordinarily_stopped_hausmanhub(self) -> None:
+        """An ordinary stopped HausmanHub setup must still deactivate cleanly."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1153,8 +1153,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         for requirement in (
             "ordinary unload before deactivation must preserve safe entry data",
             "ordinary unload before deactivation must preserve safe entry options",
-            '"HASC ordinary unload before deactivation",',
-            '"HASC deactivation after ordinary unload",',
+            '"HausmanHub ordinary unload before deactivation",',
+            '"HausmanHub deactivation after ordinary unload",',
         ):
             self.assertIn(requirement, lifecycle_source)
 
@@ -1175,8 +1175,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index("assert_entry_has_disabled_summary_sensors(", deactivation_start),
         )
 
-    def test_core_smoke_check_reactivates_ordinarily_stopped_hasc(self) -> None:
-        """An ordinarily stopped HASC setup must reactivate before restart."""
+    def test_core_smoke_check_reactivates_ordinarily_stopped_hausmanhub(self) -> None:
+        """An ordinarily stopped HausmanHub setup must reactivate before restart."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1186,8 +1186,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         for requirement in (
             "ordinary-unload reactivation must preserve safe entry data",
             "ordinary-unload reactivation must preserve safe entry options",
-            '"HASC reactivation after ordinary unload",',
-            '"HASC second deactivation after ordinary unload",',
+            '"HausmanHub reactivation after ordinary unload",',
+            '"HausmanHub second deactivation after ordinary unload",',
         ):
             self.assertIn(requirement, lifecycle_source)
 
@@ -1231,10 +1231,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertLess(safe_diagnostics_start, local_page_start)
         self.assertLess(local_page_start, second_deactivation_start)
 
-    def test_core_smoke_check_rejects_a_second_setup_while_hasc_is_stopped(
+    def test_core_smoke_check_rejects_a_second_setup_while_hausmanhub_is_stopped(
         self,
     ) -> None:
-        """An ordinary stop must not permit a second saved HASC setup."""
+        """An ordinary stop must not permit a second saved HausmanHub setup."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1244,8 +1244,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         for requirement in (
             "expected_entry_state: config_entries.ConfigEntryState",
             "expected_disabled_by: ConfigEntryDisabler | None",
-            "a rejected second setup must preserve HASC deactivation state",
-            "a rejected second setup must keep the existing HASC state",
+            "a rejected second setup must preserve HausmanHub deactivation state",
+            "a rejected second setup must keep the existing HausmanHub state",
             "ConfigEntryState.NOT_LOADED",
         ):
             self.assertIn(requirement, core_check_source)
@@ -1258,7 +1258,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index(unload_call),
         )
         unavailable_marker = (
-            '"ordinary HASC stop before restart with its optional local page closed",'
+            '"ordinary HausmanHub stop before restart with its optional local page closed",'
         )
         self.assertLess(lifecycle_source.index(unload_call), rejection_start)
         self.assertLess(
@@ -1270,10 +1270,10 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index(unavailable_marker),
         )
 
-    def test_core_smoke_check_rejects_second_setup_while_hasc_is_disabled_after_restart(
+    def test_core_smoke_check_rejects_second_setup_while_hausmanhub_is_disabled_after_restart(
         self,
     ) -> None:
-        """A disabled saved HASC setup must still prevent a second setup."""
+        """A disabled saved HausmanHub setup must still prevent a second setup."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1282,7 +1282,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
 
         for requirement in (
             "expected_disabled_by: ConfigEntryDisabler | None",
-            "a rejected second setup must preserve HASC deactivation state",
+            "a rejected second setup must preserve HausmanHub deactivation state",
         ):
             self.assertIn(requirement, core_check_source)
 
@@ -1314,8 +1314,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertLess(disabled_marker_position, second_inactive_position)
         self.assertLess(second_inactive_position, enable_position)
 
-    def test_core_smoke_check_removes_a_disabled_hasc_setup_after_restart(self) -> None:
-        """A saved disabled HASC setup must be removable after a restart."""
+    def test_core_smoke_check_removes_a_disabled_hausmanhub_setup_after_restart(self) -> None:
+        """A saved disabled HausmanHub setup must be removable after a restart."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1326,7 +1326,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "disabled_reinstall_entry_id",
             "disabled_reinstall_entity_ids",
             "disabled_removal_hass = await async_start_empty_home_assistant",
-            "disabled HASC setup must persist until its removal",
+            "disabled HausmanHub setup must persist until its removal",
         ):
             self.assertIn(requirement, lifecycle_source)
 
@@ -1370,7 +1370,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
     def test_core_smoke_check_keeps_user_deactivation_after_restart(self) -> None:
-        """A restart or safe update must not silently reactivate HASC."""
+        """A restart or safe update must not silently reactivate HausmanHub."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1382,14 +1382,14 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
-            "a deactivated HASC must not restore its local page after restart",
+            "a deactivated HausmanHub must not restore its local page after restart",
             core_check_source,
         )
         self.assertIn(
-            "a deactivated HASC must not restore state values after restart",
+            "a deactivated HausmanHub must not restore state values after restart",
             core_check_source,
         )
-        self.assertIn('"HASC deactivation before restart",', lifecycle_source)
+        self.assertIn('"HausmanHub deactivation before restart",', lifecycle_source)
         self.assertIn(
             '"user reactivation after restart with its optional local page closed",',
             lifecycle_source,
@@ -1403,7 +1403,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             lifecycle_source.index("await async_enable_safe_entry(restarted_hass, restored_entry)"),
         )
 
-    def test_core_smoke_check_closes_multiple_saved_hasc_entries(self) -> None:
+    def test_core_smoke_check_closes_multiple_saved_hausmanhub_entries(self) -> None:
         """A corrupted saved pair must show nothing until one entry is removed."""
 
         integration_source = (INTEGRATION / "__init__.py").read_text(encoding="utf-8")
@@ -1417,22 +1417,22 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             integration_source.index("async_entries(entry.domain)"),
             integration_source.index("async_forward_entry_setups"),
         )
-        self.assertIn("_close_running_duplicate_hasc_entries", integration_source)
+        self.assertIn("_close_running_duplicate_hausmanhub_entries", integration_source)
         self.assertIn("async_loaded_entries(domain)", integration_source)
-        self.assertIn("_clear_restored_hasc_records", integration_source)
+        self.assertIn("_clear_restored_hausmanhub_records", integration_source)
         self.assertIn("async_add_disposable_persisted_duplicate_entry", core_check_source)
         self.assertIn("assert_persisted_duplicate_entries_stay_closed", core_check_source)
         self.assertIn("async_assert_persisted_duplicate_entry_lifecycle", core_check_source)
         self.assertIn(
-            "a duplicate saved HASC entry must not load",
+            "a duplicate saved HausmanHub entry must not load",
             core_check_source,
         )
         self.assertIn(
-            "duplicate saved HASC entries must not restore count records",
+            "duplicate saved HausmanHub entries must not restore count records",
             core_check_source,
         )
         self.assertIn(
-            "removing the duplicate must retain only the original HASC entry",
+            "removing the duplicate must retain only the original HausmanHub entry",
             core_check_source,
         )
         self.assertEqual(
@@ -1442,15 +1442,15 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("first_entry_is_user_disabled=True", lifecycle_source)
         self.assertIn("first_entry_is_user_disabled=False", lifecycle_source)
         self.assertIn(
-            "removing a duplicate must not automatically load the remaining HASC",
+            "removing a duplicate must not automatically load the remaining HausmanHub",
             core_check_source,
         )
         self.assertIn(
-            "the remaining enabled HASC entry must reload after duplicate removal",
+            "the remaining enabled HausmanHub entry must reload after duplicate removal",
             core_check_source,
         )
         self.assertIn("expect_retained_local_summary_route=True", core_check_source)
-        self.assertIn("adding a duplicate saved HASC entry", core_check_source)
+        self.assertIn("adding a duplicate saved HausmanHub entry", core_check_source)
 
     def test_core_smoke_check_keeps_one_local_summary_route(self) -> None:
         """The temporary lifecycle must never accumulate duplicate local pages."""
@@ -1513,7 +1513,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
     def test_core_smoke_check_prevents_local_summary_caching(self) -> None:
-        """Every HASC-produced local-page response must tell browsers not to store it."""
+        """Every HausmanHub-produced local-page response must tell browsers not to store it."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1712,23 +1712,23 @@ class ReadOnlySkeletonTest(unittest.TestCase):
 
         self.assertIn("assert_persisted_unsafe_entry_stays_closed", core_check_source)
         self.assertIn(
-            "an invalid saved HASC entry must not load after restart",
+            "an invalid saved HausmanHub entry must not load after restart",
             core_check_source,
         )
         self.assertIn(
-            "an invalid saved HASC entry must not restore count states",
+            "an invalid saved HausmanHub entry must not restore count states",
             core_check_source,
         )
         self.assertIn(
-            "an invalid saved HASC entry must not restore entity registry records",
+            "an invalid saved HausmanHub entry must not restore entity registry records",
             core_check_source,
         )
-        self.assertIn("async_assert_unsafe_saved_update_closes_hasc", core_check_source)
+        self.assertIn("async_assert_unsafe_saved_update_closes_hausmanhub", core_check_source)
         self.assertIn(
-            "async_save_unsafe_hasc_setting_without_reading_home",
+            "async_save_unsafe_hausmanhub_setting_without_reading_home",
             core_check_source,
         )
-        self.assertIn("must close HASC automatically", core_check_source)
+        self.assertIn("must close HausmanHub automatically", core_check_source)
         self.assertIn("must clear entity registry records automatically", core_check_source)
         self.assertIn("must clear count states automatically", core_check_source)
         self.assertIn("async_block_home_summary_reads", core_check_source)
@@ -1784,7 +1784,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn("await async_assert_local_summary_is_unavailable(", core_check_source)
-        self.assertIn("corrected HASC data removal", core_check_source)
+        self.assertIn("corrected HausmanHub data removal", core_check_source)
         self.assertIn("(*previous_removed_entries, removed_entry)", core_check_source)
         self.assertLess(
             lifecycle_source.index("UNSAFE_PROXY_DATA"),
@@ -1808,7 +1808,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
     def test_core_smoke_check_rejects_unsafe_manual_activation(self) -> None:
-        """A disabled HASC must not start from either kind of unsafe saved setting."""
+        """A disabled HausmanHub must not start from either kind of unsafe saved setting."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -1822,8 +1822,8 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("async_enable_unsafe_entry_without_reading_home", core_check_source)
         self.assertIn("async_block_home_summary_reads", core_check_source)
         self.assertIn("must reject unsafe activation", core_check_source)
-        self.assertIn("must attempt exactly one HASC reload", core_check_source)
-        self.assertIn("must leave unsafe HASC closed with a setup error", core_check_source)
+        self.assertIn("must attempt exactly one HausmanHub reload", core_check_source)
+        self.assertIn("must leave unsafe HausmanHub closed with a setup error", core_check_source)
         self.assertIn("must not register services", core_check_source)
         self.assertIn("unsafe_data: dict[str, str] | None = None", core_check_source)
         self.assertIn("unsafe_options: dict[str, str] | None = None", core_check_source)
@@ -1857,14 +1857,14 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             "assert_deactivated_entry_stays_inactive_after_restart",
             core_check_source,
         )
-        self.assertIn("must not restore HASC runtime data", core_check_source)
+        self.assertIn("must not restore HausmanHub runtime data", core_check_source)
         self.assertIn("must not restore the local summary route", core_check_source)
         self.assertIn(
             "async_repair_unsafe_entry_after_rejected_activation",
             core_check_source,
         )
         self.assertIn(
-            "must reload HASC exactly once after manual repair",
+            "must reload HausmanHub exactly once after manual repair",
             core_check_source,
         )
         self.assertIn(
@@ -1904,7 +1904,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
-            "async_assert_partial_main_repair_keeps_hasc_closed",
+            "async_assert_partial_main_repair_keeps_hausmanhub_closed",
             core_check_source,
         )
         self.assertIn(
@@ -1972,20 +1972,20 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("recovered_entry_options", core_check_source)
         self.assertIn("async_assert_corrected_entry_stays_safe_after_restart", core_check_source)
         self.assertIn(
-            "a manually corrected HASC data entry must reload successfully",
+            "a manually corrected HausmanHub data entry must reload successfully",
             core_check_source,
         )
         self.assertIn(
             "manual data correction must restore approved entry data",
             core_check_source,
         )
-        self.assertIn("HASC corrected {scenario_name} temporary", core_check_source)
-        self.assertIn("HASC corrected-settings restart temporary", core_check_source)
+        self.assertIn("HausmanHub corrected {scenario_name} temporary", core_check_source)
+        self.assertIn("HausmanHub corrected-settings restart temporary", core_check_source)
         self.assertIn(
             "restart must preserve the manually corrected safe entry data",
             core_check_source,
         )
-        self.assertIn("corrected HASC data removal", core_check_source)
+        self.assertIn("corrected HausmanHub data removal", core_check_source)
         self.assertLess(
             core_check_source.index("assert_persisted_unsafe_entry_stays_closed("),
             core_check_source.index("reloaded_recovered_entry ="),
@@ -2023,15 +2023,15 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertIn("invalid_options_safe_options", core_check_source)
         self.assertIn("invalid_options_entity_ids", core_check_source)
         self.assertIn(
-            "manually corrected HASC options must reload successfully",
+            "manually corrected HausmanHub options must reload successfully",
             core_check_source,
         )
         self.assertIn(
             "restart must preserve the temporary invalid entry options",
             core_check_source,
         )
-        self.assertIn("HASC corrected {scenario_name} temporary", core_check_source)
-        self.assertIn("corrected HASC options removal", core_check_source)
+        self.assertIn("HausmanHub corrected {scenario_name} temporary", core_check_source)
+        self.assertIn("corrected HausmanHub options removal", core_check_source)
         self.assertIn("(*previous_removed_entries, removed_entry)", core_check_source)
         self.assertLess(
             lifecycle_source.index("UNSAFE_PROXY_OPTIONS"),
@@ -2043,7 +2043,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         )
 
     def test_core_smoke_check_removes_state_values_after_removal(self) -> None:
-        """A removed HASC entry must not leave count values in the state machine."""
+        """A removed HausmanHub entry must not leave count values in the state machine."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
@@ -2056,25 +2056,25 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
 
-    def test_core_smoke_check_keeps_hasc_removed_after_restart(self) -> None:
-        """A final empty restart must not silently restore a removed HASC."""
+    def test_core_smoke_check_keeps_hausmanhub_removed_after_restart(self) -> None:
+        """A final empty restart must not silently restore a removed HausmanHub."""
 
         core_check_source = (ROOT / "tools" / "check_home_assistant_core.py").read_text(
             encoding="utf-8"
         )
 
         self.assertIn("RemovedHascEntry", core_check_source)
-        self.assertIn("assert_hasc_stays_removed_after_restart", core_check_source)
+        self.assertIn("assert_hausmanhub_stays_removed_after_restart", core_check_source)
         self.assertIn(
             "post_removal_hass = await async_start_empty_home_assistant",
             core_check_source,
         )
         self.assertIn(
-            "removed HASC must not restore config entries after restart",
+            "removed HausmanHub must not restore config entries after restart",
             core_check_source,
         )
         self.assertIn(
-            "removed HASC must not restore local summary route after restart",
+            "removed HausmanHub must not restore local summary route after restart",
             core_check_source,
         )
 
@@ -2087,19 +2087,19 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         lifecycle_source = core_check_source.split("async def async_run_check()", 1)[1]
 
         self.assertLess(
-            lifecycle_source.index("assert_hasc_stays_removed_after_restart("),
+            lifecycle_source.index("assert_hausmanhub_stays_removed_after_restart("),
             lifecycle_source.index("fresh_entry = await async_create_safe_entry("),
         )
         self.assertIn(
-            "fresh HASC setup must use a new entry identifier",
+            "fresh HausmanHub setup must use a new entry identifier",
             lifecycle_source,
         )
         self.assertIn(
-            '"HASC post-restart temporary",',
+            '"HausmanHub post-restart temporary",',
             lifecycle_source,
         )
         self.assertIn(
-            "assert_reserved_name_does_not_block_hasc(",
+            "assert_reserved_name_does_not_block_hausmanhub(",
             lifecycle_source,
         )
 
@@ -2128,7 +2128,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertGreaterEqual(
-            lifecycle_source.count("assert_hasc_stays_removed_after_restart("),
+            lifecycle_source.count("assert_hausmanhub_stays_removed_after_restart("),
             1,
         )
 

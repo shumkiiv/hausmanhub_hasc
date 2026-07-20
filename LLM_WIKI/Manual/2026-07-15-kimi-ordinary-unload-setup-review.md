@@ -5,9 +5,9 @@ Date: 2026-07-15.
 ## Scope
 
 This change adds one disposable Core lifecycle check. It temporarily unloads
-one safe HASC setup without disabling it, checks the safe middle state, then
+one safe HausmanHub setup without disabling it, checks the safe middle state, then
 starts the same saved setup again. It does not change the integration package,
-HACS metadata, or HASC runtime authority.
+HACS metadata, or HausmanHub runtime authority.
 
 ## What the check proves
 

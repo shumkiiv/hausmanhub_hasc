@@ -4,8 +4,8 @@ Date: 2026-07-15.
 
 ## Scope
 
-Independent read-only review of the test-only HASC lifecycle addition. In an
-empty temporary Home Assistant, it covers an ordinary HASC stop, user
+Independent read-only review of the test-only HausmanHub lifecycle addition. In an
+empty temporary Home Assistant, it covers an ordinary HausmanHub stop, user
 deactivation, immediate user reactivation without a restart, and one final
 deactivation for the existing restart-and-removal path.
 

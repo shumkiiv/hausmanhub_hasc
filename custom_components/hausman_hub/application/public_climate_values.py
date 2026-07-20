@@ -22,7 +22,7 @@ PUBLIC_CLIMATE_DISPLAY_NAMES: Mapping[str, Mapping[str, str]] = {
     "control_scopes": {
         "observed": "Только наблюдение",
         "canary": "Пробное управление",
-        "managed": "Управление HASC",
+        "managed": "Управление HausmanHub",
     },
     "device_capabilities": {
         "power": "Включение и выключение",
@@ -72,7 +72,7 @@ PUBLIC_CLIMATE_DISPLAY_NAMES: Mapping[str, Mapping[str, str]] = {
     },
     "contour_kinds": {"climate": "Климат"},
     "contour_modes": {
-        "disabled": "Выключен в HASC",
+        "disabled": "Выключен в HausmanHub",
         "observe": "Наблюдение",
         "automatic": "Автоматически",
     },
@@ -132,7 +132,7 @@ def public_climate_display_names(
 
 
 def public_room_mode(value: object) -> str:
-    """Normalize a private engine room mode to one stable HASC code."""
+    """Normalize a private engine room mode to one stable HausmanHub code."""
 
     if value in {"auto", "forced_auto_only"}:
         return "automatic"
@@ -167,7 +167,7 @@ def public_device_state(value: object, *, available: bool) -> str:
 
 
 def public_strategy(value: object) -> str:
-    """Return only a known HASC strategy code."""
+    """Return only a known HausmanHub strategy code."""
 
     if value in {"soft", "normal", "aggressive"}:
         return str(value)

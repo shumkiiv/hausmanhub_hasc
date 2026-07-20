@@ -35,7 +35,7 @@ sessions were `ses_0a3cbc10dffeAqZKGhPDDs70He` and
 
 ## Local verification
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 21 passed
 - `git diff --check`
 

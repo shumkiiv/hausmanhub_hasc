@@ -1,4 +1,4 @@
-"""Pure tests for the strict HASC-to-climate-core command translator."""
+"""Pure tests for the strict HausmanHub-to-climate-core command translator."""
 
 from __future__ import annotations
 

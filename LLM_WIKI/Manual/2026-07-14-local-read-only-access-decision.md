@@ -1,10 +1,10 @@
-# Decision: guarded local access to the HASC nine-count summary
+# Decision: guarded local access to the HausmanHub nine-count summary
 
 Date: 2026-07-14.
 
 ## Owner approval
 
-The owner explicitly approved local HASC access only to the fixed nine-count
+The owner explicitly approved local HausmanHub access only to the fixed nine-count
 home summary. The approval does not cover names, identifiers, readings,
 history, commands, services, proxy, direct execution, remote internet access,
 or authority over any contour.
@@ -30,11 +30,11 @@ the stored safe configuration is invalid.
 
 ## Activation gate
 
-The owner must update HASC first, then create a separate non-administrator
+The owner must update HausmanHub first, then create a separate non-administrator
 Home Assistant account with only the built-in read-only group. If the current
 Home Assistant interface does not offer that exact group, do not edit internal
 storage manually. Stop at that point and select another safe approach through
 a new decision.
 
-Any credential remains local to the owner and outside the HASC repository.
+Any credential remains local to the owner and outside the HausmanHub repository.
 No live API call is made while implementing or verifying this change.

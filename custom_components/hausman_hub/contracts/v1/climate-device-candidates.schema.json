@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/climate-device-candidates.schema.json",
-  "title": "HASC climate device candidates v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/climate-device-candidates.schema.json",
+  "title": "HausmanHub climate device candidates v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,7 +19,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-climate-device-candidates"},
+        "name": {"const": "hausman-hub-climate-device-candidates"},
         "version": {"const": 1}
       }
     },

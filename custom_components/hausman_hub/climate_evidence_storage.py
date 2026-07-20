@@ -22,7 +22,7 @@ class ClimateEvidenceStorageError(RuntimeError):
 
 
 class HomeAssistantClimateEvidenceStore:
-    """Persist one bounded evidence window per single HASC config entry."""
+    """Persist one bounded evidence window per single HausmanHub config entry."""
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         self._store: Store[dict[str, object]] = Store(

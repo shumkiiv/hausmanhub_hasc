@@ -14,10 +14,10 @@ Kimi session `ses_097d81ab3ffe1O2oM2CerYgBTD` using
 
 It confirmed that the restart is available only after the second safe repair.
 The current temporary Home Assistant is stopped before a fresh empty instance
-starts, which then must preserve one exact safe HASC entry, the direct-
+starts, which then must preserve one exact safe HausmanHub entry, the direct-
 execution block, the same nine count sensors, fixed diagnostics, and the
 guarded local page. The existing removal and final absence restart remain in
-place; no HASC service, device, or execution surface appears.
+place; no HausmanHub service, device, or execution surface appears.
 
 ## Evidence
 

@@ -1,4 +1,4 @@
-"""Home Assistant-facing identifiers for the HausMan Hub skeleton."""
+"""Home Assistant-facing identifiers for the HausmanHub skeleton."""
 
 from __future__ import annotations
 
@@ -6,5 +6,5 @@ from typing import Final
 
 
 DOMAIN: Final = "hausman_hub"
-ENTRY_TITLE: Final = "HASC"
+ENTRY_TITLE: Final = "HausmanHub"
 ENTRY_UNIQUE_ID: Final = "hausman_hub_read_only_skeleton"

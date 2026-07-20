@@ -5,8 +5,8 @@ Date: 2026-07-15.
 ## Scope
 
 Version 0.3.9 changes the local nine-count page so that the application layer
-checks the saved HASC data and mode choice before it asks the outer adapter to
-read the local home summary. If those saved values become unsafe while HASC is
+checks the saved HausmanHub data and mode choice before it asks the outer adapter to
+read the local home summary. If those saved values become unsafe while HausmanHub is
 still loaded and before an explicit reload, the page must return only its
 unavailable response and must not read the home.
 

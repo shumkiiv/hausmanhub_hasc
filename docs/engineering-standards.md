@@ -1,6 +1,6 @@
 # Engineering standards
 
-These standards apply to every future HASC code change.
+These standards apply to every future HausmanHub code change.
 
 ## Clean Code
 
@@ -38,7 +38,7 @@ files, and local test results.
 If Kimi is temporarily unavailable, for example because of a provider error or
 a quota limit, use a different independent reviewer for the final local diff.
 Record who reviewed it, what was checked, and whether findings remain. This
-alternative review lets every change already permitted by the HASC boundaries
+alternative review lets every change already permitted by the HausmanHub boundaries
 continue safely, including code, tests, documentation, and local checks or
 fixes. It does not authorize a commit, push, release, deployment, publication,
 or new authority.

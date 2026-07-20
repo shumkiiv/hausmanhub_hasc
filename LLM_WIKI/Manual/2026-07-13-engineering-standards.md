@@ -4,7 +4,7 @@ Date: 2026-07-13.
 
 ## User decision
 
-HASC must be designed and implemented according to Clean Code and Clean
+HausmanHub must be designed and implemented according to Clean Code and Clean
 Architecture. Kimi code review is mandatory for every future code change.
 
 ## Operational rule

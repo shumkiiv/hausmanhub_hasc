@@ -27,17 +27,17 @@ from .domain.control import INPUT_BOOLEAN_DOMAIN
 
 
 CANARY_SWITCH_TRANSLATION_KEY: Final = "canary_control"
-CANARY_SWITCH_ENTITY_ID: Final = f"switch.{DOMAIN}_hasc_canary_control"
+CANARY_SWITCH_ENTITY_ID: Final = f"switch.{DOMAIN}_canary_control"
 
 
 def _canary_unique_id(entry_id: str) -> str:
-    """Return the one stable registry key owned by a HASC entry."""
+    """Return the one stable registry key owned by a HausmanHub entry."""
 
     return f"{entry_id}_{CANARY_SWITCH_TRANSLATION_KEY}"
 
 
 def _remove_disabled_canary_record(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Remove only HASC's stale canary row after the owner disarms it."""
+    """Remove only HausmanHub's stale canary row after the owner disarms it."""
 
     registry = entity_registry.async_get(hass)
     entity_id = registry.async_get_entity_id(
@@ -134,18 +134,18 @@ class CanaryInputBooleanSwitch(SwitchEntity):
         await self._async_set_target(False)
 
     def _current_configuration(self) -> SafeConfiguration:
-        """Revalidate the one saved HASC entry before every action or display."""
+        """Revalidate the one saved HausmanHub entry before every action or display."""
 
         entries = self.hass.config_entries.async_entries(self._entry.domain)
         if len(entries) != 1 or entries[0].entry_id != self._entry.entry_id:
-            raise CanaryControlViolation("canary requires one saved HASC entry")
+            raise CanaryControlViolation("canary requires one saved HausmanHub entry")
         try:
             configuration = effective_configuration(
                 self._entry.data,
                 self._entry.options,
             )
         except ConfigurationViolation as error:
-            raise CanaryControlViolation("HASC configuration is unsafe") from error
+            raise CanaryControlViolation("HausmanHub configuration is unsafe") from error
         canary_control_command(
             configuration,
             self._target_entity_id,
@@ -165,16 +165,16 @@ class CanaryInputBooleanSwitch(SwitchEntity):
             )
         except CanaryControlViolation as error:
             raise HomeAssistantError(
-                "HASC canary control is no longer authorized"
+                "HausmanHub canary control is no longer authorized"
             ) from error
 
         state = self.hass.states.get(command.target_entity_id)
         if state is None or state.state not in (STATE_ON, STATE_OFF):
-            raise HomeAssistantError("HASC canary helper is unavailable")
+            raise HomeAssistantError("HausmanHub canary helper is unavailable")
 
         service = SERVICE_TURN_ON if command.turn_on else SERVICE_TURN_OFF
         if not self.hass.services.has_service(INPUT_BOOLEAN_DOMAIN, service):
-            raise HomeAssistantError("HASC canary helper service is unavailable")
+            raise HomeAssistantError("HausmanHub canary helper service is unavailable")
         await self.hass.services.async_call(
             INPUT_BOOLEAN_DOMAIN,
             service,

@@ -9,8 +9,8 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-The local nine-count route remains registered so a later safe HASC setup can
-reuse it. After each HASC removal, the empty check now creates an exact
+The local nine-count route remains registered so a later safe HausmanHub setup can
+reuse it. After each HausmanHub removal, the empty check now creates an exact
 read-only temporary user, uses an authenticated loopback request, and requires
 the route to return only an unavailable response. The response must not include
 any of the nine approved count keys.

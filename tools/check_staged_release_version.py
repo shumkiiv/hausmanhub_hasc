@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require a higher HASC version when release-relevant files are staged.
+"""Require a higher HausmanHub version when release-relevant files are staged.
 
 The check reads only the local Git index and the preceding local commit. It
 does not contact Home Assistant, a home, devices, or the internet.

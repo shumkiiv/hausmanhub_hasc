@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable lifecycle that repairs exact
-safe settings after HASC has already recovered once, received unsafe
+safe settings after HausmanHub has already recovered once, received unsafe
 direct-execution data again, and closed again.
 
 ## Result
@@ -16,9 +16,9 @@ Kimi session `ses_097e1fc1affek3Z0BzpW3DMumA` using
 It confirmed that this second repair is allowed only after the earlier repeat
 closure. During the saved correction all home-summary readers deliberately
 fail, and the helper records exactly one reload: the separate explicit safe
-reload. Only after that reload may HASC restore exact safe data and options,
+reload. Only after that reload may HausmanHub restore exact safe data and options,
 the direct-execution block, the same nine count sensors, fixed diagnostics,
-and the guarded local page. No HASC service or device is created.
+and the guarded local page. No HausmanHub service or device is created.
 
 ## Evidence
 

@@ -1,0 +1,32 @@
+{
+  "contract": {
+    "name": "hausman-hub-climate-rooms",
+    "version": 1
+  },
+  "generated_at": 1784280000000,
+  "data_status": "current",
+  "selection_allowed": true,
+  "display_names": {
+    "room_status": {
+      "available": "Можно выбрать",
+      "data_stale": "Нужно обновить данные",
+      "source_missing": "Комната больше не найдена"
+    }
+  },
+  "rooms": [
+    {
+      "id": "kids",
+      "name": "Kids",
+      "configured": false,
+      "selectable": true,
+      "status": "available"
+    },
+    {
+      "id": "living",
+      "name": "Гостиная",
+      "configured": true,
+      "selectable": true,
+      "status": "available"
+    }
+  ]
+}

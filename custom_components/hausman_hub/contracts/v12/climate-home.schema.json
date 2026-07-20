@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v12/climate-home.schema.json",
-  "title": "HASC climate home with stable public state revision v12",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v12/climate-home.schema.json",
+  "title": "HausmanHub climate home with stable public state revision v12",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -24,7 +24,7 @@
       ],
       "properties": {
         "name": {
-          "const": "hausman-hasc-home"
+          "const": "hausman-hub-home"
         },
         "version": {
           "const": 12
@@ -1454,7 +1454,7 @@
       "required": [
         "owner",
         "automatic_active",
-        "hasc_direct_commands",
+        "hausmanhub_direct_commands",
         "settings_apply",
         "temporary_temperature"
       ],
@@ -1465,7 +1465,7 @@
         "automatic_active": {
           "type": "boolean"
         },
-        "hasc_direct_commands": {
+        "hausmanhub_direct_commands": {
           "const": false
         },
         "settings_apply": {
@@ -1627,7 +1627,7 @@
               "const": "Пробное управление"
             },
             "managed": {
-              "const": "Управление HASC"
+              "const": "Управление HausmanHub"
             }
           }
         },
@@ -1838,7 +1838,7 @@
           ],
           "properties": {
             "disabled": {
-              "const": "Выключен в HASC"
+              "const": "Выключен в HausmanHub"
             },
             "observe": {
               "const": "Наблюдение"

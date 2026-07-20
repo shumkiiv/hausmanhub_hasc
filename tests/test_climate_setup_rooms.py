@@ -1,4 +1,4 @@
-"""Stable available-room contract for the HASC climate setup API."""
+"""Stable available-room contract for the HausmanHub climate setup API."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from custom_components.hausman_hub.application.climate_setup import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FIXTURE = ROOT / "fixtures" / "climate_bridge" / "valid_state.json"
-ROOMS_FIXTURE = ROOT / "fixtures" / "hasc_climate_rooms_v1" / "rooms.json"
+ROOMS_FIXTURE = ROOT / "fixtures" / "hausmanhub_climate_rooms_v1" / "rooms.json"
 ROOMS_SCHEMA = (
     ROOT
     / "custom_components"
@@ -55,7 +55,7 @@ class ClimateSetupRoomsTest(unittest.TestCase):
         Draft202012Validator.check_schema(schema)
         self.validator = Draft202012Validator(schema)
 
-    def test_fresh_rooms_are_sorted_and_keep_the_configured_hasc_name(self) -> None:
+    def test_fresh_rooms_are_sorted_and_keep_the_configured_hausmanhub_name(self) -> None:
         result = climate_available_rooms(
             one_room_registry(),  # type: ignore[arg-type]
             import_climate_state(load_json(SOURCE_FIXTURE)),

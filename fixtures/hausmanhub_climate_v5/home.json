@@ -1,0 +1,148 @@
+{
+  "contract": {"name": "hausman-hub-home", "version": 5},
+  "generated_at": 1784280000000,
+  "climate": {"fresh": true, "commands_enabled": false},
+  "rooms": [
+    {
+      "id": "living",
+      "name": "Гостиная",
+      "temperature": 25.8,
+      "humidity": 44.0,
+      "target_temperature": 24.0,
+      "target_humidity": null,
+      "mode": "auto",
+      "authority_eligible": true,
+      "control": {
+        "enabled": false,
+        "actions": ["set_room_target", "turn_room_off"],
+        "action_inputs": {
+          "set_room_target": {
+            "target_temperature": {
+              "type": "number",
+              "required": true,
+              "minimum": 18.0,
+              "maximum": 28.0,
+              "step": 0.5,
+              "unit": "°C"
+            }
+          }
+        },
+        "action_presentations": {
+          "set_room_target": {
+            "title": "Установить температуру",
+            "description": "Изменить желаемую температуру в комнате.",
+            "confirmation_required": false,
+            "fields": {
+              "target_temperature": {
+                "title": "Желаемая температура",
+                "description": "Значение, которое должен поддерживать климатический контур."
+              }
+            }
+          },
+          "turn_room_off": {
+            "title": "Выключить климат",
+            "description": "Остановить поддержание климата в комнате.",
+            "confirmation_required": true,
+            "fields": {}
+          }
+        },
+        "blocked_reasons": ["shadow_only"]
+      },
+      "devices": [
+        {
+          "id": "living_ac",
+          "name": "Кондиционер в гостиной",
+          "kind": "air_conditioner",
+          "control_scope": "canary",
+          "capabilities": ["power", "target_temperature", "hvac_mode", "fan_mode"],
+          "available": true,
+          "state": "cool"
+        }
+      ]
+    }
+  ],
+  "contours": [
+    {
+      "id": "climate",
+      "name": "Климат",
+      "kind": "climate",
+      "mode": "automatic",
+      "status": "ready",
+      "engine": {"name": "hausman-climate", "version": 1},
+      "schedule": {
+        "enabled": true,
+        "day_start": "07:00",
+        "night_start": "23:00"
+      },
+      "rooms": [
+        {
+          "id": "living",
+          "name": "Гостиная",
+          "status": "ready",
+          "current": {"temperature": 25.8, "humidity": 44.0},
+          "targets": {
+            "temperature": 24.0,
+            "humidity": 45,
+            "strategy": "normal"
+          },
+          "comfort_profiles": {
+            "active": "day",
+            "day": {
+              "temperature": 24.0,
+              "humidity": 45,
+              "strategy": "normal"
+            },
+            "night": {
+              "temperature": 23.0,
+              "humidity": 45,
+              "strategy": "soft"
+            }
+          },
+          "temporary_temperature": {
+            "active": false,
+            "temperature": null,
+            "ends": null,
+            "available": false
+          },
+          "device_count": 1,
+          "engine_mode": "auto",
+          "engine_strategy": "normal",
+          "authority_ready": true,
+          "targets_in_sync": true,
+          "automatic_active": true,
+          "reasons": []
+        }
+      ],
+      "execution": {
+        "owner": "existing_climate_core",
+        "automatic_active": true,
+        "hausmanhub_direct_commands": false,
+        "settings_apply": {
+          "available": false,
+          "requires_confirmation": true,
+          "parameters": {
+            "temperature": true,
+            "strategy": true,
+            "automatic_mode": true,
+            "humidity": false
+          }
+        },
+        "temporary_temperature": {
+          "available": false,
+          "requires_confirmation": true,
+          "minimum": 18.0,
+          "maximum": 28.0,
+          "step": 0.5
+        }
+      },
+      "reasons": []
+    }
+  ],
+  "reconciliation": {
+    "matches": true,
+    "matched_device_ids": ["living_ac"],
+    "missing_device_ids": [],
+    "room_mismatch_device_ids": [],
+    "unregistered_device_count": 0
+  }
+}

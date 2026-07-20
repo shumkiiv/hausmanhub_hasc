@@ -1,4 +1,4 @@
-"""Safety policy for the approved HausMan Hub integration modes.
+"""Safety policy for the approved HausmanHub integration modes.
 
 The module intentionally has no Home Assistant imports. It is the innermost
 layer and keeps general direct execution blocked. The optional control canary
@@ -32,7 +32,7 @@ class UnsafeModeError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class SafeConfiguration:
-    """The complete validated HASC configuration."""
+    """The complete validated HausmanHub configuration."""
 
     mode: str
     direct_execution_status: str = DIRECT_EXECUTION_BLOCKED

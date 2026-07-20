@@ -14,7 +14,7 @@ Kimi session `ses_097d2dcefffeeugl6hD8knxtZr` using
 `kimi-for-coding/k2p7` returned **NO FINDINGS**.
 
 It confirmed that this final repeat closure is available only after the safe
-restart. The restarted saved-setting guard closes HASC while all home-summary
+restart. The restarted saved-setting guard closes HausmanHub while all home-summary
 readers deliberately fail. The check requires cleared sensor records and
 states, closed diagnostics and local page, no service or device, preserved
 unsafe saved data for manual repair, an unchanged collision record, and the

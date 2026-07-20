@@ -5,15 +5,15 @@ Date: 2026-07-15.
 ## Scope
 
 Only the disposable empty Home Assistant Core lifecycle check, its local
-source guard, and its documentation changed. The HASC integration package did
+source guard, and its documentation changed. The HausmanHub integration package did
 not change.
 
 ## What changed
 
 The empty Core check now uses Home Assistant's normal user deactivation path
-for an already safe HASC setup, then activates it again.
+for an already safe HausmanHub setup, then activates it again.
 
-- While deactivated, the saved setup must be unloaded, the nine HASC count
+- While deactivated, the saved setup must be unloaded, the nine HausmanHub count
   records must be marked disabled by that setup, and the authenticated local
   count page must answer only that it is unavailable, with no count key.
 - After reactivation, exactly the same nine enabled count records, fixed safe

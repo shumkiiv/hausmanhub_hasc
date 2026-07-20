@@ -5,11 +5,11 @@ Date: 2026-07-16.
 ## Scope
 
 The disposable Home Assistant lifecycle now covers one meaningful combined
-saved-settings failure: a user-disabled HASC entry attempts to unblock direct
+saved-settings failure: a user-disabled HausmanHub entry attempts to unblock direct
 execution in main data while its options request prohibited `proxy` mode.
 
 After rejected user activation, correcting only the main data must not reload
-or start HASC. The display, diagnostics, and local page stay closed. Only the
+or start HausmanHub. The display, diagnostics, and local page stay closed. Only the
 remaining safe options repair and one explicit reload restore the approved
 nine-count surface.
 

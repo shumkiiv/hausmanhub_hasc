@@ -26,7 +26,7 @@ modify repository files.
 ## Verification
 
 - `python3 -m unittest discover -s tests -v` — 24 passed
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m json.tool hacs.json`
 - `git diff --cached --check`
 - GitHub visibility confirmed as `PUBLIC`

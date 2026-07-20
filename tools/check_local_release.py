@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run HASC's local synthetic checks before a commit or publication.
+"""Run HausmanHub's local synthetic checks before a commit or publication.
 
 This command works only with the repository's tests, synthetic fixtures, and
 local Git index. It does not start Home Assistant or connect to a home,
@@ -61,6 +61,10 @@ def local_checks(python_executable: str) -> tuple[Check, ...]:
         (
             "staged release version",
             (python_executable, "tools/check_staged_release_version.py"),
+        ),
+        (
+            "HausmanHub product naming",
+            (python_executable, "tools/check_product_naming.py"),
         ),
         ("HACS installation package", (python_executable, "tools/check_hacs_package.py")),
         ("published-file safety", (python_executable, "tools/check_repository_boundary.py")),

@@ -1,1 +1,1 @@
-"""Framework-independent HausMan Hub safety rules."""
+"""Framework-independent HausmanHub safety rules."""

@@ -1,4 +1,4 @@
-"""Tests for the one-command local HASC publication check."""
+"""Tests for the one-command local HausmanHub publication check."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ class LocalReleaseCheckTest(unittest.TestCase):
                 "diagnostics synthetic fixture",
                 "Android model compatibility",
                 "staged release version",
+                "HausmanHub product naming",
                 "HACS installation package",
                 "published-file safety",
                 "staged-file safety",

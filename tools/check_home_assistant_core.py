@@ -1,4 +1,4 @@
-"""Run HASC observation and disabled climate facade against isolated HA Core.
+"""Run HausmanHub observation and disabled climate facade against isolated HA Core.
 
 This is an explicit compatibility smoke check, not a live-home test. It copies
 the integration into a new temporary Home Assistant configuration directory,
@@ -6,7 +6,7 @@ exercises safe ``read-only`` and ``shadow`` entries, the climate bridge's full
 disabled rollback, plus one disposable ``input_boolean`` canary, and removes
 all temporary files when finished. It never receives a real credential,
 connects to a real or remote network, or calls a physical device. Its only
-executed HASC command calls the temporary helper's standard local on/off
+executed HausmanHub command calls the temporary helper's standard local on/off
 services. HTTP checks use a temporary loopback server.
 """
 
@@ -54,7 +54,7 @@ from homeassistant.helpers.entity_component import DATA_INSTANCES
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION_SOURCE = REPOSITORY_ROOT / "custom_components" / "hausman_hub"
 CLIMATE_STATE_FIXTURE = REPOSITORY_ROOT / "fixtures" / "climate_bridge" / "valid_state.json"
-CLIMATE_REGISTRY_FIXTURE = REPOSITORY_ROOT / "fixtures" / "hasc_climate_v1" / "registry.json"
+CLIMATE_REGISTRY_FIXTURE = REPOSITORY_ROOT / "fixtures" / "hausmanhub_climate_v1" / "registry.json"
 SUMMARY_SENSOR_KEYS = (
     "areas_count",
     "devices_count",
@@ -78,9 +78,9 @@ SUMMARY_SENSOR_ICONS = {
     "disabled_entities_count": "mdi:pause-circle-outline",
 }
 PROTECTED_SUMMARY_SENSOR_ENTITY_IDS = frozenset(
-    f"sensor.hausman_hub_hasc_{key}" for key in SUMMARY_SENSOR_KEYS
+    f"sensor.hausman_hub_{key}" for key in SUMMARY_SENSOR_KEYS
 )
-RESERVED_SUMMARY_SENSOR_ENTITY_ID = "sensor.hausman_hub_hasc_areas_count"
+RESERVED_SUMMARY_SENSOR_ENTITY_ID = "sensor.hausman_hub_areas_count"
 EXTERNAL_COLLISION_PLATFORM = "homeassistant"
 LOCAL_SUMMARY_ACTIVE_ENTRY = "local_summary_active_entry"
 LOCAL_SUMMARY_ENABLED_FIELD = "local_summary_enabled"
@@ -101,8 +101,8 @@ CONTOUR_DEVICES_FIELD = "contour_devices"
 CONTOUR_TARGET_TEMPERATURE_FIELD = "contour_target_temperature"
 CONTOUR_TARGET_HUMIDITY_FIELD = "contour_target_humidity"
 CONTOUR_STRATEGY_FIELD = "contour_strategy"
-CANARY_TARGET_ENTITY_ID = "input_boolean.hasc_disposable_canary"
-CANARY_SWITCH_ENTITY_ID = "switch.hausman_hub_hasc_canary_control"
+CANARY_TARGET_ENTITY_ID = "input_boolean.hausmanhub_disposable_canary"
+CANARY_SWITCH_ENTITY_ID = "switch.hausman_hub_canary_control"
 CANARY_SWITCH_UNIQUE_ID_SUFFIX = "canary_control"
 SUMMARY_UPDATE_INTERVAL_MINUTES = {
     "5m": 5,
@@ -257,7 +257,7 @@ UNSAFE_EXTRA_FIELD_OPTIONS = {
 
 @dataclass(frozen=True)
 class ReservedCollisionEntry:
-    """Remember the disposable external entry that HASC must never change."""
+    """Remember the disposable external entry that HausmanHub must never change."""
 
     registry_id: str
     entity_id: str
@@ -269,7 +269,7 @@ class ReservedCollisionEntry:
 
 @dataclass(frozen=True)
 class RemovedHascEntry:
-    """Keep only disposable HASC identifiers needed after the final restart."""
+    """Keep only disposable HausmanHub identifiers needed after the final restart."""
 
     entry_id: str
     entity_ids: frozenset[str]
@@ -306,7 +306,7 @@ async def async_block_home_summary_reads(
     domain: str,
     scenario_name: str,
 ) -> AsyncIterator[None]:
-    """Make every HASC home-summary reader fail during one safety action."""
+    """Make every HausmanHub home-summary reader fail during one safety action."""
 
     integration = await loader.async_get_integration(hass, domain)
     adapters = (
@@ -382,12 +382,12 @@ async def async_assert_second_entry_is_rejected(
     assert_result(
         duplicate["type"],
         "abort",
-        "a second HASC setup must be rejected",
+        "a second HausmanHub setup must be rejected",
     )
     assert_result(
         duplicate["reason"],
         "single_instance_allowed",
-        "a second HASC setup must report that only one setup is allowed",
+        "a second HausmanHub setup must report that only one setup is allowed",
     )
     await hass.async_block_till_done()
 
@@ -400,7 +400,7 @@ async def async_assert_second_entry_is_rejected(
     assert_result(
         entries[0].entry_id,
         entry.entry_id,
-        "the existing HASC setup must remain the only setup",
+        "the existing HausmanHub setup must remain the only setup",
     )
     assert_result(
         entry.data,
@@ -415,12 +415,12 @@ async def async_assert_second_entry_is_rejected(
     assert_result(
         entry.disabled_by,
         expected_disabled_by,
-        "a rejected second setup must preserve HASC deactivation state",
+        "a rejected second setup must preserve HausmanHub deactivation state",
     )
     assert_result(
         entry.state,
         expected_entry_state,
-        "a rejected second setup must keep the existing HASC state",
+        "a rejected second setup must keep the existing HausmanHub state",
     )
 
 
@@ -430,7 +430,7 @@ async def async_add_disposable_persisted_duplicate_entry(
 ) -> ConfigEntry:
     """Insert one valid duplicate only in the empty Core test configuration.
 
-    The normal user flow correctly refuses a second HASC setup. This helper
+    The normal user flow correctly refuses a second HausmanHub setup. This helper
     deliberately bypasses that flow only inside ``TemporaryDirectory`` so the
     running empty Core and a later restart can prove that malformed saved
     duplicates fail closed. It does not read or write a real Home Assistant
@@ -464,10 +464,10 @@ async def async_add_disposable_persisted_duplicate_entry(
             for configured_entry in hass.config_entries.async_entries(entry.domain)
         },
         {entry.entry_id, duplicate_entry.entry_id},
-        "the disposable duplicate fixture must retain two saved HASC entries",
+        "the disposable duplicate fixture must retain two saved HausmanHub entries",
     )
     if duplicate_entry.state is config_entries.ConfigEntryState.LOADED:
-        raise RuntimeError("a disposable duplicate HASC entry must fail closed")
+        raise RuntimeError("a disposable duplicate HausmanHub entry must fail closed")
     return duplicate_entry
 
 
@@ -519,21 +519,21 @@ async def async_unload_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> No
 
     retained_entry = hass.config_entries.async_get_entry(entry.entry_id)
     if retained_entry is None:
-        raise RuntimeError("ordinary unload must retain the saved HASC setup")
+        raise RuntimeError("ordinary unload must retain the saved HausmanHub setup")
     assert_result(
         retained_entry.entry_id,
         entry.entry_id,
-        "ordinary unload must retain the same HASC setup",
+        "ordinary unload must retain the same HausmanHub setup",
     )
     assert_result(
         entry.disabled_by,
         None,
-        "ordinary unload must not user-deactivate HASC",
+        "ordinary unload must not user-deactivate HausmanHub",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.NOT_LOADED,
-        "ordinary unload must leave HASC not loaded",
+        "ordinary unload must leave HausmanHub not loaded",
     )
 
 
@@ -546,12 +546,12 @@ async def async_setup_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> Non
     assert_result(
         entry.disabled_by,
         None,
-        "ordinary setup must keep HASC user-enabled",
+        "ordinary setup must keep HausmanHub user-enabled",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "ordinary setup must load HASC successfully",
+        "ordinary setup must load HausmanHub successfully",
     )
 
 
@@ -567,12 +567,12 @@ async def async_disable_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> N
     assert_result(
         entry.disabled_by,
         ConfigEntryDisabler.USER,
-        "deactivated HASC must record user deactivation",
+        "deactivated HausmanHub must record user deactivation",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.NOT_LOADED,
-        "deactivated HASC must no longer stay loaded",
+        "deactivated HausmanHub must no longer stay loaded",
     )
 
 
@@ -585,12 +585,12 @@ async def async_enable_safe_entry(hass: HomeAssistant, entry: ConfigEntry) -> No
     assert_result(
         entry.disabled_by,
         None,
-        "reactivated HASC must clear user deactivation",
+        "reactivated HausmanHub must clear user deactivation",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "reactivated HASC must load successfully",
+        "reactivated HausmanHub must load successfully",
     )
 
 
@@ -600,7 +600,7 @@ async def async_enable_unsafe_entry_without_reading_home(
     entry: ConfigEntry,
     scenario_name: str,
 ) -> None:
-    """Prove explicit activation cannot load an unsafe disabled HASC setup."""
+    """Prove explicit activation cannot load an unsafe disabled HausmanHub setup."""
 
     assert_result(
         entry.disabled_by,
@@ -638,12 +638,12 @@ async def async_enable_unsafe_entry_without_reading_home(
     assert_result(
         reload_calls,
         [entry.entry_id],
-        f"{scenario_name} must attempt exactly one HASC reload",
+        f"{scenario_name} must attempt exactly one HausmanHub reload",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.SETUP_ERROR,
-        f"{scenario_name} must leave unsafe HASC closed with a setup error",
+        f"{scenario_name} must leave unsafe HausmanHub closed with a setup error",
     )
     assert_result(
         hass.services.async_services().get(domain),
@@ -663,7 +663,7 @@ async def async_repair_unsafe_entry_after_rejected_activation(
     *,
     restore_main_data: bool,
 ) -> str:
-    """Restore exact safe settings and explicitly start only safe HASC."""
+    """Restore exact safe settings and explicitly start only safe HausmanHub."""
 
     assert_result(
         entry.disabled_by,
@@ -705,7 +705,7 @@ async def async_repair_unsafe_entry_after_rejected_activation(
     assert_result(
         reload_calls,
         [entry.entry_id],
-        f"{scenario_name} must reload HASC exactly once after manual repair",
+        f"{scenario_name} must reload HausmanHub exactly once after manual repair",
     )
     assert_result(
         dict(entry.data),
@@ -745,15 +745,15 @@ async def async_repair_unsafe_entry_after_rejected_activation(
     assert_local_summary_view(hass, domain)
     await async_assert_authenticated_local_summary_http_access(
         hass,
-        f"HASC repaired {scenario_name} temporary",
+        f"HausmanHub repaired {scenario_name} temporary",
     )
     return await async_create_test_read_only_access_token(
         hass,
-        f"HASC repaired {scenario_name} removal test user",
+        f"HausmanHub repaired {scenario_name} removal test user",
     )
 
 
-async def async_assert_partial_main_repair_keeps_hasc_closed(
+async def async_assert_partial_main_repair_keeps_hausmanhub_closed(
     hass: HomeAssistant,
     domain: str,
     entry: ConfigEntry,
@@ -763,7 +763,7 @@ async def async_assert_partial_main_repair_keeps_hasc_closed(
     reader_token: str,
     scenario_name: str,
 ) -> None:
-    """Prove correcting only one of two broken mappings cannot start HASC."""
+    """Prove correcting only one of two broken mappings cannot start HausmanHub."""
 
     assert_result(
         entry.state,
@@ -811,7 +811,7 @@ async def async_assert_partial_main_repair_keeps_hasc_closed(
         None,
         f"{scenario_name} must preserve the user's activation attempt",
     )
-    await async_assert_unsafe_saved_update_closes_hasc(
+    await async_assert_unsafe_saved_update_closes_hausmanhub(
         hass,
         domain,
         entry,
@@ -882,7 +882,7 @@ async def async_update_safe_options(
     original_async_reload = hass.config_entries.async_reload
 
     async def async_recording_reload(entry_id: str) -> bool:
-        """Record the entry selected by HASC's own saved-setting listener."""
+        """Record the entry selected by HausmanHub's own saved-setting listener."""
 
         reload_calls.append(entry_id)
         return await original_async_reload(entry_id)
@@ -928,12 +928,12 @@ async def async_update_safe_options(
     assert_result(
         reload_calls,
         [entry.entry_id],
-        "saving safe options must reload only HASC",
+        "saving safe options must reload only HausmanHub",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "saving safe options must leave HASC loaded",
+        "saving safe options must leave HausmanHub loaded",
     )
 
 
@@ -1132,7 +1132,7 @@ async def async_open_options_section(
     entry: ConfigEntry,
     section: str,
 ) -> dict[str, Any]:
-    """Open one separated HASC options area through the real first screen."""
+    """Open one separated HausmanHub options area through the real first screen."""
 
     initial = await hass.config_entries.options.async_init(entry.entry_id)
     assert_result(initial["type"], "form", "options flow must show its section menu")
@@ -1183,8 +1183,8 @@ async def async_assert_canary_control_lifecycle(
         [
             InputBoolean.from_yaml(
                 {
-                    CONF_ID: "hasc_disposable_canary",
-                    CONF_NAME: "HASC disposable canary",
+                    CONF_ID: "hausmanhub_disposable_canary",
+                    CONF_NAME: "HausmanHub disposable canary",
                     "initial": False,
                 }
             )
@@ -1222,7 +1222,7 @@ async def async_assert_canary_control_lifecycle(
     assert_result(
         hass.services.async_services().get(domain),
         None,
-        "canary must not register a HASC service",
+        "canary must not register a HausmanHub service",
     )
 
     entries = entity_registry.async_entries_for_config_entry(
@@ -1235,12 +1235,12 @@ async def async_assert_canary_control_lifecycle(
         if registry_entry.unique_id
         == f"{entry.entry_id}_{CANARY_SWITCH_UNIQUE_ID_SUFFIX}"
     ]
-    assert_result(len(canary_entries), 1, "armed canary must create one HASC switch")
+    assert_result(len(canary_entries), 1, "armed canary must create one HausmanHub switch")
     canary_entry = canary_entries[0]
     assert_result(
         canary_entry.entity_id,
         CANARY_SWITCH_ENTITY_ID,
-        "canary switch must keep its protected HASC name",
+        "canary switch must keep its protected HausmanHub name",
     )
     assert_result(canary_entry.device_id, None, "canary switch must create no device")
     assert_result(
@@ -1251,7 +1251,7 @@ async def async_assert_canary_control_lifecycle(
     assert_result(
         hass.states.get(CANARY_SWITCH_ENTITY_ID).state,
         STATE_OFF,
-        "HASC canary switch must mirror the helper's initial state",
+        "HausmanHub canary switch must mirror the helper's initial state",
     )
 
     await hass.services.async_call(
@@ -1264,12 +1264,12 @@ async def async_assert_canary_control_lifecycle(
     assert_result(
         hass.states.get(CANARY_TARGET_ENTITY_ID).state,
         STATE_ON,
-        "HASC canary turn-on must reach only the disposable helper",
+        "HausmanHub canary turn-on must reach only the disposable helper",
     )
     assert_result(
         hass.states.get(CANARY_SWITCH_ENTITY_ID).state,
         STATE_ON,
-        "HASC canary switch must mirror the helper after turn-on",
+        "HausmanHub canary switch must mirror the helper after turn-on",
     )
 
     await hass.services.async_call(
@@ -1282,7 +1282,7 @@ async def async_assert_canary_control_lifecycle(
     assert_result(
         hass.states.get(CANARY_TARGET_ENTITY_ID).state,
         STATE_OFF,
-        "HASC canary turn-off must reach only the disposable helper",
+        "HausmanHub canary turn-off must reach only the disposable helper",
     )
     await async_assert_safe_diagnostics(hass, domain, entry, current_mode)
 
@@ -1307,7 +1307,7 @@ async def async_assert_canary_control_lifecycle(
     if CANARY_CONTROL_TARGET_FIELD in entry.options:
         raise RuntimeError("canary rollback must delete its saved target")
     if hass.states.get(CANARY_SWITCH_ENTITY_ID) is not None:
-        raise RuntimeError("canary rollback must remove the HASC switch state")
+        raise RuntimeError("canary rollback must remove the HausmanHub switch state")
     assert_result(
         entity_registry.async_get(hass).async_get_entity_id(
             "switch",
@@ -1315,7 +1315,7 @@ async def async_assert_canary_control_lifecycle(
             f"{entry.entry_id}_{CANARY_SWITCH_UNIQUE_ID_SUFFIX}",
         ),
         None,
-        "canary rollback must remove its HASC registry row",
+        "canary rollback must remove its HausmanHub registry row",
     )
     assert_result(
         hass.states.get(CANARY_TARGET_ENTITY_ID).state,
@@ -1390,7 +1390,7 @@ async def async_update_optional_local_page(
     original_async_reload = hass.config_entries.async_reload
 
     async def async_recording_reload(entry_id: str) -> bool:
-        """Record the one HASC-only reload caused by this local page choice."""
+        """Record the one HausmanHub-only reload caused by this local page choice."""
 
         reload_calls.append(entry_id)
         return await original_async_reload(entry_id)
@@ -1433,12 +1433,12 @@ async def async_update_optional_local_page(
     assert_result(
         reload_calls,
         [entry.entry_id],
-        "changing the optional local page must reload only HASC",
+        "changing the optional local page must reload only HausmanHub",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "changing the optional local page must leave HASC loaded",
+        "changing the optional local page must leave HausmanHub loaded",
     )
     assert_entry_has_only_summary_sensors(
         hass,
@@ -1458,11 +1458,11 @@ async def async_update_optional_local_page(
         assert_local_summary_view(hass, domain)
         await async_assert_authenticated_local_summary_http_access(
             hass,
-            "HASC optional page enabled temporary",
+            "HausmanHub optional page enabled temporary",
         )
         return
 
-    # The nine normal HASC rows intentionally remain loaded and may refresh
+    # The nine normal HausmanHub rows intentionally remain loaded and may refresh
     # their already-approved aggregate snapshot during the reload above. This
     # separate guard proves only that a request to the now-closed extra page
     # cannot trigger another home read.
@@ -1523,7 +1523,7 @@ async def async_update_summary_interval(
     original_async_reload = hass.config_entries.async_reload
 
     async def async_recording_reload(entry_id: str) -> bool:
-        """Record the HASC-only reload caused by a cadence choice."""
+        """Record the HausmanHub-only reload caused by a cadence choice."""
 
         reload_calls.append(entry_id)
         return await original_async_reload(entry_id)
@@ -1557,12 +1557,12 @@ async def async_update_summary_interval(
     assert_result(
         reload_calls,
         [entry.entry_id],
-        "changing summary interval must reload only HASC",
+        "changing summary interval must reload only HausmanHub",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "changing summary interval must leave HASC loaded",
+        "changing summary interval must leave HausmanHub loaded",
     )
     assert_entry_has_only_summary_sensors(
         hass,
@@ -1599,7 +1599,7 @@ async def async_update_inactive_safe_options_without_reading_home(
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.NOT_LOADED,
-        "inactive safe options must begin with HASC not loaded",
+        "inactive safe options must begin with HausmanHub not loaded",
     )
     assert_result(
         entry.disabled_by,
@@ -1610,7 +1610,7 @@ async def async_update_inactive_safe_options_without_reading_home(
     original_async_reload = hass.config_entries.async_reload
 
     async def async_recording_reload(entry_id: str) -> bool:
-        """Record any unexpected attempt to restart inactive HASC."""
+        """Record any unexpected attempt to restart inactive HausmanHub."""
 
         reload_calls.append(entry_id)
         return await original_async_reload(entry_id)
@@ -1640,7 +1640,7 @@ async def async_update_inactive_safe_options_without_reading_home(
     assert_result(
         safe_options["type"],
         "create_entry",
-        f"inactive HASC must accept {target_mode} options",
+        f"inactive HausmanHub must accept {target_mode} options",
     )
     assert_result(
         entry.options.get("mode"),
@@ -1671,12 +1671,12 @@ async def async_update_inactive_safe_options_without_reading_home(
     assert_result(
         reload_calls,
         [],
-        "inactive safe options must not reload HASC",
+        "inactive safe options must not reload HausmanHub",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.NOT_LOADED,
-        "inactive safe options must leave HASC not loaded",
+        "inactive safe options must leave HausmanHub not loaded",
     )
 
 
@@ -1930,7 +1930,7 @@ def assert_safe_home_summary(home_summary: Any) -> None:
 
 
 def assert_local_summary_response_is_not_stored(response: Any, response_name: str) -> None:
-    """Require HASC's own local-page response to prevent browser caching."""
+    """Require HausmanHub's own local-page response to prevent browser caching."""
 
     headers = getattr(response, "headers", None)
     if headers is None:
@@ -1959,7 +1959,7 @@ def assert_summary_sensor_registry(
     entry_id: str,
     expected_entity_ids: frozenset[str] | None = PROTECTED_SUMMARY_SENSOR_ENTITY_IDS,
 ) -> list[Any]:
-    """Require only the nine approved HASC sensor registry records.
+    """Require only the nine approved HausmanHub sensor registry records.
 
     A fresh installation must use the exact protected names. A collision check
     may instead pass ``None`` to require the protected name prefix only.
@@ -1997,18 +1997,18 @@ def assert_summary_sensor_registry(
         assert_result(
             actual_entity_ids,
             expected_entity_ids,
-            "HASC display entities must keep their expected safe names",
+            "HausmanHub display entities must keep their expected safe names",
         )
     elif any(
-        not entity_id.startswith("sensor.hausman_hub_hasc_")
+        not entity_id.startswith("sensor.hausman_hub_")
         for entity_id in actual_entity_ids
     ):
-        raise RuntimeError("new HASC display entities must keep the protected prefix")
+        raise RuntimeError("new HausmanHub display entities must keep the protected prefix")
     for entry in entries:
         assert_result(
             entry.device_id,
             None,
-            "a HASC summary sensor must not be attached to a device",
+            "a HausmanHub summary sensor must not be attached to a device",
         )
     return entries
 
@@ -2031,26 +2031,26 @@ def assert_entry_has_only_summary_sensors(
         assert_result(
             entry.disabled_by,
             None,
-            "an active HASC summary sensor must be enabled",
+            "an active HausmanHub summary sensor must be enabled",
         )
         state = hass.states.get(entry.entity_id)
         if state is None:
-            raise RuntimeError("every HASC summary sensor must have a state")
+            raise RuntimeError("every HausmanHub summary sensor must have a state")
         summary_key = entry.unique_id.removeprefix(f"{entry_id}_")
         expected_icon = SUMMARY_SENSOR_ICONS.get(summary_key)
         if expected_icon is None:
-            raise RuntimeError("a HASC summary sensor must have an approved icon key")
+            raise RuntimeError("a HausmanHub summary sensor must have an approved icon key")
         assert_result(
             state.attributes.get("icon"),
             expected_icon,
-            "a HASC summary sensor must keep its fixed visual icon",
+            "a HausmanHub summary sensor must keep its fixed visual icon",
         )
         try:
             value = int(state.state)
         except (TypeError, ValueError) as exc:
-            raise RuntimeError("every HASC summary sensor must be a whole number") from exc
+            raise RuntimeError("every HausmanHub summary sensor must be a whole number") from exc
         if value < 0:
-            raise RuntimeError("every HASC summary sensor must be non-negative")
+            raise RuntimeError("every HausmanHub summary sensor must be non-negative")
 
 
 def assert_entry_uses_summary_update_interval(
@@ -2059,7 +2059,7 @@ def assert_entry_uses_summary_update_interval(
     entry_id: str,
     expected_interval: str,
 ) -> None:
-    """Require every live HASC count sensor to share the selected cadence."""
+    """Require every live HausmanHub count sensor to share the selected cadence."""
 
     expected_minutes = SUMMARY_UPDATE_INTERVAL_MINUTES.get(expected_interval)
     if expected_minutes is None:
@@ -2067,7 +2067,7 @@ def assert_entry_uses_summary_update_interval(
     assert_result(
         hass.services.async_services().get(domain),
         None,
-        "summary interval choice must not add a HASC service",
+        "summary interval choice must not add a HausmanHub service",
     )
     entries = entity_registry.async_entries_for_config_entry(
         entity_registry.async_get(hass),
@@ -2076,7 +2076,7 @@ def assert_entry_uses_summary_update_interval(
     assert_result(
         {entry.unique_id for entry in entries},
         {f"{entry_id}_{key}" for key in SUMMARY_SENSOR_KEYS},
-        "summary interval check must inspect exactly the nine HASC count sensors",
+        "summary interval check must inspect exactly the nine HausmanHub count sensors",
     )
     entity_components = hass.data.get(DATA_INSTANCES)
     if not isinstance(entity_components, dict):
@@ -2087,18 +2087,18 @@ def assert_entry_uses_summary_update_interval(
 
     live_entities = [sensor_component.get_entity(entry.entity_id) for entry in entries]
     if any(entity is None for entity in live_entities):
-        raise RuntimeError("every active HASC registry row must have a live sensor entity")
+        raise RuntimeError("every active HausmanHub registry row must have a live sensor entity")
     coordinators = {id(entity.coordinator): entity.coordinator for entity in live_entities}
     assert_result(
         len(coordinators),
         1,
-        "all nine HASC count sensors must share one read-only coordinator",
+        "all nine HausmanHub count sensors must share one read-only coordinator",
     )
     coordinator = next(iter(coordinators.values()))
     assert_result(
         coordinator.update_interval,
         timedelta(minutes=expected_minutes),
-        "HASC coordinator must use the selected fixed summary interval",
+        "HausmanHub coordinator must use the selected fixed summary interval",
     )
 
 
@@ -2120,10 +2120,10 @@ def assert_entry_has_unloaded_summary_sensors(
         assert_result(
             entry.disabled_by,
             None,
-            "an unloaded HASC summary sensor must remain enabled",
+            "an unloaded HausmanHub summary sensor must remain enabled",
         )
         if hass.states.get(entry.entity_id) is not None:
-            raise RuntimeError("an unloaded HASC summary sensor must not keep a state")
+            raise RuntimeError("an unloaded HausmanHub summary sensor must not keep a state")
 
 
 def assert_entry_has_disabled_summary_sensors(
@@ -2144,35 +2144,35 @@ def assert_entry_has_disabled_summary_sensors(
         assert_result(
             entry.disabled_by,
             entity_registry.RegistryEntryDisabler.CONFIG_ENTRY,
-            "a deactivated HASC summary sensor must be disabled by its setup",
+            "a deactivated HausmanHub summary sensor must be disabled by its setup",
         )
         if hass.states.get(entry.entity_id) is not None:
-            raise RuntimeError("a deactivated HASC summary sensor must not keep a state")
+            raise RuntimeError("a deactivated HausmanHub summary sensor must not keep a state")
 
 
 def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> ReservedCollisionEntry:
-    """Reserve one HASC-like name only inside the disposable Core check."""
+    """Reserve one HausmanHub-like name only inside the disposable Core check."""
 
     reserved_entry = entity_registry.async_get(hass).async_get_or_create(
         "sensor",
         EXTERNAL_COLLISION_PLATFORM,
         "reserved_summary_sensor_name",
-        suggested_object_id="hausman_hub_hasc_areas_count",
+        suggested_object_id="hausman_hub_areas_count",
     )
     assert_result(
         reserved_entry.entity_id,
         RESERVED_SUMMARY_SENSOR_ENTITY_ID,
-        "the disposable collision fixture must reserve the base HASC-like name",
+        "the disposable collision fixture must reserve the base HausmanHub-like name",
     )
     assert_result(
         reserved_entry.platform,
         EXTERNAL_COLLISION_PLATFORM,
-        "the disposable collision fixture must stay outside HASC",
+        "the disposable collision fixture must stay outside HausmanHub",
     )
     assert_result(
         reserved_entry.config_entry_id,
         None,
-        "the disposable collision fixture must not belong to a HASC setup",
+        "the disposable collision fixture must not belong to a HausmanHub setup",
     )
     assert_result(
         reserved_entry.device_id,
@@ -2189,12 +2189,12 @@ def reserve_summary_sensor_name_for_test(hass: HomeAssistant) -> ReservedCollisi
     )
 
 
-def assert_reserved_name_does_not_block_hasc(
+def assert_reserved_name_does_not_block_hausmanhub(
     hass: HomeAssistant,
     entry_id: str,
     reserved_entry: ReservedCollisionEntry,
 ) -> None:
-    """Require HASC to keep all nine sensors when a similar name is occupied."""
+    """Require HausmanHub to keep all nine sensors when a similar name is occupied."""
 
     entries = entity_registry.async_entries_for_config_entry(
         entity_registry.async_get(hass),
@@ -2203,9 +2203,9 @@ def assert_reserved_name_does_not_block_hasc(
     entity_id_by_unique_id = {entry.unique_id: entry.entity_id for entry in entries}
     collision_sensor_id = entity_id_by_unique_id[f"{entry_id}_areas_count"]
     if collision_sensor_id == reserved_entry.entity_id:
-        raise RuntimeError("HASC must not reuse an occupied summary sensor name")
-    if not collision_sensor_id.startswith("sensor.hausman_hub_hasc_"):
-        raise RuntimeError("HASC must keep its protected name prefix after a collision")
+        raise RuntimeError("HausmanHub must not reuse an occupied summary sensor name")
+    if not collision_sensor_id.startswith("sensor.hausman_hub_"):
+        raise RuntimeError("HausmanHub must keep its protected name prefix after a collision")
     assert_result(
         {
             entity_id
@@ -2213,7 +2213,7 @@ def assert_reserved_name_does_not_block_hasc(
             if unique_id != f"{entry_id}_areas_count"
         },
         PROTECTED_SUMMARY_SENSOR_ENTITY_IDS - {RESERVED_SUMMARY_SENSOR_ENTITY_ID},
-        "only the occupied HASC-like name may change in the disposable collision check",
+        "only the occupied HausmanHub-like name may change in the disposable collision check",
     )
 
 
@@ -2221,11 +2221,11 @@ def assert_reserved_collision_entry_is_unchanged(
     hass: HomeAssistant,
     reserved_entry: ReservedCollisionEntry,
 ) -> None:
-    """Require HASC removal to leave the external collision entry unchanged."""
+    """Require HausmanHub removal to leave the external collision entry unchanged."""
 
     current_entry = entity_registry.async_get(hass).async_get(reserved_entry.entity_id)
     if current_entry is None:
-        raise RuntimeError("HASC removal must keep the external collision fixture")
+        raise RuntimeError("HausmanHub removal must keep the external collision fixture")
     current_snapshot = ReservedCollisionEntry(
         registry_id=current_entry.id,
         entity_id=current_entry.entity_id,
@@ -2237,7 +2237,7 @@ def assert_reserved_collision_entry_is_unchanged(
     assert_result(
         current_snapshot,
         reserved_entry,
-        "HASC removal must not change the external collision fixture",
+        "HausmanHub removal must not change the external collision fixture",
     )
 
 
@@ -2252,7 +2252,7 @@ def find_local_summary_routes(hass: HomeAssistant) -> tuple[Any, ...]:
 
 
 def find_climate_routes(hass: HomeAssistant) -> dict[str, tuple[Any, ...]]:
-    """Return every fixed HASC climate route grouped by its canonical path."""
+    """Return every fixed HausmanHub climate route grouped by its canonical path."""
 
     resources = tuple(hass.http.app.router.resources())
     return {
@@ -2280,7 +2280,7 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
     assert_result(
         getattr(climate_runtime, "entry_id", None),
         entry_id,
-        "disabled climate facade must belong to the loaded HASC entry",
+        "disabled climate facade must belong to the loaded HausmanHub entry",
     )
     bridge_mode = getattr(getattr(climate_runtime, "configuration", None), "climate_bridge_mode", None)
     assert_result(
@@ -2402,12 +2402,12 @@ def assert_deactivated_entry_stays_inactive_after_restart(
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.NOT_LOADED,
-        "a deactivated HASC must stay unloaded after restart",
+        "a deactivated HausmanHub must stay unloaded after restart",
     )
     if hass.data.get(domain) is not None:
-        raise RuntimeError("a deactivated HASC must not restore runtime data after restart")
+        raise RuntimeError("a deactivated HausmanHub must not restore runtime data after restart")
     if find_local_summary_routes(hass):
-        raise RuntimeError("a deactivated HASC must not restore its local page after restart")
+        raise RuntimeError("a deactivated HausmanHub must not restore its local page after restart")
     assert_entry_has_disabled_summary_sensors(
         hass,
         domain,
@@ -2420,7 +2420,7 @@ def assert_deactivated_entry_stays_inactive_after_restart(
     ):
         if hass.states.get(summary_sensor.entity_id) is not None:
             raise RuntimeError(
-                "a deactivated HASC must not restore state values after restart"
+                "a deactivated HausmanHub must not restore state values after restart"
             )
 
 
@@ -2436,14 +2436,14 @@ async def async_assert_ordinary_unloaded_entry_recovers_after_restart(
 
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None:
-        raise RuntimeError("ordinary unload restart must retain the saved HASC setup")
+        raise RuntimeError("ordinary unload restart must retain the saved HausmanHub setup")
     assert_result(
         [
             configured_entry.entry_id
             for configured_entry in hass.config_entries.async_entries(domain)
         ],
         [entry_id],
-        "ordinary unload restart must preserve only the safe HASC setup",
+        "ordinary unload restart must preserve only the safe HausmanHub setup",
     )
     assert_result(
         dict(entry.data),
@@ -2458,12 +2458,12 @@ async def async_assert_ordinary_unloaded_entry_recovers_after_restart(
     assert_result(
         entry.disabled_by,
         None,
-        "ordinary unload restart must keep HASC user-enabled",
+        "ordinary unload restart must keep HausmanHub user-enabled",
     )
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "ordinary unload restart must auto-load HASC",
+        "ordinary unload restart must auto-load HausmanHub",
     )
     assert_result(
         entry.data.get("direct_execution_status"),
@@ -2501,7 +2501,7 @@ async def async_assert_ordinary_unloaded_entry_recovers_after_restart(
         assert_local_summary_view(hass, domain)
         await async_assert_authenticated_local_summary_http_access(
             hass,
-            "HASC ordinary-unload restart temporary",
+            "HausmanHub ordinary-unload restart temporary",
         )
     else:
         assert_local_summary_is_not_registered(
@@ -2521,7 +2521,7 @@ async def async_assert_ordinary_unloaded_entry_can_be_removed(
     expected_entity_ids: frozenset[str],
     reader_token: str,
 ) -> RemovedHascEntry:
-    """Require an ordinary stopped, still-enabled HASC entry to remove cleanly."""
+    """Require an ordinary stopped, still-enabled HausmanHub entry to remove cleanly."""
 
     await async_unload_safe_entry(hass, entry)
     assert_result(
@@ -2544,7 +2544,7 @@ async def async_assert_ordinary_unloaded_entry_can_be_removed(
         hass,
         domain,
         entry,
-        "HASC ordinary unload before removal",
+        "HausmanHub ordinary unload before removal",
     )
     local_page_enabled = expected_options.get(LOCAL_SUMMARY_ENABLED_FIELD, True)
     if type(local_page_enabled) is not bool:
@@ -2554,7 +2554,7 @@ async def async_assert_ordinary_unloaded_entry_can_be_removed(
             hass,
             domain,
             reader_token,
-            "HASC ordinary unload before removal",
+            "HausmanHub ordinary unload before removal",
         )
     else:
         assert_local_summary_is_not_registered(
@@ -2568,14 +2568,14 @@ async def async_assert_ordinary_unloaded_entry_can_be_removed(
         hass,
         domain,
         entry,
-        "HASC removal after ordinary unload",
+        "HausmanHub removal after ordinary unload",
     )
     if local_page_enabled:
         await async_assert_local_summary_is_unavailable(
             hass,
             domain,
             reader_token,
-            "HASC removal after ordinary unload",
+            "HausmanHub removal after ordinary unload",
         )
     else:
         assert_local_summary_is_not_registered(
@@ -2586,35 +2586,35 @@ async def async_assert_ordinary_unloaded_entry_can_be_removed(
     return removed_entry
 
 
-def assert_hasc_stays_removed_after_restart(
+def assert_hausmanhub_stays_removed_after_restart(
     hass: HomeAssistant,
     domain: str,
     removed_entries: tuple[RemovedHascEntry, ...],
     reserved_entry: ReservedCollisionEntry,
 ) -> None:
-    """Require the final empty restart to keep HASC completely absent."""
+    """Require the final empty restart to keep HausmanHub completely absent."""
 
     if not removed_entries:
         raise RuntimeError("the lifecycle check must record removals before restart")
     if hass.config_entries.async_entries(domain):
-        raise RuntimeError("removed HASC must not restore config entries after restart")
+        raise RuntimeError("removed HausmanHub must not restore config entries after restart")
     if hass.services.async_services().get(domain) is not None:
-        raise RuntimeError("removed HASC must not restore services after restart")
+        raise RuntimeError("removed HausmanHub must not restore services after restart")
     if hass.data.get(domain) is not None:
-        raise RuntimeError("removed HASC must not restore runtime data after restart")
+        raise RuntimeError("removed HausmanHub must not restore runtime data after restart")
     if find_local_summary_routes(hass):
-        raise RuntimeError("removed HASC must not restore local summary route after restart")
+        raise RuntimeError("removed HausmanHub must not restore local summary route after restart")
 
     entities = entity_registry.async_get(hass)
     devices = device_registry.async_get(hass)
     for removed_entry in removed_entries:
         if entity_registry.async_entries_for_config_entry(entities, removed_entry.entry_id):
-            raise RuntimeError("removed HASC must not restore entities after restart")
+            raise RuntimeError("removed HausmanHub must not restore entities after restart")
         if device_registry.async_entries_for_config_entry(devices, removed_entry.entry_id):
-            raise RuntimeError("removed HASC must not restore devices after restart")
+            raise RuntimeError("removed HausmanHub must not restore devices after restart")
         for entity_id in removed_entry.entity_ids:
             if hass.states.get(entity_id) is not None:
-                raise RuntimeError("removed HASC must not restore state values after restart")
+                raise RuntimeError("removed HausmanHub must not restore state values after restart")
 
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
 
@@ -2632,7 +2632,7 @@ def assert_persisted_unsafe_entry_stays_closed(
 
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None:
-        raise RuntimeError("the temporary invalid HASC entry must remain inspectable")
+        raise RuntimeError("the temporary invalid HausmanHub entry must remain inspectable")
     assert_result(
         dict(entry.data),
         expected_data,
@@ -2644,25 +2644,25 @@ def assert_persisted_unsafe_entry_stays_closed(
         "restart must preserve the temporary invalid entry options",
     )
     if entry.state is config_entries.ConfigEntryState.LOADED:
-        raise RuntimeError("an invalid saved HASC entry must not load after restart")
+        raise RuntimeError("an invalid saved HausmanHub entry must not load after restart")
     if hass.services.async_services().get(domain) is not None:
-        raise RuntimeError("an invalid saved HASC entry must not restore services")
+        raise RuntimeError("an invalid saved HausmanHub entry must not restore services")
     if hass.data.get(domain) is not None:
-        raise RuntimeError("an invalid saved HASC entry must not restore runtime data")
+        raise RuntimeError("an invalid saved HausmanHub entry must not restore runtime data")
     if find_local_summary_routes(hass):
-        raise RuntimeError("an invalid saved HASC entry must not restore its local page")
+        raise RuntimeError("an invalid saved HausmanHub entry must not restore its local page")
 
     entries = entity_registry.async_entries_for_config_entry(
         entity_registry.async_get(hass),
         entry_id,
     )
     if entries:
-        raise RuntimeError("an invalid saved HASC entry must not restore entity registry records")
+        raise RuntimeError("an invalid saved HausmanHub entry must not restore entity registry records")
     if device_registry.async_entries_for_config_entry(device_registry.async_get(hass), entry_id):
-        raise RuntimeError("an invalid saved HASC entry must not restore devices")
+        raise RuntimeError("an invalid saved HausmanHub entry must not restore devices")
     for entity_id in expected_entity_ids:
         if hass.states.get(entity_id) is not None:
-            raise RuntimeError("an invalid saved HASC entry must not restore count states")
+            raise RuntimeError("an invalid saved HausmanHub entry must not restore count states")
 
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
 
@@ -2679,7 +2679,7 @@ def assert_persisted_duplicate_entries_stay_closed(
     reserved_entry: ReservedCollisionEntry,
     expect_retained_local_summary_route: bool = False,
 ) -> tuple[ConfigEntry, ConfigEntry]:
-    """Require a saved HASC pair to expose no active HASC data."""
+    """Require a saved HausmanHub pair to expose no active HausmanHub data."""
 
     entries_by_id = {
         entry.entry_id: entry for entry in hass.config_entries.async_entries(domain)
@@ -2687,14 +2687,14 @@ def assert_persisted_duplicate_entries_stay_closed(
     assert_result(
         set(entries_by_id),
         {first_entry_id, duplicate_entry_id},
-        "a malformed saved pair must retain both HASC entries for manual repair",
+        "a malformed saved pair must retain both HausmanHub entries for manual repair",
     )
     first_entry = entries_by_id[first_entry_id]
     duplicate_entry = entries_by_id[duplicate_entry_id]
     assert_result(
         first_entry.disabled_by,
         first_entry_disabled_by,
-        "the first HASC entry must retain its saved activation state",
+        "the first HausmanHub entry must retain its saved activation state",
     )
     assert_result(
         duplicate_entry.disabled_by,
@@ -2705,18 +2705,18 @@ def assert_persisted_duplicate_entries_stay_closed(
         assert_result(
             dict(configured_entry.data),
             expected_data,
-            "a malformed duplicate must not change saved HASC data",
+            "a malformed duplicate must not change saved HausmanHub data",
         )
         assert_result(
             dict(configured_entry.options),
             expected_options,
-            "a malformed duplicate must not change saved HASC options",
+            "a malformed duplicate must not change saved HausmanHub options",
         )
         if configured_entry.state is config_entries.ConfigEntryState.LOADED:
-            raise RuntimeError("a duplicate saved HASC entry must not load")
+            raise RuntimeError("a duplicate saved HausmanHub entry must not load")
 
     if hass.services.async_services().get(domain) is not None:
-        raise RuntimeError("duplicate saved HASC entries must not restore services")
+        raise RuntimeError("duplicate saved HausmanHub entries must not restore services")
     if expect_retained_local_summary_route:
         runtime = hass.data.get(domain)
         if not isinstance(runtime, dict):
@@ -2730,20 +2730,20 @@ def assert_persisted_duplicate_entries_stay_closed(
             raise RuntimeError("a live duplicate must retain exactly one closed local route")
     else:
         if hass.data.get(domain) is not None:
-            raise RuntimeError("duplicate saved HASC entries must not restore runtime data")
+            raise RuntimeError("duplicate saved HausmanHub entries must not restore runtime data")
         if find_local_summary_routes(hass):
-            raise RuntimeError("duplicate saved HASC entries must not restore the local page")
+            raise RuntimeError("duplicate saved HausmanHub entries must not restore the local page")
 
     entities = entity_registry.async_get(hass)
     devices = device_registry.async_get(hass)
     for entry_id in (first_entry_id, duplicate_entry_id):
         if entity_registry.async_entries_for_config_entry(entities, entry_id):
-            raise RuntimeError("duplicate saved HASC entries must not restore count records")
+            raise RuntimeError("duplicate saved HausmanHub entries must not restore count records")
         if device_registry.async_entries_for_config_entry(devices, entry_id):
-            raise RuntimeError("duplicate saved HASC entries must not restore devices")
+            raise RuntimeError("duplicate saved HausmanHub entries must not restore devices")
     for entity_id in expected_stale_entity_ids:
         if hass.states.get(entity_id) is not None:
-            raise RuntimeError("duplicate saved HASC entries must not restore count states")
+            raise RuntimeError("duplicate saved HausmanHub entries must not restore count states")
 
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
     return first_entry, duplicate_entry
@@ -2762,11 +2762,11 @@ async def async_assert_corrected_entry_stays_safe_after_restart(
 
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None:
-        raise RuntimeError("the manually corrected HASC entry must remain registered")
+        raise RuntimeError("the manually corrected HausmanHub entry must remain registered")
     assert_result(
         [configured_entry.entry_id for configured_entry in hass.config_entries.async_entries(domain)],
         [entry_id],
-        "restart must preserve only the corrected HASC entry",
+        "restart must preserve only the corrected HausmanHub entry",
     )
     assert_result(
         dict(entry.data),
@@ -2781,11 +2781,11 @@ async def async_assert_corrected_entry_stays_safe_after_restart(
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.LOADED,
-        "a manually corrected HASC entry must load after restart",
+        "a manually corrected HausmanHub entry must load after restart",
     )
     expected_mode = expected_options.get("mode", expected_data["mode"])
     if not isinstance(expected_mode, str):
-        raise RuntimeError("the manually corrected HASC mode must remain a string")
+        raise RuntimeError("the manually corrected HausmanHub mode must remain a string")
     await async_assert_safe_diagnostics(hass, domain, entry, expected_mode)
     assert_entry_has_only_summary_sensors(
         hass,
@@ -2796,7 +2796,7 @@ async def async_assert_corrected_entry_stays_safe_after_restart(
     assert_local_summary_view(hass, domain)
     await async_assert_authenticated_local_summary_http_access(
         hass,
-        "HASC corrected-settings restart temporary",
+        "HausmanHub corrected-settings restart temporary",
     )
     assert_reserved_collision_entry_is_unchanged(hass, reserved_entry)
     return entry
@@ -2810,7 +2810,7 @@ async def async_create_test_access_token(
 
     refresh_token = await hass.auth.async_create_refresh_token(
         user,
-        client_id="https://hasc-local-check.invalid",
+        client_id="https://hausmanhub-local-check.invalid",
     )
     return hass.auth.async_create_access_token(refresh_token, "127.0.0.1")
 
@@ -2844,12 +2844,12 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
     """Exercise actual Core auth and fail-closed disabled climate endpoints."""
 
     owner = await hass.auth.async_create_user(
-        "HASC disabled climate test owner",
+        "HausmanHub disabled climate test owner",
         group_ids=[GROUP_ID_ADMIN],
         local_only=True,
     )
     tablet = await hass.auth.async_create_user(
-        "HASC disabled climate tablet",
+        "HausmanHub disabled climate tablet",
         group_ids=[GROUP_ID_USER],
         local_only=True,
     )
@@ -2866,7 +2866,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_result(
             unauthenticated_capabilities.status,
             HTTPStatus.UNAUTHORIZED,
-            "HASC capabilities must require Home Assistant authentication",
+            "HausmanHub capabilities must require Home Assistant authentication",
         )
         rejected_owner_capabilities = await client.get(
             CAPABILITIES_PATH,
@@ -2875,7 +2875,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_result(
             rejected_owner_capabilities.status,
             HTTPStatus.FORBIDDEN,
-            "HASC capabilities must reject an administrator as a tablet",
+            "HausmanHub capabilities must reject an administrator as a tablet",
         )
         capabilities = await client.get(
             CAPABILITIES_PATH,
@@ -2884,31 +2884,31 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         assert_result(
             capabilities.status,
             HTTPStatus.OK,
-            "the exact local tablet must discover installed HASC capabilities",
+            "the exact local tablet must discover installed HausmanHub capabilities",
         )
         capabilities_payload = await capabilities.json()
         assert_result(
             capabilities_payload.get("contract"),
-            {"name": "hausman-hasc-capabilities", "version": 1},
-            "HASC capabilities must keep their exact public contract",
+            {"name": "hausman-hub-capabilities", "version": 1},
+            "HausmanHub capabilities must keep their exact public contract",
         )
         assert_result(
             capabilities_payload.get("capabilities", {})
             .get("climate_home", {})
             .get("response_contract"),
-            {"name": "hausman-hasc-home", "version": 12},
-            "HASC capabilities must advertise the current home contract",
+            {"name": "hausman-hub-home", "version": 12},
+            "HausmanHub capabilities must advertise the current home contract",
         )
         assert_result(
             capabilities_payload.get("capabilities", {})
             .get("automatic_contours", {})
             .get("response_contract"),
-            {"name": "hausman-hasc-contours", "version": 7},
-            "HASC capabilities must advertise the current contour contract",
+            {"name": "hausman-hub-contours", "version": 7},
+            "HausmanHub capabilities must advertise the current contour contract",
         )
         assert_local_summary_response_is_not_stored(
             capabilities,
-            "HASC capabilities response",
+            "HausmanHub capabilities response",
         )
 
         unauthenticated = await client.get(CLIMATE_HOME_PATH)
@@ -2964,7 +2964,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
                 .get("automatic"),
             ),
             (
-                {"name": "hausman-hasc-contours", "version": 7},
+                {"name": "hausman-hub-contours", "version": 7},
                 [],
                 "Автоматически",
             ),
@@ -3289,12 +3289,12 @@ async def async_assert_shadow_climate_end_to_end(
     bridge_origin = str(bridge_server.make_url("/")).removesuffix("/")
 
     owner = await hass.auth.async_create_user(
-        "HASC shadow climate test owner",
+        "HausmanHub shadow climate test owner",
         group_ids=[GROUP_ID_ADMIN],
         local_only=True,
     )
     tablet = await hass.auth.async_create_user(
-        "HASC shadow climate tablet",
+        "HausmanHub shadow climate tablet",
         group_ids=[GROUP_ID_USER],
         local_only=True,
     )
@@ -3609,7 +3609,7 @@ async def async_assert_shadow_climate_end_to_end(
             raise RuntimeError("tablet home state revision must be a JSON-safe integer")
         assert_result(
             home_payload.get("contract"),
-            {"name": "hausman-hasc-home", "version": 12},
+            {"name": "hausman-hub-home", "version": 12},
             "tablet must receive the combined v12 home contract",
         )
         combined_contours = home_payload.get("contours", [])
@@ -3708,7 +3708,7 @@ async def async_assert_shadow_climate_end_to_end(
                 if isinstance(device, dict)
             ],
             ["working"],
-            "tablet device state must be normalized to a stable HASC code",
+            "tablet device state must be normalized to a stable HausmanHub code",
         )
         assert_result(
             (
@@ -4157,7 +4157,7 @@ async def async_assert_local_summary_rejects_alternate_paths(
 
 async def async_assert_authenticated_local_summary_http_access(
     hass: HomeAssistant,
-    test_user_prefix: str = "HASC temporary",
+    test_user_prefix: str = "HausmanHub temporary",
 ) -> None:
     """Exercise the actual auth middleware against one disposable loopback app."""
 
@@ -4320,7 +4320,7 @@ async def async_assert_local_summary_is_unavailable(
         await client.close()
 
 
-async def async_save_unsafe_hasc_setting_without_reading_home(
+async def async_save_unsafe_hausmanhub_setting_without_reading_home(
     hass: HomeAssistant,
     domain: str,
     entry: ConfigEntry,
@@ -4329,10 +4329,10 @@ async def async_save_unsafe_hasc_setting_without_reading_home(
     data: dict[str, str] | None = None,
     options: dict[str, str] | None = None,
 ) -> None:
-    """Save unsafe mappings while every HASC home reader fails immediately."""
+    """Save unsafe mappings while every HausmanHub home reader fails immediately."""
 
     if data is None and options is None:
-        raise RuntimeError("the unsafe HASC update must change a saved mapping")
+        raise RuntimeError("the unsafe HausmanHub update must change a saved mapping")
 
     async with async_block_home_summary_reads(
         hass,
@@ -4348,7 +4348,7 @@ async def async_save_unsafe_hasc_setting_without_reading_home(
         await hass.async_block_till_done()
 
 
-async def async_assert_unsafe_saved_update_closes_hasc(
+async def async_assert_unsafe_saved_update_closes_hausmanhub(
     hass: HomeAssistant,
     domain: str,
     entry: ConfigEntry,
@@ -4358,10 +4358,10 @@ async def async_assert_unsafe_saved_update_closes_hasc(
     *,
     expect_retained_local_summary_route: bool = True,
 ) -> None:
-    """Prove an unsafe saved setting leaves every HASC display closed."""
+    """Prove an unsafe saved setting leaves every HausmanHub display closed."""
 
     if entry.state is config_entries.ConfigEntryState.LOADED:
-        raise RuntimeError(f"{scenario_name} must close HASC automatically")
+        raise RuntimeError(f"{scenario_name} must close HausmanHub automatically")
     if entity_registry.async_entries_for_config_entry(
         entity_registry.async_get(hass),
         entry.entry_id,
@@ -4384,7 +4384,7 @@ async def async_assert_unsafe_saved_update_closes_hasc(
         )
     else:
         if hass.data.get(domain) is not None:
-            raise RuntimeError(f"{scenario_name} must not restore HASC runtime data")
+            raise RuntimeError(f"{scenario_name} must not restore HausmanHub runtime data")
         if find_local_summary_routes(hass):
             raise RuntimeError(f"{scenario_name} must not restore the local summary route")
 
@@ -4404,7 +4404,7 @@ async def async_assert_stale_local_summary_pointer_is_unavailable_without_readin
     assert_result(
         entry.state,
         config_entries.ConfigEntryState.NOT_LOADED,
-        f"{unavailable_after} must keep HASC unloaded",
+        f"{unavailable_after} must keep HausmanHub unloaded",
     )
     assert_result(
         runtime.get(LOCAL_SUMMARY_ACTIVE_ENTRY),
@@ -4489,7 +4489,7 @@ def install_legacy_sensor_names_for_test(integration_target: Path) -> None:
     # Exact single-line replacements fail loudly if the source changes, rather
     # than silently claiming to emulate the legacy version incorrectly.
     for current_line in (
-        'SENSOR_ENTITY_ID_PREFIX: Final = f"sensor.{DOMAIN}_hasc"\n',
+        'SENSOR_ENTITY_ID_PREFIX: Final = f"sensor.{DOMAIN}"\n',
         '        self.entity_id = f"{SENSOR_ENTITY_ID_PREFIX}_{summary_key}"\n',
     ):
         if source.count(current_line) != 1:
@@ -4505,7 +4505,7 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
     reserved_entry: ReservedCollisionEntry,
     first_entry_is_user_disabled: bool,
 ) -> tuple[RemovedHascEntry, RemovedHascEntry]:
-    """Prove a saved HASC pair stays closed until one record is removed.
+    """Prove a saved HausmanHub pair stays closed until one record is removed.
 
     The check runs both relevant saved states: an enabled pair, where the
     remaining entry requires an explicit reload after repair, and a pair with
@@ -4525,7 +4525,7 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
         "user-deactivated first entry" if first_entry_is_user_disabled else "enabled pair"
     )
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             seed_hass,
             domain,
             previous_removed_entries,
@@ -4538,7 +4538,7 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
             first_entry.entry_id,
             expected_entity_ids=None,
         )
-        assert_reserved_name_does_not_block_hasc(
+        assert_reserved_name_does_not_block_hausmanhub(
             seed_hass,
             first_entry.entry_id,
             reserved_entry,
@@ -4587,7 +4587,7 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
             assert_result(
                 closed_first_entry.state,
                 config_entries.ConfigEntryState.NOT_LOADED,
-                "adding a duplicate must unload the remaining enabled HASC",
+                "adding a duplicate must unload the remaining enabled HausmanHub",
             )
         await async_assert_closed_diagnostics(
             seed_hass,
@@ -4603,13 +4603,13 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
         )
         duplicate_reader_token = await async_create_test_read_only_access_token(
             seed_hass,
-            f"HASC live duplicate {scenario_name} test user",
+            f"HausmanHub live duplicate {scenario_name} test user",
         )
         await async_assert_local_summary_is_unavailable(
             seed_hass,
             domain,
             duplicate_reader_token,
-            "adding a duplicate saved HASC entry",
+            "adding a duplicate saved HausmanHub entry",
         )
     finally:
         await seed_hass.async_stop()
@@ -4657,26 +4657,26 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
         assert_result(
             [entry.entry_id for entry in duplicate_hass.config_entries.async_entries(domain)],
             [first_entry.entry_id],
-            "removing the duplicate must retain only the original HASC entry",
+            "removing the duplicate must retain only the original HausmanHub entry",
         )
         if first_entry_is_user_disabled:
             await async_enable_safe_entry(duplicate_hass, first_entry)
         else:
             if first_entry.state is config_entries.ConfigEntryState.LOADED:
                 raise RuntimeError(
-                    "removing a duplicate must not automatically load the remaining HASC"
+                    "removing a duplicate must not automatically load the remaining HausmanHub"
                 )
             reloaded = await duplicate_hass.config_entries.async_reload(first_entry.entry_id)
             assert_result(
                 reloaded,
                 True,
-                "the remaining enabled HASC entry must reload after duplicate removal",
+                "the remaining enabled HausmanHub entry must reload after duplicate removal",
             )
             await duplicate_hass.async_block_till_done()
             assert_result(
                 first_entry.state,
                 config_entries.ConfigEntryState.LOADED,
-                "an explicitly reloaded remaining HASC entry must load successfully",
+                "an explicitly reloaded remaining HausmanHub entry must load successfully",
             )
         assert_entry_has_only_summary_sensors(
             duplicate_hass,
@@ -4684,7 +4684,7 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
             first_entry.entry_id,
             expected_entity_ids=None,
         )
-        assert_reserved_name_does_not_block_hasc(
+        assert_reserved_name_does_not_block_hausmanhub(
             duplicate_hass,
             first_entry.entry_id,
             reserved_entry,
@@ -4698,11 +4698,11 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
         assert_local_summary_view(duplicate_hass, domain)
         await async_assert_authenticated_local_summary_http_access(
             duplicate_hass,
-            f"HASC corrected {scenario_name} temporary",
+            f"HausmanHub corrected {scenario_name} temporary",
         )
         recovery_reader_token = await async_create_test_read_only_access_token(
             duplicate_hass,
-            f"HASC corrected {scenario_name} removal test user",
+            f"HausmanHub corrected {scenario_name} removal test user",
         )
         recovered_removal = await async_remove_safe_entry(
             duplicate_hass,
@@ -4729,7 +4729,7 @@ async def async_assert_persisted_duplicate_entry_lifecycle(
 
     final_hass = await async_start_empty_home_assistant(config_directory)
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             final_hass,
             domain,
             (*previous_removed_entries, duplicate_removal, recovered_removal),
@@ -4759,7 +4759,7 @@ async def async_assert_invalid_saved_data_lifecycle(
     recovered_entry_options: dict[str, Any] | None = None
     saved_unsafe_data = dict(unsafe_data)
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             invalid_data_hass,
             domain,
             previous_removed_entries,
@@ -4786,7 +4786,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         assert_result(
             len(invalid_entry_entity_ids),
             len(SUMMARY_SENSOR_KEYS),
-            "the temporary invalid-data HASC entry must start with nine count sensors",
+            "the temporary invalid-data HausmanHub entry must start with nine count sensors",
         )
         await async_assert_safe_diagnostics(
             invalid_data_hass,
@@ -4803,9 +4803,9 @@ async def async_assert_invalid_saved_data_lifecycle(
         assert_local_summary_view(invalid_data_hass, domain)
         invalid_reader_token = await async_create_test_read_only_access_token(
             invalid_data_hass,
-            f"HASC temporary {scenario_name} test user",
+            f"HausmanHub temporary {scenario_name} test user",
         )
-        await async_save_unsafe_hasc_setting_without_reading_home(
+        await async_save_unsafe_hausmanhub_setting_without_reading_home(
             invalid_data_hass,
             domain,
             invalid_entry,
@@ -4815,14 +4815,14 @@ async def async_assert_invalid_saved_data_lifecycle(
         assert_result(
             dict(invalid_entry.data),
             saved_unsafe_data,
-            "the temporary unsafe HASC data must persist",
+            "the temporary unsafe HausmanHub data must persist",
         )
         await async_assert_broken_options_form_defaults_to_read_only(
             invalid_data_hass,
             invalid_entry,
             f"{scenario_name} saved main settings",
         )
-        await async_assert_unsafe_saved_update_closes_hasc(
+        await async_assert_unsafe_saved_update_closes_hausmanhub(
             invalid_data_hass,
             domain,
             invalid_entry,
@@ -4854,7 +4854,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         )
         recovered_entry = recovered_data_hass.config_entries.async_get_entry(invalid_entry_id)
         if recovered_entry is None:
-            raise RuntimeError("the temporary invalid HASC entry must remain repairable")
+            raise RuntimeError("the temporary invalid HausmanHub entry must remain repairable")
         recovered_data_hass.config_entries.async_update_entry(
             recovered_entry,
             data=recovered_entry_data,
@@ -4866,7 +4866,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         assert_result(
             reloaded_recovered_entry,
             True,
-            "a manually corrected HASC data entry must reload successfully",
+            "a manually corrected HausmanHub data entry must reload successfully",
         )
         await recovered_data_hass.async_block_till_done()
         assert_result(
@@ -4882,7 +4882,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         assert_result(
             recovered_entry.state,
             config_entries.ConfigEntryState.LOADED,
-            "a manually corrected HASC data entry must load safely",
+            "a manually corrected HausmanHub data entry must load safely",
         )
         await async_assert_safe_diagnostics(
             recovered_data_hass,
@@ -4899,7 +4899,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         assert_local_summary_view(recovered_data_hass, domain)
         await async_assert_authenticated_local_summary_http_access(
             recovered_data_hass,
-            f"HASC corrected {scenario_name} temporary",
+            f"HausmanHub corrected {scenario_name} temporary",
         )
         assert_reserved_collision_entry_is_unchanged(recovered_data_hass, reserved_entry)
     finally:
@@ -4919,7 +4919,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         )
         recovery_removal_reader_token = await async_create_test_read_only_access_token(
             recovered_data_restart_hass,
-            f"HASC corrected {scenario_name} removal test user",
+            f"HausmanHub corrected {scenario_name} removal test user",
         )
         removed_entry = await async_remove_safe_entry(
             recovered_data_restart_hass,
@@ -4929,7 +4929,7 @@ async def async_assert_invalid_saved_data_lifecycle(
             recovered_data_restart_hass,
             domain,
             recovery_removal_reader_token,
-            "corrected HASC data removal",
+            "corrected HausmanHub data removal",
         )
         assert_reserved_collision_entry_is_unchanged(
             recovered_data_restart_hass,
@@ -4945,7 +4945,7 @@ async def async_assert_invalid_saved_data_lifecycle(
         config_directory
     )
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             recovered_data_removal_hass,
             domain,
             (*previous_removed_entries, removed_entry),
@@ -4974,7 +4974,7 @@ async def async_assert_invalid_saved_options_lifecycle(
     invalid_options_entity_ids: frozenset[str] | None = None
     saved_unsafe_options = dict(unsafe_options)
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             invalid_options_hass,
             domain,
             previous_removed_entries,
@@ -5003,7 +5003,7 @@ async def async_assert_invalid_saved_options_lifecycle(
         assert_result(
             len(invalid_options_entity_ids),
             len(SUMMARY_SENSOR_KEYS),
-            "the temporary invalid-options HASC entry must start with nine count sensors",
+            "the temporary invalid-options HausmanHub entry must start with nine count sensors",
         )
         await async_assert_safe_diagnostics(
             invalid_options_hass,
@@ -5020,9 +5020,9 @@ async def async_assert_invalid_saved_options_lifecycle(
         assert_local_summary_view(invalid_options_hass, domain)
         invalid_options_reader_token = await async_create_test_read_only_access_token(
             invalid_options_hass,
-            f"HASC temporary {scenario_name} test user",
+            f"HausmanHub temporary {scenario_name} test user",
         )
-        await async_save_unsafe_hasc_setting_without_reading_home(
+        await async_save_unsafe_hausmanhub_setting_without_reading_home(
             invalid_options_hass,
             domain,
             invalid_options_entry,
@@ -5032,14 +5032,14 @@ async def async_assert_invalid_saved_options_lifecycle(
         assert_result(
             dict(invalid_options_entry.options),
             saved_unsafe_options,
-            "the temporary unsafe HASC options must persist",
+            "the temporary unsafe HausmanHub options must persist",
         )
         await async_assert_broken_options_form_defaults_to_read_only(
             invalid_options_hass,
             invalid_options_entry,
             f"{scenario_name} saved options",
         )
-        await async_assert_unsafe_saved_update_closes_hasc(
+        await async_assert_unsafe_saved_update_closes_hausmanhub(
             invalid_options_hass,
             domain,
             invalid_options_entry,
@@ -5073,7 +5073,7 @@ async def async_assert_invalid_saved_options_lifecycle(
             invalid_options_entry_id
         )
         if recovered_options_entry is None:
-            raise RuntimeError("the temporary invalid HASC options entry must remain repairable")
+            raise RuntimeError("the temporary invalid HausmanHub options entry must remain repairable")
         invalid_options_restarted_hass.config_entries.async_update_entry(
             recovered_options_entry,
             options=invalid_options_safe_options,
@@ -5087,7 +5087,7 @@ async def async_assert_invalid_saved_options_lifecycle(
         assert_result(
             reloaded_recovered_options_entry,
             True,
-            "manually corrected HASC options must reload successfully",
+            "manually corrected HausmanHub options must reload successfully",
         )
         await invalid_options_restarted_hass.async_block_till_done()
         assert_result(
@@ -5103,11 +5103,11 @@ async def async_assert_invalid_saved_options_lifecycle(
         assert_result(
             recovered_options_entry.state,
             config_entries.ConfigEntryState.LOADED,
-            "manually corrected HASC options must load safely",
+            "manually corrected HausmanHub options must load safely",
         )
         safe_mode = invalid_options_safe_options.get("mode")
         if not isinstance(safe_mode, str):
-            raise RuntimeError("the corrected HASC options must retain a string mode")
+            raise RuntimeError("the corrected HausmanHub options must retain a string mode")
         await async_assert_safe_diagnostics(
             invalid_options_restarted_hass,
             domain,
@@ -5123,7 +5123,7 @@ async def async_assert_invalid_saved_options_lifecycle(
         assert_local_summary_view(invalid_options_restarted_hass, domain)
         await async_assert_authenticated_local_summary_http_access(
             invalid_options_restarted_hass,
-            f"HASC corrected {scenario_name} temporary",
+            f"HausmanHub corrected {scenario_name} temporary",
         )
         assert_reserved_collision_entry_is_unchanged(
             invalid_options_restarted_hass,
@@ -5146,7 +5146,7 @@ async def async_assert_invalid_saved_options_lifecycle(
         )
         options_recovery_removal_reader_token = await async_create_test_read_only_access_token(
             recovered_options_hass,
-            f"HASC corrected {scenario_name} removal test user",
+            f"HausmanHub corrected {scenario_name} removal test user",
         )
         removed_entry = await async_remove_safe_entry(
             recovered_options_hass,
@@ -5156,7 +5156,7 @@ async def async_assert_invalid_saved_options_lifecycle(
             recovered_options_hass,
             domain,
             options_recovery_removal_reader_token,
-            "corrected HASC options removal",
+            "corrected HausmanHub options removal",
         )
         assert_reserved_collision_entry_is_unchanged(recovered_options_hass, reserved_entry)
     finally:
@@ -5169,7 +5169,7 @@ async def async_assert_invalid_saved_options_lifecycle(
         config_directory
     )
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             recovered_options_removal_hass,
             domain,
             (*previous_removed_entries, removed_entry),
@@ -5198,7 +5198,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     restart_after_repeat_repair: bool = False,
     reclose_after_repeat_repair_restart: bool = False,
 ) -> RemovedHascEntry:
-    """Prove manual activation cannot bypass unsafe saved HASC settings."""
+    """Prove manual activation cannot bypass unsafe saved HausmanHub settings."""
 
     if unsafe_data is None and unsafe_options is None:
         raise RuntimeError("unsafe activation must change a saved mapping")
@@ -5240,7 +5240,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     unsafe_hass_stopped = False
     removed_entry: RemovedHascEntry | None = None
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             unsafe_hass,
             domain,
             previous_removed_entries,
@@ -5261,7 +5261,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         )
         unsafe_reader_token = await async_create_test_read_only_access_token(
             unsafe_hass,
-            f"HASC {scenario_name} activation test user",
+            f"HausmanHub {scenario_name} activation test user",
         )
         await async_disable_safe_entry(unsafe_hass, unsafe_entry)
         assert_entry_has_disabled_summary_sensors(
@@ -5289,7 +5289,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         expected_options = (
             dict(unsafe_options) if unsafe_options is not None else dict(safe_options)
         )
-        await async_save_unsafe_hasc_setting_without_reading_home(
+        await async_save_unsafe_hausmanhub_setting_without_reading_home(
             unsafe_hass,
             domain,
             unsafe_entry,
@@ -5310,12 +5310,12 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         assert_result(
             unsafe_entry.disabled_by,
             ConfigEntryDisabler.USER,
-            "saving unsafe settings must keep HASC user-disabled",
+            "saving unsafe settings must keep HausmanHub user-disabled",
         )
         assert_result(
             unsafe_entry.state,
             config_entries.ConfigEntryState.NOT_LOADED,
-            "saving unsafe settings must keep disabled HASC not loaded",
+            "saving unsafe settings must keep disabled HausmanHub not loaded",
         )
         assert_entry_has_disabled_summary_sensors(
             unsafe_hass,
@@ -5347,7 +5347,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 unsafe_entry.entry_id
             )
             if activation_entry is None:
-                raise RuntimeError("the restarted unsafe HASC entry must remain repairable")
+                raise RuntimeError("the restarted unsafe HausmanHub entry must remain repairable")
             assert_result(
                 dict(activation_entry.data),
                 expected_data,
@@ -5396,7 +5396,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
             expected_options,
             "unsafe activation must leave manual repair possible",
         )
-        await async_assert_unsafe_saved_update_closes_hasc(
+        await async_assert_unsafe_saved_update_closes_hausmanhub(
             activation_hass,
             domain,
             activation_entry,
@@ -5410,7 +5410,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 raise RuntimeError(
                     "partial repair requires the retained local summary reader token"
                 )
-            await async_assert_partial_main_repair_keeps_hasc_closed(
+            await async_assert_partial_main_repair_keeps_hausmanhub_closed(
                 activation_hass,
                 domain,
                 activation_entry,
@@ -5441,9 +5441,9 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
         if reclose_after_recovery:
             if activation_reader_token is None:
                 raise RuntimeError(
-                    "recovered HASC must keep a reader token before repeat closure"
+                    "recovered HausmanHub must keep a reader token before repeat closure"
                 )
-            await async_save_unsafe_hasc_setting_without_reading_home(
+            await async_save_unsafe_hausmanhub_setting_without_reading_home(
                 activation_hass,
                 domain,
                 activation_entry,
@@ -5461,7 +5461,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 expected_options,
                 "repeated unsafe options must remain available for manual repair",
             )
-            await async_assert_unsafe_saved_update_closes_hasc(
+            await async_assert_unsafe_saved_update_closes_hausmanhub(
                 activation_hass,
                 domain,
                 activation_entry,
@@ -5501,15 +5501,15 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
             )
             activation_reader_token = await async_create_test_read_only_access_token(
                 activation_hass,
-                f"HASC {scenario_name} repeat-repair restart removal test user",
+                f"HausmanHub {scenario_name} repeat-repair restart removal test user",
             )
             expect_retained_local_summary_route = True
         if reclose_after_repeat_repair_restart:
             if activation_reader_token is None:
                 raise RuntimeError(
-                    "restarted HASC must keep a reader token before repeat closure"
+                    "restarted HausmanHub must keep a reader token before repeat closure"
                 )
-            await async_save_unsafe_hasc_setting_without_reading_home(
+            await async_save_unsafe_hausmanhub_setting_without_reading_home(
                 activation_hass,
                 domain,
                 activation_entry,
@@ -5527,7 +5527,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
                 expected_options,
                 "restart repeat unsafe options must remain available for manual repair",
             )
-            await async_assert_unsafe_saved_update_closes_hasc(
+            await async_assert_unsafe_saved_update_closes_hausmanhub(
                 activation_hass,
                 domain,
                 activation_entry,
@@ -5557,7 +5557,7 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
             )
         else:
             if activation_hass.data.get(domain) is not None:
-                raise RuntimeError("removed unsafe activation must not restore HASC runtime data")
+                raise RuntimeError("removed unsafe activation must not restore HausmanHub runtime data")
             if find_local_summary_routes(activation_hass):
                 raise RuntimeError("removed unsafe activation must not restore local summary route")
         assert_reserved_collision_entry_is_unchanged(activation_hass, reserved_entry)
@@ -5568,11 +5568,11 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
             await unsafe_hass.async_stop()
 
     if removed_entry is None:
-        raise RuntimeError(f"the {scenario_name} activation fixture must remove its HASC entry")
+        raise RuntimeError(f"the {scenario_name} activation fixture must remove its HausmanHub entry")
 
     removal_hass = await async_start_empty_home_assistant(config_directory)
     try:
-        assert_hasc_stays_removed_after_restart(
+        assert_hausmanhub_stays_removed_after_restart(
             removal_hass,
             domain,
             (*previous_removed_entries, removed_entry),
@@ -5589,7 +5589,7 @@ async def async_run_check() -> None:
 
     domain = load_integration_domain()
 
-    with tempfile.TemporaryDirectory(prefix="hasc-core-check-") as temporary_directory:
+    with tempfile.TemporaryDirectory(prefix="hausmanhub-core-check-") as temporary_directory:
         config_directory = Path(temporary_directory)
         integration_target = config_directory / "custom_components" / domain
         integration_target.parent.mkdir(parents=True)
@@ -5630,7 +5630,7 @@ async def async_run_check() -> None:
             assert_result(
                 legacy_default_entry_options,
                 {},
-                "a legacy HASC entry must begin without the new interval option",
+                "a legacy HausmanHub entry must begin without the new interval option",
             )
             await hass.async_stop()
             hass = await async_start_empty_home_assistant(config_directory)
@@ -5691,7 +5691,7 @@ async def async_run_check() -> None:
             assert_local_summary_view(hass, domain)
             await async_assert_authenticated_local_summary_http_access(
                 hass,
-                "HASC slower summary interval temporary",
+                "HausmanHub slower summary interval temporary",
             )
 
             await async_update_safe_options(hass, read_only_entry, "read-only")
@@ -5725,7 +5725,7 @@ async def async_run_check() -> None:
 
             optional_page_reader_token = await async_create_test_read_only_access_token(
                 hass,
-                "HASC optional local page test user",
+                "HausmanHub optional local page test user",
             )
             read_only_entry_id = read_only_entry.entry_id
             await async_update_optional_local_page(
@@ -5744,7 +5744,7 @@ async def async_run_check() -> None:
             assert_result(
                 read_only_entry.state,
                 config_entries.ConfigEntryState.LOADED,
-                "disabled optional local page must keep HASC's count display loaded",
+                "disabled optional local page must keep HausmanHub's count display loaded",
             )
             assert_entry_has_only_summary_sensors(
                 hass,
@@ -5768,7 +5768,7 @@ async def async_run_check() -> None:
 
             optional_page_reader_token = await async_create_test_read_only_access_token(
                 hass,
-                "HASC optional local page restart test user",
+                "HausmanHub optional local page restart test user",
             )
             await async_update_optional_local_page(
                 hass,
@@ -5783,7 +5783,7 @@ async def async_run_check() -> None:
             ordinary_unload_options_before_save = dict(read_only_entry.options)
             ordinary_unload_reader_token = await async_create_test_read_only_access_token(
                 hass,
-                "HASC temporary ordinary-unload test user",
+                "HausmanHub temporary ordinary-unload test user",
             )
             await async_unload_safe_entry(hass, read_only_entry)
             assert_result(
@@ -5806,13 +5806,13 @@ async def async_run_check() -> None:
                 hass,
                 domain,
                 read_only_entry,
-                "HASC ordinary unload",
+                "HausmanHub ordinary unload",
             )
             await async_assert_local_summary_is_unavailable(
                 hass,
                 domain,
                 ordinary_unload_reader_token,
-                "HASC ordinary unload",
+                "HausmanHub ordinary unload",
             )
             await async_update_inactive_safe_options_without_reading_home(
                 hass,
@@ -5838,20 +5838,20 @@ async def async_run_check() -> None:
                 hass,
                 domain,
                 read_only_entry,
-                "saving safe options while HASC is stopped",
+                "saving safe options while HausmanHub is stopped",
             )
             await async_assert_local_summary_is_unavailable(
                 hass,
                 domain,
                 ordinary_unload_reader_token,
-                "saving safe options while HASC is stopped",
+                "saving safe options while HausmanHub is stopped",
             )
             await async_assert_stale_local_summary_pointer_is_unavailable_without_reading(
                 hass,
                 domain,
                 read_only_entry,
                 ordinary_unload_reader_token,
-                "saving safe options while HASC is stopped with a stale local-summary pointer",
+                "saving safe options while HausmanHub is stopped with a stale local-summary pointer",
             )
             ordinary_unload_options = dict(read_only_entry.options)
             await async_setup_safe_entry(hass, read_only_entry)
@@ -5881,18 +5881,18 @@ async def async_run_check() -> None:
             async with async_block_home_summary_reads(
                 hass,
                 domain,
-                "HASC ordinary setup with its optional local page closed",
+                "HausmanHub ordinary setup with its optional local page closed",
             ):
                 await async_assert_local_summary_is_unavailable(
                     hass,
                     domain,
                     ordinary_unload_reader_token,
-                    "HASC ordinary setup with its optional local page closed",
+                    "HausmanHub ordinary setup with its optional local page closed",
                 )
 
             deactivation_reader_token = await async_create_test_read_only_access_token(
                 hass,
-                "HASC temporary deactivation test user",
+                "HausmanHub temporary deactivation test user",
             )
             await async_disable_safe_entry(hass, read_only_entry)
             assert_entry_has_disabled_summary_sensors(
@@ -5905,13 +5905,13 @@ async def async_run_check() -> None:
                 hass,
                 domain,
                 read_only_entry,
-                "HASC deactivation",
+                "HausmanHub deactivation",
             )
             await async_assert_local_summary_is_unavailable(
                 hass,
                 domain,
                 deactivation_reader_token,
-                "HASC deactivation",
+                "HausmanHub deactivation",
             )
             deactivation_data = dict(read_only_entry.data)
             await async_update_inactive_safe_options_without_reading_home(
@@ -5938,13 +5938,13 @@ async def async_run_check() -> None:
                 hass,
                 domain,
                 read_only_entry,
-                "saving safe options while HASC is user-deactivated",
+                "saving safe options while HausmanHub is user-deactivated",
             )
             await async_assert_local_summary_is_unavailable(
                 hass,
                 domain,
                 deactivation_reader_token,
-                "saving safe options while HASC is user-deactivated",
+                "saving safe options while HausmanHub is user-deactivated",
             )
             deactivation_options = dict(read_only_entry.options)
             await async_enable_safe_entry(hass, read_only_entry)
@@ -5974,7 +5974,7 @@ async def async_run_check() -> None:
             assert_local_summary_view(hass, domain)
             await async_assert_authenticated_local_summary_http_access(
                 hass,
-                "HASC temporary reactivation",
+                "HausmanHub temporary reactivation",
             )
             await async_disable_safe_entry(hass, read_only_entry)
             assert_entry_has_disabled_summary_sensors(
@@ -5987,7 +5987,7 @@ async def async_run_check() -> None:
                 hass,
                 domain,
                 deactivation_reader_token,
-                "HASC deactivation before restart",
+                "HausmanHub deactivation before restart",
             )
 
             entry_id = read_only_entry.entry_id
@@ -6024,7 +6024,7 @@ async def async_run_check() -> None:
                 restarted_hass,
                 domain,
                 restored_entry,
-                "HASC deactivation restart",
+                "HausmanHub deactivation restart",
             )
             await async_assert_second_entry_is_rejected(
                 restarted_hass,
@@ -6064,7 +6064,7 @@ async def async_run_check() -> None:
                 restarted_hass,
                 domain,
                 restored_entry,
-                "saving safe options while HASC is user-deactivated after restart",
+                "saving safe options while HausmanHub is user-deactivated after restart",
             )
             disabled_restart_options = dict(restored_entry.options)
             await async_enable_safe_entry(restarted_hass, restored_entry)
@@ -6129,7 +6129,7 @@ async def async_run_check() -> None:
                 restarted_hass,
                 domain,
                 restored_entry,
-                "ordinary HASC stop before restart",
+                "ordinary HausmanHub stop before restart",
             )
             await async_assert_second_entry_is_rejected(
                 restarted_hass,
@@ -6146,7 +6146,7 @@ async def async_run_check() -> None:
             assert_local_summary_is_not_registered(
                 restarted_hass,
                 domain,
-                "ordinary HASC stop before restart with its optional local page closed",
+                "ordinary HausmanHub stop before restart with its optional local page closed",
             )
         finally:
             await restarted_hass.async_stop()
@@ -6159,7 +6159,7 @@ async def async_run_check() -> None:
         try:
             removal_reader_token = await async_create_test_read_only_access_token(
                 ordinary_unload_restarted_hass,
-                "HASC temporary removal test user",
+                "HausmanHub temporary removal test user",
             )
             restored_entry = await async_assert_ordinary_unloaded_entry_recovers_after_restart(
                 ordinary_unload_restarted_hass,
@@ -6215,7 +6215,7 @@ async def async_run_check() -> None:
                 shadow_entry.entry_id,
                 expected_entity_ids=None,
             )
-            assert_reserved_name_does_not_block_hasc(
+            assert_reserved_name_does_not_block_hausmanhub(
                 ordinary_unload_restarted_hass,
                 shadow_entry.entry_id,
                 reserved_entry,
@@ -6230,7 +6230,7 @@ async def async_run_check() -> None:
                 ordinary_unload_restarted_hass,
                 domain,
                 removal_reader_token,
-                "HASC removal",
+                "HausmanHub removal",
             )
             assert_reserved_collision_entry_is_unchanged(
                 ordinary_unload_restarted_hass,
@@ -6248,7 +6248,7 @@ async def async_run_check() -> None:
                 reinstalled_entry.entry_id,
                 expected_entity_ids=None,
             )
-            assert_reserved_name_does_not_block_hasc(
+            assert_reserved_name_does_not_block_hausmanhub(
                 ordinary_unload_restarted_hass,
                 reinstalled_entry.entry_id,
                 reserved_entry,
@@ -6283,13 +6283,13 @@ async def async_run_check() -> None:
                 ordinary_unload_restarted_hass,
                 domain,
                 reinstalled_entry,
-                "HASC ordinary unload before deactivation",
+                "HausmanHub ordinary unload before deactivation",
             )
             await async_assert_local_summary_is_unavailable(
                 ordinary_unload_restarted_hass,
                 domain,
                 removal_reader_token,
-                "HASC ordinary unload before deactivation",
+                "HausmanHub ordinary unload before deactivation",
             )
             await async_disable_safe_entry(
                 ordinary_unload_restarted_hass,
@@ -6305,7 +6305,7 @@ async def async_run_check() -> None:
                 ordinary_unload_restarted_hass,
                 domain,
                 reinstalled_entry,
-                "HASC deactivation after ordinary unload",
+                "HausmanHub deactivation after ordinary unload",
             )
             disabled_reinstall_entry_id = reinstalled_entry.entry_id
             disabled_reinstall_entity_ids = frozenset(
@@ -6319,7 +6319,7 @@ async def async_run_check() -> None:
                 ordinary_unload_restarted_hass,
                 domain,
                 removal_reader_token,
-                "HASC deactivation",
+                "HausmanHub deactivation",
             )
             await async_enable_safe_entry(
                 ordinary_unload_restarted_hass,
@@ -6350,7 +6350,7 @@ async def async_run_check() -> None:
             assert_local_summary_view(ordinary_unload_restarted_hass, domain)
             await async_assert_authenticated_local_summary_http_access(
                 ordinary_unload_restarted_hass,
-                "HASC reactivation after ordinary unload",
+                "HausmanHub reactivation after ordinary unload",
             )
             assert_reserved_collision_entry_is_unchanged(
                 ordinary_unload_restarted_hass,
@@ -6370,13 +6370,13 @@ async def async_run_check() -> None:
                 ordinary_unload_restarted_hass,
                 domain,
                 reinstalled_entry,
-                "HASC second deactivation after ordinary unload",
+                "HausmanHub second deactivation after ordinary unload",
             )
             await async_assert_local_summary_is_unavailable(
                 ordinary_unload_restarted_hass,
                 domain,
                 removal_reader_token,
-                "HASC second deactivation after ordinary unload",
+                "HausmanHub second deactivation after ordinary unload",
             )
             assert_reserved_collision_entry_is_unchanged(
                 ordinary_unload_restarted_hass,
@@ -6392,7 +6392,7 @@ async def async_run_check() -> None:
             or disabled_reinstall_entity_ids is None
         ):
             raise RuntimeError(
-                "the lifecycle check must retain a disabled HASC setup for removal"
+                "the lifecycle check must retain a disabled HausmanHub setup for removal"
             )
 
         disabled_removal_hass = await async_start_empty_home_assistant(config_directory)
@@ -6401,7 +6401,7 @@ async def async_run_check() -> None:
                 disabled_reinstall_entry_id
             )
             if disabled_reinstall_entry is None:
-                raise RuntimeError("disabled HASC setup must persist until its removal")
+                raise RuntimeError("disabled HausmanHub setup must persist until its removal")
             assert_deactivated_entry_stays_inactive_after_restart(
                 disabled_removal_hass,
                 domain,
@@ -6427,7 +6427,7 @@ async def async_run_check() -> None:
 
         post_removal_hass = await async_start_empty_home_assistant(config_directory)
         try:
-            assert_hasc_stays_removed_after_restart(
+            assert_hausmanhub_stays_removed_after_restart(
                 post_removal_hass,
                 domain,
                 tuple(removed_entries),
@@ -6441,7 +6441,7 @@ async def async_run_check() -> None:
             if fresh_entry.entry_id in {
                 removed_entry.entry_id for removed_entry in removed_entries
             }:
-                raise RuntimeError("fresh HASC setup must use a new entry identifier")
+                raise RuntimeError("fresh HausmanHub setup must use a new entry identifier")
             assert_entry_has_only_summary_sensors(
                 post_removal_hass,
                 domain,
@@ -6454,7 +6454,7 @@ async def async_run_check() -> None:
                 fresh_entry.entry_id,
                 SUMMARY_UPDATE_INTERVAL_DEFAULT,
             )
-            assert_reserved_name_does_not_block_hasc(
+            assert_reserved_name_does_not_block_hausmanhub(
                 post_removal_hass,
                 fresh_entry.entry_id,
                 reserved_entry,
@@ -6472,11 +6472,11 @@ async def async_run_check() -> None:
             assert_local_summary_view(post_removal_hass, domain)
             await async_assert_authenticated_local_summary_http_access(
                 post_removal_hass,
-                "HASC post-restart temporary",
+                "HausmanHub post-restart temporary",
             )
             fresh_removal_reader_token = await async_create_test_read_only_access_token(
                 post_removal_hass,
-                "HASC post-restart removal test user",
+                "HausmanHub post-restart removal test user",
             )
             removed_entries.append(
                 await async_remove_safe_entry(post_removal_hass, fresh_entry.entry_id)
@@ -6485,13 +6485,13 @@ async def async_run_check() -> None:
                 post_removal_hass,
                 domain,
                 fresh_entry,
-                "HASC removal",
+                "HausmanHub removal",
             )
             await async_assert_local_summary_is_unavailable(
                 post_removal_hass,
                 domain,
                 fresh_removal_reader_token,
-                "HASC removal",
+                "HausmanHub removal",
             )
             assert_reserved_collision_entry_is_unchanged(
                 post_removal_hass,

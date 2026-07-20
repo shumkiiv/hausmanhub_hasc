@@ -1,10 +1,10 @@
 # Repository basics
 
-Established on 2026-07-13 for the separate HausMan Hub HASC workstream.
+Established on 2026-07-13 for the separate HausmanHub workstream.
 
 ## Repository identity
 
-- GitHub repository: `shumkiiv/hausmanhub_hasc`.
+- GitHub repository: `shumkiiv/hausmanhub_hacs`.
 - Visibility: public, explicitly approved by the owner on 2026-07-14 so HACS
   can read the repository. It is not listed in the public HACS catalog.
 - License: MIT.
@@ -27,7 +27,7 @@ The first implementation work, when explicitly requested, is limited to:
 
 ## Non-negotiable boundaries
 
-- Do not modify or deploy the HausMan Hub Node-RED/Home Assistant runtime.
+- Do not modify or deploy the HausmanHub Node-RED/Home Assistant runtime.
 - Do not call a live home during repository checks. Runtime code may call only
   the explicitly armed single-`input_boolean` canary's standard on/off service;
   physical devices and every other service domain remain excluded.
@@ -35,7 +35,7 @@ The first implementation work, when explicitly requested, is limited to:
   policy.
 - Do not add secrets, `.env` files, tokens, Node-RED flows, live entity IDs,
   service paths, physical command payloads, or deployment scripts.
-- Keep HASC commits separate from climate fixes, Node-RED deployment, and
+- Keep HausmanHub commits separate from climate fixes, Node-RED deployment, and
   Smart Home Center runtime work.
 
 Proxy is possible only after separate owner approval and documented rollback.
@@ -62,7 +62,7 @@ own domain policy. Every code change needs independent review. Kimi must review
 the final current diff before the change is considered complete or before a
 commit, push, release, deployment, or publication. If Kimi is
 temporarily unavailable, another independent review may support every change
-permitted by the HASC boundaries, including code, tests, documentation, and
+permitted by the HausmanHub boundaries, including code, tests, documentation, and
 local checks or fixes. It does not authorize a commit, push, release,
 deployment, publication, or new authority. Documentation-only edits do not
 require Kimi only when the change contains no code; the final Kimi gate applies

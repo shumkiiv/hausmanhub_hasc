@@ -1,4 +1,4 @@
-"""Safe room suggestions for HASC climate device candidates."""
+"""Safe room suggestions for HausmanHub climate device candidates."""
 
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ from custom_components.hausman_hub.application.climate_setup import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FIXTURE = ROOT / "fixtures" / "climate_bridge" / "valid_state.json"
-REGISTRY_FIXTURE = ROOT / "fixtures" / "hasc_climate_v1" / "registry.json"
+REGISTRY_FIXTURE = ROOT / "fixtures" / "hausmanhub_climate_v1" / "registry.json"
 SUGGESTIONS_FIXTURE = (
-    ROOT / "fixtures" / "hasc_climate_room_suggestions_v1" / "suggestions.json"
+    ROOT / "fixtures" / "hausmanhub_climate_room_suggestions_v1" / "suggestions.json"
 )
 SUGGESTIONS_SCHEMA = (
     ROOT

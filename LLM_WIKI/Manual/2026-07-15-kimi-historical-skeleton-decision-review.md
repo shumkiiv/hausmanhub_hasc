@@ -6,7 +6,7 @@ Date: 2026-07-15.
 
 Only documentation and its local guard changed. The old private-first skeleton
 decision is now clearly historical and links to the current public manual-HACS
-decision. The packaging decision now correctly says that HASC has exactly nine
+decision. The packaging decision now correctly says that HausmanHub has exactly nine
 diagnostic count sensors, while still having no device, command, or control
 surface.
 

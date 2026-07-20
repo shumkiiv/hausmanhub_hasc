@@ -32,6 +32,7 @@ ICON_PATH = INTEGRATION_DIRECTORY / "brand/icon.png"
 CHANGELOG_PATH = PurePosixPath("CHANGELOG.md")
 LICENSE_PATH = PurePosixPath("LICENSE")
 README_PATH = PurePosixPath("README.md")
+INSTALL_GUIDE_PATH = PurePosixPath("docs/install-via-hacs.md")
 TRANSLATION_PATHS = (
     INTEGRATION_DIRECTORY / "strings.json",
     INTEGRATION_DIRECTORY / "translations/en.json",
@@ -90,6 +91,7 @@ CONTRACT_PATHS = tuple(
 REQUIRED_PACKAGE_PATHS = (
     HACS_METADATA_PATH,
     README_PATH,
+    INSTALL_GUIDE_PATH,
     CHANGELOG_PATH,
     LICENSE_PATH,
     INTEGRATION_DIRECTORY / "__init__.py",
@@ -127,7 +129,7 @@ REQUIRED_PACKAGE_PATHS = (
     *TRANSLATION_PATHS,
     *CONTRACT_PATHS,
 )
-EXPECTED_NAME = "HASC — управление домом"
+EXPECTED_NAME = "HausmanHub"
 EXPECTED_DOMAIN = "hausman_hub"
 EXPECTED_HOME_ASSISTANT = "2026.6.4"
 EXPECTED_HACS_METADATA = {
@@ -139,8 +141,8 @@ EXPECTED_MANIFEST_VALUES = {
     "name": EXPECTED_NAME,
     "codeowners": ["@shumkiiv"],
     "config_flow": True,
-    "documentation": "https://github.com/shumkiiv/hausmanhub_hasc",
-    "issue_tracker": "https://github.com/shumkiiv/hausmanhub_hasc/issues",
+    "documentation": "https://github.com/shumkiiv/hausmanhub_hacs",
+    "issue_tracker": "https://github.com/shumkiiv/hausmanhub_hacs/issues",
     "integration_type": "hub",
     "single_config_entry": True,
 }

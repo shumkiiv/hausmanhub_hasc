@@ -4,9 +4,9 @@ Date: 2026-07-15.
 
 ## Scope
 
-Version 0.3.8 closes the HASC diagnostic file whenever HASC is not the one
+Version 0.3.8 closes the HausmanHub diagnostic file whenever HausmanHub is not the one
 safe loaded setup: after an ordinary stop, user deactivation, removal, a broken
-saved setting, or a damaged pair of saved HASC setups. The closed report is
+saved setting, or a damaged pair of saved HausmanHub setups. The closed report is
 fixed and does not read the local home summary.
 
 ## Final result

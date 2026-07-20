@@ -59,7 +59,7 @@ class HacsPackageCheckTest(unittest.TestCase):
             self.files,
             package.HACS_METADATA_PATH,
             (
-                '{"name":"HASC — управление домом",'
+                '{"name":"HausmanHub",'
                 '"homeassistant":"2026.6.4","render_readme":true}'
             ).encode("utf-8"),
         )

@@ -4,7 +4,7 @@ Date: 2026-07-13.
 
 ## Completed scope
 
-The first code-level HASC step is complete as a Python-standard-library-only
+The first code-level HausmanHub step is complete as a Python-standard-library-only
 fixture harness. It adds:
 
 - synthetic Common inventory fixtures and schema validation;

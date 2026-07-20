@@ -1,4 +1,4 @@
-"""Compatibility fixtures for the installed HASC climate JSON contracts."""
+"""Compatibility fixtures for the installed HausmanHub climate JSON contracts."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ from tests.test_climate_canary_preflight import NOW, ready_inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "custom_components" / "hausman_hub" / "contracts"
-FIXTURES = ROOT / "fixtures" / "hasc_climate_v1"
+FIXTURES = ROOT / "fixtures" / "hausmanhub_climate_v1"
 SOURCE_FIXTURE = ROOT / "fixtures" / "climate_bridge" / "valid_state.json"
 LOCAL_NOW = datetime(2026, 7, 19, 12, 0, tzinfo=timezone(timedelta(hours=3)))
 
@@ -64,48 +64,48 @@ class ClimateContractSchemasTest(unittest.TestCase):
 
     def test_every_packaged_schema_is_valid_and_each_fixture_matches(self) -> None:
         pairs = {
-            "hasc_capabilities_v1/capabilities.json": "v1/api-capabilities.schema.json",
-            "hasc_climate_v1/action-request.json": "v1/climate-action-request.schema.json",
-            "hasc_climate_v1/operation-query.json": "v1/climate-operation-query.schema.json",
-            "hasc_climate_v1/operation-receipt.json": "v1/climate-operation-receipt.schema.json",
-            "hasc_climate_v1/registry.json": "v1/climate-registry.schema.json",
-            "hasc_climate_v1/readiness.json": "v1/climate-readiness.schema.json",
-            "hasc_climate_v1/registry-preview.json": "v1/climate-registry-preview.schema.json",
-            "hasc_climate_v1/shadow-candidate-query.json": "v1/climate-shadow-candidate-query.schema.json",
-            "hasc_climate_v1/shadow-evidence.json": "v1/climate-shadow-evidence.schema.json",
-            "hasc_climate_v1/canary-preflight-query.json": "v1/climate-canary-preflight-query.schema.json",
-            "hasc_climate_v1/canary-preflight.json": "v1/climate-canary-preflight.schema.json",
-            "hasc_climate_rooms_v1/rooms.json": "v1/climate-rooms.schema.json",
-            "hasc_climate_device_candidates_v1/candidates.json": "v1/climate-device-candidates.schema.json",
-            "hasc_climate_room_suggestions_v1/suggestions.json": "v1/climate-room-suggestions.schema.json",
-            "hasc_climate_draft_v1/request.json": "v1/climate-draft-request.schema.json",
-            "hasc_climate_draft_v1/draft.json": "v1/climate-draft.schema.json",
-            "hasc_climate_draft_v1/save.json": "v1/climate-draft-save.schema.json",
-            "hasc_climate_current_setup_v1/current.json": "v1/climate-current-setup.schema.json",
-            "hasc_climate_draft_v1/options.json": "v1/climate-setup-options.schema.json",
-            "hasc_climate_draft_v1/validation.json": "v1/climate-draft-validation.schema.json",
-            "hasc_climate_v2/home.json": "v2/climate-home.schema.json",
-            "hasc_climate_v3/home.json": "v3/climate-home.schema.json",
-            "hasc_climate_v4/home.json": "v4/climate-home.schema.json",
-            "hasc_climate_v5/home.json": "v5/climate-home.schema.json",
-            "hasc_climate_v6/home.json": "v6/climate-home.schema.json",
-            "hasc_climate_v7/home.json": "v7/climate-home.schema.json",
-            "hasc_climate_v8/home.json": "v8/climate-home.schema.json",
-            "hasc_climate_v9/home.json": "v9/climate-home.schema.json",
-            "hasc_climate_v10/home.json": "v10/climate-home.schema.json",
-            "hasc_climate_v11/home.json": "v11/climate-home.schema.json",
-            "hasc_climate_v12/home.json": "v12/climate-home.schema.json",
-            "hasc_contours_v1/contours.json": "v1/contours.schema.json",
-            "hasc_contours_v2/contours.json": "v2/contours.schema.json",
-            "hasc_contours_v3/contours.json": "v3/contours.schema.json",
-            "hasc_contours_v4/contours.json": "v4/contours.schema.json",
-            "hasc_contours_v5/contours.json": "v5/contours.schema.json",
-            "hasc_contours_v6/contours.json": "v6/contours.schema.json",
-            "hasc_contours_v7/contours.json": "v7/contours.schema.json",
-            "hasc_contour_apply_v1/request.json": "v1/contour-apply-request.schema.json",
-            "hasc_contour_apply_v1/preview.json": "v1/contour-apply-preview.schema.json",
-            "hasc_contour_apply_v1/receipt.json": "v1/contour-apply-receipt.schema.json",
-            "hasc_temporary_temperature_v1/request.json": "v1/temporary-temperature-request.schema.json",
+            "hausmanhub_capabilities_v1/capabilities.json": "v1/api-capabilities.schema.json",
+            "hausmanhub_climate_v1/action-request.json": "v1/climate-action-request.schema.json",
+            "hausmanhub_climate_v1/operation-query.json": "v1/climate-operation-query.schema.json",
+            "hausmanhub_climate_v1/operation-receipt.json": "v1/climate-operation-receipt.schema.json",
+            "hausmanhub_climate_v1/registry.json": "v1/climate-registry.schema.json",
+            "hausmanhub_climate_v1/readiness.json": "v1/climate-readiness.schema.json",
+            "hausmanhub_climate_v1/registry-preview.json": "v1/climate-registry-preview.schema.json",
+            "hausmanhub_climate_v1/shadow-candidate-query.json": "v1/climate-shadow-candidate-query.schema.json",
+            "hausmanhub_climate_v1/shadow-evidence.json": "v1/climate-shadow-evidence.schema.json",
+            "hausmanhub_climate_v1/canary-preflight-query.json": "v1/climate-canary-preflight-query.schema.json",
+            "hausmanhub_climate_v1/canary-preflight.json": "v1/climate-canary-preflight.schema.json",
+            "hausmanhub_climate_rooms_v1/rooms.json": "v1/climate-rooms.schema.json",
+            "hausmanhub_climate_device_candidates_v1/candidates.json": "v1/climate-device-candidates.schema.json",
+            "hausmanhub_climate_room_suggestions_v1/suggestions.json": "v1/climate-room-suggestions.schema.json",
+            "hausmanhub_climate_draft_v1/request.json": "v1/climate-draft-request.schema.json",
+            "hausmanhub_climate_draft_v1/draft.json": "v1/climate-draft.schema.json",
+            "hausmanhub_climate_draft_v1/save.json": "v1/climate-draft-save.schema.json",
+            "hausmanhub_climate_current_setup_v1/current.json": "v1/climate-current-setup.schema.json",
+            "hausmanhub_climate_draft_v1/options.json": "v1/climate-setup-options.schema.json",
+            "hausmanhub_climate_draft_v1/validation.json": "v1/climate-draft-validation.schema.json",
+            "hausmanhub_climate_v2/home.json": "v2/climate-home.schema.json",
+            "hausmanhub_climate_v3/home.json": "v3/climate-home.schema.json",
+            "hausmanhub_climate_v4/home.json": "v4/climate-home.schema.json",
+            "hausmanhub_climate_v5/home.json": "v5/climate-home.schema.json",
+            "hausmanhub_climate_v6/home.json": "v6/climate-home.schema.json",
+            "hausmanhub_climate_v7/home.json": "v7/climate-home.schema.json",
+            "hausmanhub_climate_v8/home.json": "v8/climate-home.schema.json",
+            "hausmanhub_climate_v9/home.json": "v9/climate-home.schema.json",
+            "hausmanhub_climate_v10/home.json": "v10/climate-home.schema.json",
+            "hausmanhub_climate_v11/home.json": "v11/climate-home.schema.json",
+            "hausmanhub_climate_v12/home.json": "v12/climate-home.schema.json",
+            "hausmanhub_contours_v1/contours.json": "v1/contours.schema.json",
+            "hausmanhub_contours_v2/contours.json": "v2/contours.schema.json",
+            "hausmanhub_contours_v3/contours.json": "v3/contours.schema.json",
+            "hausmanhub_contours_v4/contours.json": "v4/contours.schema.json",
+            "hausmanhub_contours_v5/contours.json": "v5/contours.schema.json",
+            "hausmanhub_contours_v6/contours.json": "v6/contours.schema.json",
+            "hausmanhub_contours_v7/contours.json": "v7/contours.schema.json",
+            "hausmanhub_contour_apply_v1/request.json": "v1/contour-apply-request.schema.json",
+            "hausmanhub_contour_apply_v1/preview.json": "v1/contour-apply-preview.schema.json",
+            "hausmanhub_contour_apply_v1/receipt.json": "v1/contour-apply-receipt.schema.json",
+            "hausmanhub_temporary_temperature_v1/request.json": "v1/temporary-temperature-request.schema.json",
         }
         for fixture_name, schema_name in pairs.items():
             with self.subTest(fixture=fixture_name):
@@ -119,7 +119,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         capabilities = api_capabilities_snapshot()
         validator("v1/api-capabilities.schema.json").validate(capabilities)
         self.assertEqual(
-            load_json(ROOT / "fixtures" / "hasc_capabilities_v1" / "capabilities.json"),
+            load_json(ROOT / "fixtures" / "hausmanhub_capabilities_v1" / "capabilities.json"),
             capabilities,
         )
 
@@ -151,7 +151,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             {"version": 1, "rooms": [], "devices": []}
         )
         draft_request = load_json(
-            ROOT / "fixtures" / "hasc_climate_draft_v1" / "request.json"
+            ROOT / "fixtures" / "hausmanhub_climate_draft_v1" / "request.json"
         )
         draft = create_climate_contour_draft(
             draft_registry,
@@ -193,7 +193,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         validator("v1/climate-current-setup.schema.json").validate(current_setup)
         self.assertEqual(
             load_json(
-                ROOT / "fixtures" / "hasc_climate_draft_v1" / "save.json"
+                ROOT / "fixtures" / "hausmanhub_climate_draft_v1" / "save.json"
             ),
             draft_save,
         )
@@ -306,13 +306,13 @@ class ClimateContractSchemasTest(unittest.TestCase):
         with self.assertRaises(Exception):
             validator("v1/climate-canary-preflight.schema.json").validate(preflight)
 
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v2" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v2" / "home.json")
         home["rooms"][0]["control"]["enabled"] = True  # type: ignore[index]
         with self.assertRaises(Exception):
             validator("v2/climate-home.schema.json").validate(home)
 
         unknown_reason = load_json(
-            ROOT / "fixtures" / "hasc_climate_v2" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v2" / "home.json"
         )
         unknown_reason["rooms"][0]["control"]["blocked_reasons"] = [  # type: ignore[index]
             "backend_private_error"
@@ -321,14 +321,14 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v2/climate-home.schema.json").validate(unknown_reason)
 
         missing_inputs = load_json(
-            ROOT / "fixtures" / "hasc_climate_v3" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v3" / "home.json"
         )
         missing_inputs["rooms"][0]["control"].pop("action_inputs")  # type: ignore[index]
         with self.assertRaises(Exception):
             validator("v3/climate-home.schema.json").validate(missing_inputs)
 
         weakened_limit = load_json(
-            ROOT / "fixtures" / "hasc_climate_v3" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v3" / "home.json"
         )
         weakened_limit["rooms"][0]["control"]["action_inputs"][  # type: ignore[index]
             "set_room_target"
@@ -337,7 +337,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v3/climate-home.schema.json").validate(weakened_limit)
 
         missing_presentations = load_json(
-            ROOT / "fixtures" / "hasc_climate_v4" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v4" / "home.json"
         )
         missing_presentations["rooms"][0]["control"].pop(  # type: ignore[index]
             "action_presentations"
@@ -348,7 +348,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             )
 
         wrong_confirmation = load_json(
-            ROOT / "fixtures" / "hasc_climate_v4" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v4" / "home.json"
         )
         wrong_confirmation["rooms"][0]["control"]["action_presentations"][  # type: ignore[index]
             "turn_room_off"
@@ -357,7 +357,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v4/climate-home.schema.json").validate(wrong_confirmation)
 
         orphan_presentation = load_json(
-            ROOT / "fixtures" / "hasc_climate_v4" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v4" / "home.json"
         )
         orphan_presentation["rooms"][0]["control"]["actions"] = [  # type: ignore[index]
             "turn_room_off"
@@ -367,14 +367,14 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v4/climate-home.schema.json").validate(orphan_presentation)
 
         split_home = load_json(
-            ROOT / "fixtures" / "hasc_climate_v5" / "home.json"
+            ROOT / "fixtures" / "hausmanhub_climate_v5" / "home.json"
         )
         split_home.pop("contours")  # type: ignore[union-attr]
         with self.assertRaises(Exception):
             validator("v5/climate-home.schema.json").validate(split_home)
 
     def test_v5_examples_describe_reachable_control_states(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v5" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v5" / "home.json")
         room = home["rooms"][0]  # type: ignore[index]
         contour = home["contours"][0]  # type: ignore[index]
         contour_room = contour["rooms"][0]
@@ -392,14 +392,14 @@ class ClimateContractSchemasTest(unittest.TestCase):
         )
 
         contours = load_json(
-            ROOT / "fixtures" / "hasc_contours_v5" / "contours.json"
+            ROOT / "fixtures" / "hausmanhub_contours_v5" / "contours.json"
         )
         managed = contours["contours"][0]  # type: ignore[index]
         self.assertTrue(managed["execution"]["settings_apply"]["available"])
         self.assertTrue(managed["rooms"][0]["temporary_temperature"]["available"])
 
     def test_v6_public_codes_have_plain_display_names(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v6" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v6" / "home.json")
         home_schema = load_json(
             ROOT
             / "custom_components"
@@ -461,7 +461,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         )
 
     def test_v7_room_actual_state_is_explicit_and_strict(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v7" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v7" / "home.json")
         actual = home["rooms"][0]["actual"]  # type: ignore[index]
 
         self.assertEqual(
@@ -484,7 +484,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v7/climate-home.schema.json").validate(unknown_status)
 
     def test_v8_active_target_and_saved_profiles_cannot_be_confused(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v8" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v8" / "home.json")
         room = home["rooms"][0]  # type: ignore[index]
 
         self.assertEqual(24, room["active_target"]["temperature"])
@@ -502,7 +502,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v8/climate-home.schema.json").validate(private_strategy)
 
     def test_v9_next_schedule_change_is_exact_and_strict(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v9" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v9" / "home.json")
         schedule = home["contours"][0]["schedule"]  # type: ignore[index]
 
         self.assertEqual("night", schedule["next_profile"])
@@ -526,7 +526,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             )
 
     def test_v10_allowed_actions_follow_each_room_gate(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v10" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v10" / "home.json")
         control = home["rooms"][0]["control"]  # type: ignore[index]
 
         self.assertFalse(control["enabled"])
@@ -576,7 +576,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             )
 
     def test_v11_every_advertised_action_has_exact_blocked_reasons(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v11" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v11" / "home.json")
         control = home["rooms"][0]["control"]  # type: ignore[index]
 
         self.assertEqual(set(control["actions"]), set(control["action_availability"]))
@@ -631,7 +631,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             validator("v11/climate-home.schema.json").validate(unknown_reason)
 
     def test_v12_state_revision_is_required_and_json_safe(self) -> None:
-        home = load_json(ROOT / "fixtures" / "hasc_climate_v12" / "home.json")
+        home = load_json(ROOT / "fixtures" / "hausmanhub_climate_v12" / "home.json")
         revision = home["state_revision"]  # type: ignore[index]
 
         self.assertIs(type(revision), int)

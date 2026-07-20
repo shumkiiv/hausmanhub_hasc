@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/api-capabilities.schema.json",
-  "title": "HASC tablet API capabilities v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/api-capabilities.schema.json",
+  "title": "HausmanHub tablet API capabilities v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "api", "capabilities"],
@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-capabilities"},
+        "name": {"const": "hausman-hub-capabilities"},
         "version": {"const": 1}
       }
     },
@@ -165,7 +165,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-home"},
+        "name": {"const": "hausman-hub-home"},
         "version": {"const": 12}
       }
     },
@@ -174,7 +174,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-contours"},
+        "name": {"const": "hausman-hub-contours"},
         "version": {"const": 7}
       }
     },
@@ -183,7 +183,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-contour-apply-request"},
+        "name": {"const": "hausman-hub-contour-apply-request"},
         "version": {"const": 1}
       }
     },
@@ -192,7 +192,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-contour-apply-receipt"},
+        "name": {"const": "hausman-hub-contour-apply-receipt"},
         "version": {"const": 1}
       }
     },
@@ -201,7 +201,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-temporary-temperature-request"},
+        "name": {"const": "hausman-hub-temporary-temperature-request"},
         "version": {"const": 1}
       }
     },
@@ -210,7 +210,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-climate-action-request"},
+        "name": {"const": "hausman-hub-climate-action-request"},
         "version": {"const": 1}
       }
     },
@@ -219,7 +219,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-climate-operation-query"},
+        "name": {"const": "hausman-hub-climate-operation-query"},
         "version": {"const": 1}
       }
     },
@@ -228,7 +228,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-operation"},
+        "name": {"const": "hausman-hub-operation"},
         "version": {"const": 1}
       }
     }

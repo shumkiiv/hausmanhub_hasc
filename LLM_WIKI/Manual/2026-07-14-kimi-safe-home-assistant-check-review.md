@@ -22,7 +22,7 @@ Review session: `ses_0a0c0a2d3ffe1jfN7q2xGVTiYF`.
 
 ## Verification supplied to review
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 25 passed
 - `python3 -m json.tool hacs.json`
 - `git diff --check`

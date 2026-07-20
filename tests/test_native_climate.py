@@ -1,4 +1,4 @@
-"""Pure tests for HASC's non-executing native climate decision."""
+"""Pure tests for HausmanHub's non-executing native climate decision."""
 
 from __future__ import annotations
 

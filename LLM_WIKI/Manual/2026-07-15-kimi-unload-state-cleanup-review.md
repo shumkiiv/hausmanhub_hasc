@@ -5,13 +5,13 @@ Date: 2026-07-15.
 ## Scope
 
 Version 0.3.5 closes a display-cleanup gap found in the disposable Core check.
-After HASC was turned off, its nine registry entries were disabled but their
-old aggregate state values remained in memory. A successful HASC unload now
-clears only the state values belonging to that same HASC setup.
+After HausmanHub was turned off, its nine registry entries were disabled but their
+old aggregate state values remained in memory. A successful HausmanHub unload now
+clears only the state values belonging to that same HausmanHub setup.
 
 ## What the check proves
 
-The updated checks show that HASC:
+The updated checks show that HausmanHub:
 
 - removes its nine current state values immediately after a successful user
   deactivation;
@@ -25,7 +25,7 @@ The updated checks show that HASC:
 
 Kimi session `ses_0998ece1dffeLPhwrXAMZog4IQ` (model `k2p7`) returned
 `NO FINDINGS` for the runtime change. Its follow-up review also returned
-`NO FINDINGS` after the test was strengthened to prove that the HASC registry
+`NO FINDINGS` after the test was strengthened to prove that the HausmanHub registry
 entry is retained and no registry record is removed.
 
 ## Verification

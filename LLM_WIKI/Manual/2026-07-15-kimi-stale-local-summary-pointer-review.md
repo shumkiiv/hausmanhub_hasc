@@ -5,8 +5,8 @@ Date: 2026-07-15.
 ## Scope
 
 Version 0.3.10 closes a rare transition where the local nine-count page still
-has an old in-memory HASC pointer after the HASC setup has stopped. The page
-now requires exactly one saved HASC setup and confirms that Home Assistant
+has an old in-memory HausmanHub pointer after the HausmanHub setup has stopped. The page
+now requires exactly one saved HausmanHub setup and confirms that Home Assistant
 still reports that setup as loaded before it can ask for the aggregate summary.
 
 The unit test keeps the old pointer, removes the synthetic setup only from the

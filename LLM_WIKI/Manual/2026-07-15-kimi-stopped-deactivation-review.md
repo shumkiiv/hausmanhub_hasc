@@ -1,11 +1,11 @@
-# Kimi review: user deactivation after an ordinary HASC stop
+# Kimi review: user deactivation after an ordinary HausmanHub stop
 
 Date: 2026-07-15.
 
 ## Scope
 
 The disposable Home Assistant lifecycle now covers one additional safe
-sequence: a user-enabled HASC setup is ordinarily stopped first and is then
+sequence: a user-enabled HausmanHub setup is ordinarily stopped first and is then
 deactivated by the user before the temporary Home Assistant restarts.
 
 The check requires the ordinary stop to keep the exact safe settings and nine
@@ -19,7 +19,7 @@ Kimi session `ses_098a3ae5bffeRRUzTkU7LSCvjZ` (model `k2p7`) reviewed the
 final uncommitted test-only change and returned `NO FINDINGS`.
 
 The review confirmed that this closes a lifecycle coverage gap without changing
-HASC runtime behavior or adding a device, service, proxy, direct execution,
+HausmanHub runtime behavior or adding a device, service, proxy, direct execution,
 network connection, or real-home access.
 
 ## Verification

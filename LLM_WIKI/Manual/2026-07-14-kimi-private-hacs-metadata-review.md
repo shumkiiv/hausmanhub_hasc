@@ -27,7 +27,7 @@ repository files.
 
 ## Local verification
 
-- `python3 -m compileall -q custom_components hasc_validation tools tests`
+- `python3 -m compileall -q custom_components hausmanhub_validation tools tests`
 - `python3 -m unittest discover -s tests -v` — 24 passed
 - `python3 -m json.tool hacs.json`
 - isolated Home Assistant Core 2026.7.0 compatibility check passed

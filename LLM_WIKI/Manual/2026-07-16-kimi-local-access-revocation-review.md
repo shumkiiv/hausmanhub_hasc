@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 The disposable Home Assistant Core check now proves that a local temporary
-reader loses access to HASC's nine-count page as soon as the reader is moved
+reader loses access to HausmanHub's nine-count page as soon as the reader is moved
 from Home Assistant's exact read-only group to the ordinary user group.
 
 The existing token must return `403`, contain none of the nine count keys, and

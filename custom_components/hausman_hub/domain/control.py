@@ -1,4 +1,4 @@
-"""Domain contract for the first deliberately narrow HASC control canary."""
+"""Domain contract for the first deliberately narrow HausmanHub control canary."""
 
 from __future__ import annotations
 

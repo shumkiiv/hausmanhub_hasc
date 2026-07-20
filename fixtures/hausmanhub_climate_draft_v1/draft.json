@@ -1,0 +1,65 @@
+{
+  "contract": {
+    "name": "hausman-hub-climate-draft",
+    "version": 1
+  },
+  "generated_at": 1784280000000,
+  "snapshot_revision": 8115739542118920,
+  "draft_revision": 2766488448644126,
+  "status": "created",
+  "save_allowed": false,
+  "validation_required": true,
+  "display_names": {
+    "modes": {
+      "observe": "Только наблюдение",
+      "automatic": "Автоматическое управление"
+    },
+    "strategies": {
+      "soft": "Плавно",
+      "normal": "Обычно",
+      "aggressive": "Быстро"
+    }
+  },
+  "name": "Климат дома",
+  "mode": "automatic",
+  "rooms": [
+    {
+      "id": "kids",
+      "name": "Kids",
+      "targets": {
+        "target_temperature": 24.0,
+        "target_humidity": 50,
+        "strategy": "soft"
+      },
+      "devices": [
+        {
+          "candidate_id": "candidate_0001",
+          "name": "Kids humidifier",
+          "type": "humidifier",
+          "type_name": "Увлажнитель"
+        }
+      ]
+    },
+    {
+      "id": "living",
+      "name": "Living room",
+      "targets": {
+        "target_temperature": 25.0,
+        "target_humidity": 45,
+        "strategy": "normal"
+      },
+      "devices": [
+        {
+          "candidate_id": "candidate_0002",
+          "name": "Living AC",
+          "type": "air_conditioner",
+          "type_name": "Кондиционер"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "room_count": 2,
+    "device_count": 2
+  }
+}

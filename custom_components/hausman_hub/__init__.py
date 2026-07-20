@@ -1,9 +1,9 @@
-"""Home Assistant boundary for the HausMan Hub HASC integration.
+"""Home Assistant boundary for the HausmanHub integration.
 
 It always creates the nine diagnostic count sensors. An explicitly armed
 legacy canary may additionally control one ``input_boolean`` helper. The
 separate climate facade persists logical bindings and can use only two fixed
-Climate API paths in shadow or one-room canary mode. HASC registers no service
+Climate API paths in shadow or one-room canary mode. HausmanHub registers no service
 and never calls a Home Assistant climate entity directly.
 """
 
@@ -26,14 +26,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for configured_entry in hass.config_entries.async_entries(entry.domain)
     )
     if configured_entry_ids != (entry.entry_id,):
-        await _close_running_duplicate_hasc_entries(hass, entry.domain)
-        _clear_restored_hasc_records(hass, configured_entry_ids + (entry.entry_id,))
+        await _close_running_duplicate_hausmanhub_entries(hass, entry.domain)
+        _clear_restored_hausmanhub_records(hass, configured_entry_ids + (entry.entry_id,))
         return False
 
     try:
         configuration = effective_configuration(entry.data, entry.options)
     except ConfigurationViolation:
-        _clear_restored_hasc_records(hass, (entry.entry_id,))
+        _clear_restored_hausmanhub_records(hass, (entry.entry_id,))
         return False
 
     # Imports stay at the outer boundary so framework-independent tests can run
@@ -78,7 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Apply a saved HASC setting by reloading only this HASC entry.
+    """Apply a saved HausmanHub setting by reloading only this HausmanHub entry.
 
     Turning off the optional local page closes any already active page before
     Home Assistant reloads the nine-count display. An old address therefore
@@ -101,15 +101,15 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def _close_running_duplicate_hasc_entries(
+async def _close_running_duplicate_hausmanhub_entries(
     hass: HomeAssistant,
     domain: str,
 ) -> None:
-    """Close only active HASC displays when more than one record is saved.
+    """Close only active HausmanHub displays when more than one record is saved.
 
-    A damaged saved pair can also appear while one HASC entry is already
+    A damaged saved pair can also appear while one HausmanHub entry is already
     running. Close its local summary before awaiting the ordinary integration
-    unload, then let Home Assistant stop only those loaded HASC displays. The
+    unload, then let Home Assistant stop only those loaded HausmanHub displays. The
     saved entries remain untouched for the owner to repair manually.
     """
 
@@ -124,17 +124,17 @@ async def _close_running_duplicate_hasc_entries(
         await hass.config_entries.async_unload(loaded_entry.entry_id)
 
 
-def _clear_restored_hasc_records(
+def _clear_restored_hausmanhub_records(
     hass: HomeAssistant,
     entry_ids: tuple[str, ...],
 ) -> None:
-    """Remove stale HASC count records when saved settings must stay closed.
+    """Remove stale HausmanHub count records when saved settings must stay closed.
 
     Home Assistant can restore previous entity states before an integration gets
-    a chance to reject invalid settings or multiple saved HASC entries.
-    Clearing only records owned by the captured HASC entries makes rejection
+    a chance to reject invalid settings or multiple saved HausmanHub entries.
+    Clearing only records owned by the captured HausmanHub entries makes rejection
     fail closed without changing saved settings, devices, services, other
-    entities, or anything outside HASC. A later safe reload with exactly one
+    entities, or anything outside HausmanHub. A later safe reload with exactly one
     valid entry creates the same fixed nine count sensors again.
     """
 
@@ -143,7 +143,7 @@ def _clear_restored_hasc_records(
     from homeassistant.helpers.start import async_at_started
 
     @callback
-    def clear_hasc_records_after_start(_: HomeAssistant) -> None:
+    def clear_hausmanhub_records_after_start(_: HomeAssistant) -> None:
         entities = entity_registry.async_get(hass)
         for entry_id in dict.fromkeys(entry_ids):
             entries = entity_registry.async_entries_for_config_entry(
@@ -156,15 +156,15 @@ def _clear_restored_hasc_records(
 
     # The entity registry writes unavailable placeholders during startup, so
     # wait for that normal framework step before cleanup. A running system has
-    # already passed startup and must clear the stale HASC records immediately.
+    # already passed startup and must clear the stale HausmanHub records immediately.
     if getattr(hass, "is_running", False):
-        clear_hasc_records_after_start(hass)
+        clear_hausmanhub_records_after_start(hass)
     else:
-        async_at_started(hass, clear_hasc_records_after_start)
+        async_at_started(hass, clear_hausmanhub_records_after_start)
 
 
-def _clear_hasc_state_values(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Clear only current state values owned by one HASC setup."""
+def _clear_hausmanhub_state_values(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clear only current state values owned by one HausmanHub setup."""
 
     from homeassistant.helpers import entity_registry
 
@@ -177,7 +177,7 @@ def _clear_hasc_state_values(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload HASC entities, clear their values, and close its local summary."""
+    """Unload HausmanHub entities, clear their values, and close its local summary."""
 
     from homeassistant.const import Platform
 
@@ -189,7 +189,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         (Platform.SENSOR, Platform.SWITCH),
     )
     if unloaded:
-        _clear_hasc_state_values(hass, entry)
+        _clear_hausmanhub_state_values(hass, entry)
         clear_local_summary_access(hass, entry)
         clear_climate_api(hass, entry.entry_id)
     return unloaded

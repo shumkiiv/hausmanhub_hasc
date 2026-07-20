@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from hasc_validation import (  # noqa: E402
+from hausmanhub_validation import (  # noqa: E402
     validate_common_inventory,
     validate_diagnostics_contract,
     validate_shadow_evidence,
@@ -156,7 +156,7 @@ class StaticContractValidationTest(unittest.TestCase):
         hacs_metadata = load("hacs.json")
         self.assertEqual(
             {
-                "name": "HASC — управление домом",
+                "name": "HausmanHub",
                 "homeassistant": "2026.6.4",
             },
             hacs_metadata,

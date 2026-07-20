@@ -14,7 +14,7 @@ In a disposable Python 3.14.3 environment, the repository's real-Core
 lifecycle check passed with `homeassistant==2026.6.4`:
 
 ```sh
-/tmp/hasc-core-2026.6.4/bin/python tools/check_home_assistant_core.py
+/tmp/hausmanhub-core-2026.6.4/bin/python tools/check_home_assistant_core.py
 ```
 
 The check used an empty temporary Home Assistant configuration. It did not

@@ -1,4 +1,4 @@
-"""Authenticated local-network adapter for the fixed HASC home summary.
+"""Authenticated local-network adapter for the fixed HausmanHub home summary.
 
 This is intentionally a single GET-only Home Assistant view. It has no
 outgoing connection, token storage, service call, entity creation, or command

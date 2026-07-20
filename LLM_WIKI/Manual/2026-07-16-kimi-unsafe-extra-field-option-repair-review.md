@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable lifecycle where a user-disabled
-HASC entry has a saved `shadow` option plus an unmodelled extra field, the
+HausmanHub entry has a saved `shadow` option plus an unmodelled extra field, the
 user's activation is rejected, and the exact safe options are repaired
 manually.
 
@@ -18,7 +18,7 @@ It confirmed that the extra-field case uses the options repair branch rather
 than the main-data or proxy path. All home-summary readers fail during the
 saved correction, so only the one separate explicit reload may return exact
 safe options, the direct-execution block, nine count sensors, fixed
-diagnostics, and the guarded local page. No HASC service or device is created.
+diagnostics, and the guarded local page. No HausmanHub service or device is created.
 
 ## Evidence
 

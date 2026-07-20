@@ -1,17 +1,17 @@
-# Kimi review: duplicate setup while HASC is disabled after restart
+# Kimi review: duplicate setup while HausmanHub is disabled after restart
 
 Date: 2026-07-15.
 
 ## Scope
 
-This change extends the disposable Home Assistant lifecycle check. A safe HASC
+This change extends the disposable Home Assistant lifecycle check. A safe HausmanHub
 setup is deliberately disabled by the user, the empty test instance is
 restarted, and the still-saved disabled setup is then protected from a second
 setup attempt.
 
 ## What the check proves
 
-Home Assistant keeps exactly one saved HASC setup. A rejected second setup
+Home Assistant keeps exactly one saved HausmanHub setup. A rejected second setup
 preserves its data, options, disabled state, and unloaded state. The existing
 nine records stay disabled without count values or an active local page. Only
 the normal explicit activation can restore the same nine safe counts,

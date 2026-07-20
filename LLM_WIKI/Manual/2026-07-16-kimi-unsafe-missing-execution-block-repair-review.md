@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable lifecycle where a user-disabled
-HASC entry has main data without the required direct-execution block, the
+HausmanHub entry has main data without the required direct-execution block, the
 user's activation is rejected, and the exact safe main data is repaired
 manually.
 
@@ -18,7 +18,7 @@ It confirmed that the missing-field case uses the main-data repair branch.
 All home-summary readers fail during the saved correction, and only one
 separate explicit reload may restore exact safe data and options, the
 direct-execution block, nine count sensors, diagnostics, and the guarded local
-page. No HASC service or device is created.
+page. No HausmanHub service or device is created.
 
 ## Evidence
 

@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable Home Assistant lifecycle that
-saves `direct_execution_status: allowed` on a user-disabled HASC setup, stops
+saves `direct_execution_status: allowed` on a user-disabled HausmanHub setup, stops
 the temporary Core completely, starts a new empty Core from the same temporary
 configuration, and then attempts user activation.
 
@@ -31,7 +31,7 @@ remain active for the non-restart scenarios.
   data, no local page, and closed diagnostics.
 - During activation all three temporary home-summary readers fail if called.
   The check then requires no count records or states, no available diagnostics
-  or page, and no HASC service before removing the temporary entry and proving
+  or page, and no HausmanHub service before removing the temporary entry and proving
   it remains absent after another empty restart.
 
 The review and checks use only repository files, synthetic fixtures, and

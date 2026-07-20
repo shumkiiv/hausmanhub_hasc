@@ -4,8 +4,8 @@ Date: 2026-07-15.
 
 ## Scope
 
-Independent read-only review of the upcoming HASC 0.3.12 change. When a
-running HASC setup has damaged saved settings, its next scheduled refresh must
+Independent read-only review of the upcoming HausmanHub 0.3.12 change. When a
+running HausmanHub setup has damaged saved settings, its next scheduled refresh must
 close before reading the local home summary. All nine aggregate-count sensors
 must then become unavailable until the owner repairs the saved settings.
 
@@ -26,7 +26,7 @@ service, Node-RED connection, proxy, or direct-execution capability.
 - The disposable empty Home Assistant Core checks passed with 2026.6.4 and
   2026.7.0.
 - The Core check damages every existing bad main-setting and mode-choice
-  variant while HASC is running, replaces the reader with a function that
+  variant while HausmanHub is running, replaces the reader with a function that
   fails if used, forces the live refresh, and requires all nine sensors to be
   unavailable.
 

@@ -1,14 +1,14 @@
-# Kimi review: removal after an ordinary HASC stop
+# Kimi review: removal after an ordinary HausmanHub stop
 
 Date: 2026-07-15.
 
 ## Scope
 
 The disposable Home Assistant lifecycle now checks one missing safe case:
-an enabled HASC setup is ordinarily stopped, rather than disabled by the
+an enabled HausmanHub setup is ordinarily stopped, rather than disabled by the
 owner, and is removed before it starts again.
 
-The check requires the saved settings and exactly nine enabled HASC registry
+The check requires the saved settings and exactly nine enabled HausmanHub registry
 records to remain intact while stopped, but all count values, diagnostics, and
 the local count-only page to stay unavailable. It then removes the setup,
 requires both read paths to remain closed, and verifies that an unrelated
@@ -20,7 +20,7 @@ Kimi session `ses_098b7c2b9ffenyV0RpHQn0uHqe` (model `k2p7`) reviewed the
 final uncommitted change and returned `NO FINDINGS`.
 
 The review confirmed that this is test-only coverage in a disposable empty
-Home Assistant configuration. It adds no HASC runtime capability, device,
+Home Assistant configuration. It adds no HausmanHub runtime capability, device,
 service, proxy, direct execution path, remote connection, or real-home read.
 
 ## Verification

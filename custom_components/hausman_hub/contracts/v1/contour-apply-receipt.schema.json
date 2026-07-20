@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hausman.local/hasc/contracts/v1/contour-apply-receipt.schema.json",
-  "title": "HASC contour apply receipt v1",
+  "$id": "https://hausman.local/hausmanhub/contracts/v1/contour-apply-receipt.schema.json",
+  "title": "HausmanHub contour apply receipt v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "operation_id", "request_id", "contour_id", "status", "room_count", "command_count", "accepted_count", "confirmed_room_count", "changes", "reasons", "created_at", "updated_at"],
@@ -11,7 +11,7 @@
       "additionalProperties": false,
       "required": ["name", "version"],
       "properties": {
-        "name": {"const": "hausman-hasc-contour-apply-receipt"},
+        "name": {"const": "hausman-hub-contour-apply-receipt"},
         "version": {"const": 1}
       }
     },

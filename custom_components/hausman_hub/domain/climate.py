@@ -1,4 +1,4 @@
-"""Climate registry model shared by every HASC outer adapter.
+"""Climate registry model shared by every HausmanHub outer adapter.
 
 The model describes logical devices and their private Home Assistant bindings.
 It contains no Home Assistant, HTTP, Node-RED, or storage imports.  Android
@@ -22,7 +22,7 @@ class ClimateModelViolation(ValueError):
 
 
 class ClimateDeviceKind(StrEnum):
-    """Logical climate device kinds understood by HASC and Android."""
+    """Logical climate device kinds understood by HausmanHub and Android."""
 
     AIR_CONDITIONER = "air_conditioner"
     RADIATOR_THERMOSTAT = "radiator_thermostat"
@@ -60,7 +60,7 @@ class ClimateEndpointRole(StrEnum):
 
 
 class ClimateControlScope(StrEnum):
-    """How far HASC may progress for one registered logical device."""
+    """How far HausmanHub may progress for one registered logical device."""
 
     OBSERVED = "observed"
     CANARY = "canary"
@@ -101,7 +101,7 @@ _PASSIVE_KINDS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class ClimateRoom:
-    """A stable HASC room used by the climate core and Android."""
+    """A stable HausmanHub room used by the climate core and Android."""
 
     room_id: str
     name: str
@@ -208,7 +208,7 @@ class ClimateDevice:
 
 @dataclass(frozen=True, slots=True)
 class ClimateRegistry:
-    """Complete versioned HASC climate registry."""
+    """Complete versioned HausmanHub climate registry."""
 
     rooms: tuple[ClimateRoom, ...] = ()
     devices: tuple[ClimateDevice, ...] = ()
@@ -230,12 +230,12 @@ class ClimateRegistry:
             )
 
     def room(self, room_id: str) -> ClimateRoom | None:
-        """Return one configured room by stable HASC id."""
+        """Return one configured room by stable HausmanHub id."""
 
         return next((room for room in self.rooms if room.room_id == room_id), None)
 
     def device(self, device_id: str) -> ClimateDevice | None:
-        """Return one configured device by stable HASC id."""
+        """Return one configured device by stable HausmanHub id."""
 
         return next(
             (device for device in self.devices if device.device_id == device_id),

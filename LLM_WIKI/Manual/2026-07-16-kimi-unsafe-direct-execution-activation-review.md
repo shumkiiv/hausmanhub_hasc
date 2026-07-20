@@ -5,7 +5,7 @@ Date: 2026-07-16.
 ## Scope
 
 Independent read-only review of the disposable Home Assistant check for a
-user-disabled HASC setup whose saved main data is deliberately changed to
+user-disabled HausmanHub setup whose saved main data is deliberately changed to
 `direct_execution_status: allowed` before the user attempts to enable it.
 
 ## Result
@@ -16,7 +16,7 @@ Kimi session `ses_0980a1270ffef3bXpJWIMG3uDW` using
 It confirmed that the shared lifecycle helper still covers the earlier unsafe
 `proxy` option and now separately covers unsafe main data. For the bad main
 data, activation returns `False`, attempts exactly one reload of the same
-HASC entry, and leaves it in `SETUP_ERROR`. The damaged data is retained for
+HausmanHub entry, and leaves it in `SETUP_ERROR`. The damaged data is retained for
 manual repair; it is not silently repaired or turned into runtime authority.
 
 ## Evidence
@@ -24,8 +24,8 @@ manual repair; it is not silently repaired or turned into runtime authority.
 - 115 local synthetic and boundary checks passed.
 - The disposable empty Home Assistant check passed with 2026.6.4 and
   2026.7.0.
-- Before the unsafe save and activation, every HASC home-summary reader is
-  replaced with a failure. The scenario requires no registered HASC service,
+- Before the unsafe save and activation, every HausmanHub home-summary reader is
+  replaced with a failure. The scenario requires no registered HausmanHub service,
   device, count state, registry row, available diagnostics, or available local
   page.
 - It removes the temporary entry and proves it remains absent after a fresh

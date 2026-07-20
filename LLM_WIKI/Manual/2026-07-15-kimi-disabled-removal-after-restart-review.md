@@ -1,21 +1,21 @@
-# Kimi review: remove a disabled HASC setup after restart
+# Kimi review: remove a disabled HausmanHub setup after restart
 
 Date: 2026-07-15.
 
 ## Scope
 
 This change extends the disposable Home Assistant lifecycle check. A
-collision-aware safe HASC reinstallation is disabled by the user, saved through
+collision-aware safe HausmanHub reinstallation is disabled by the user, saved through
 an empty temporary restart, and removed only by the following empty Home
 Assistant instance.
 
 ## What the check proves
 
 The restarted instance finds the same saved entry and the same nine disabled
-temporary registry records, including the HASC name adjusted for the temporary
+temporary registry records, including the HausmanHub name adjusted for the temporary
 external collision. It has no count states, runtime data, or local page. The
 test removes that preserved disabled entry, keeps the external temporary record
-unchanged, and then uses one more empty restart to require HASC's complete
+unchanged, and then uses one more empty restart to require HausmanHub's complete
 absence.
 
 ## Review outcome

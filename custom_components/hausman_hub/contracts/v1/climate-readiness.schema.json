@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/shumkiiv/hausmanhub_hasc/contracts/v1/climate-readiness.schema.json",
-  "title": "HASC climate readiness v1",
+  "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-readiness.schema.json",
+  "title": "HausmanHub climate readiness v1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract", "bridge_mode", "status", "ready", "fresh", "registry", "reconciliation", "reasons"],
@@ -20,7 +20,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "version"],
-      "properties": {"name": {"const": "hausman-hasc-climate-readiness"}, "version": {"const": 1}}
+      "properties": {"name": {"const": "hausman-hub-climate-readiness"}, "version": {"const": 1}}
     },
     "counts": {
       "type": "object",

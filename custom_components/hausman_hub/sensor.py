@@ -1,4 +1,4 @@
-"""Read-only Home Assistant display for the approved HASC aggregate summary.
+"""Read-only Home Assistant display for the approved HausmanHub aggregate summary.
 
 The coordinator keeps only the fixed nine-number payload in memory. It reads
 local registries on a timer and does not call services, change state, connect
@@ -34,7 +34,7 @@ SUMMARY_UPDATE_INTERVALS: Final[dict[str, timedelta]] = {
     "15m": timedelta(minutes=15),
     "30m": timedelta(minutes=30),
 }
-SENSOR_ENTITY_ID_PREFIX: Final = f"sensor.{DOMAIN}_hasc"
+SENSOR_ENTITY_ID_PREFIX: Final = f"sensor.{DOMAIN}"
 SUMMARY_SENSOR_ICONS: Final[dict[str, str]] = {
     "areas_count": "mdi:floor-plan",
     "devices_count": "mdi:devices",
@@ -73,11 +73,11 @@ class HomeSummaryCoordinator(DataUpdateCoordinator[dict[str, int]]):
 
         entry = self.config_entry
         if entry is None:
-            raise UpdateFailed("HASC saved configuration is unavailable")
+            raise UpdateFailed("HausmanHub saved configuration is unavailable")
         try:
             effective_configuration(entry.data, entry.options)
         except ConfigurationViolation as error:
-            raise UpdateFailed("HASC saved configuration is unsafe") from error
+            raise UpdateFailed("HausmanHub saved configuration is unsafe") from error
 
         return home_summary_payload(
             collect_home_summary(self.hass, entry.entry_id)
@@ -117,7 +117,7 @@ class HomeSummaryCountSensor(CoordinatorEntity[HomeSummaryCoordinator], SensorEn
         entry_id: str,
         summary_key: str,
     ) -> None:
-        """Create a HASC-owned sensor with a static safe translation key."""
+        """Create a HausmanHub-owned sensor with a static safe translation key."""
 
         super().__init__(coordinator)
         self._summary_key = summary_key

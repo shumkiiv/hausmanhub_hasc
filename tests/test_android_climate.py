@@ -30,7 +30,7 @@ class AndroidClimateTest(unittest.TestCase):
             bridge_mode=ClimateBridgeMode.SHADOW,
         )
 
-        self.assertEqual("hausman-hasc-home", result["contract"]["name"])
+        self.assertEqual("hausman-hub-home", result["contract"]["name"])
         self.assertEqual(12, result["contract"]["version"])
         self.assertEqual(
             "Автоматически",

@@ -9,8 +9,8 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-After a safe HASC setup is removed in the empty test system, the test creates
-another safe `read-only` setup. It requires exactly nine HASC count sensors,
+After a safe HausmanHub setup is removed in the empty test system, the test creates
+another safe `read-only` setup. It requires exactly nine HausmanHub count sensors,
 the unchanged external collision record, clean removal of the second setup,
 and the same unchanged external record after that removal.
 
@@ -18,7 +18,7 @@ and the same unchanged external record after that removal.
 
 Kimi returned `NO FINDINGS`. It confirmed that the scenario waits for setup and
 removal, does not depend on a specific collision suffix, uses the existing
-nine-count and external-record guards, and adds no HASC runtime capability,
+nine-count and external-record guards, and adds no HausmanHub runtime capability,
 home data, control, or network access.
 
 ## Verification

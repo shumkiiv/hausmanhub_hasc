@@ -98,7 +98,7 @@ class FakeConfigEntries:
         return [entry for entry in self.entries if getattr(entry, "domain", None) == domain]
 
     def async_loaded_entries(self, domain: str) -> list[object]:
-        """Return only the synthetic HASC displays that are still running."""
+        """Return only the synthetic HausmanHub displays that are still running."""
 
         return [
             entry
@@ -142,7 +142,7 @@ class FakeConfigEntries:
 
 
 class FakeStates:
-    """Store synthetic states and record removal of an HASC-owned state."""
+    """Store synthetic states and record removal of an HausmanHub-owned state."""
 
     def __init__(self) -> None:
         self.values = {
@@ -162,7 +162,7 @@ class FakeStates:
 
 
 class FakeEntityRegistry:
-    """Expose only the registry lookup used by the HASC outer boundary."""
+    """Expose only the registry lookup used by the HausmanHub outer boundary."""
 
     def __init__(self) -> None:
         self.entities = {
@@ -270,7 +270,7 @@ class FakeEntry:
         self,
         data: dict[str, object],
         options: dict[str, object],
-        entry_id: str = "synthetic-hasc-entry",
+        entry_id: str = "synthetic-hausmanhub-entry",
     ) -> None:
         self.entry_id = entry_id
         self.domain = "hausman_hub"
@@ -524,7 +524,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
         )
         self.assertEqual(200, capabilities_response.status)
         self.assertEqual(
-            {"name": "hausman-hasc-capabilities", "version": 1},
+            {"name": "hausman-hub-capabilities", "version": 1},
             capabilities_response.payload["contract"],
         )
         self.assertEqual(
@@ -599,7 +599,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, contour_response.status)
-        self.assertEqual("hausman-hasc-contours", contour_response.payload["contract"]["name"])
+        self.assertEqual("hausman-hub-contours", contour_response.payload["contract"]["name"])
         self.assertEqual([], contour_response.payload["contours"])
         self.assertEqual(
             403,
@@ -1173,7 +1173,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual(200, options_response.status)
         self.assertTrue(options_response.payload["draft_creation_allowed"])
         self.assertEqual(
-            "hausman-hasc-climate-setup-options",
+            "hausman-hub-climate-setup-options",
             options_response.payload["contract"]["name"],
         )
         revision = options_response.payload["snapshot_revision"]
@@ -1751,8 +1751,8 @@ class LocalSummaryAccessTest(unittest.TestCase):
             self.hass.config_entries.forwarded,
         )
 
-    def test_saved_setting_change_reloads_only_this_hasc_entry(self) -> None:
-        """A saved setting must ask Home Assistant to reload only HASC."""
+    def test_saved_setting_change_reloads_only_this_hausmanhub_entry(self) -> None:
+        """A saved setting must ask Home Assistant to reload only HausmanHub."""
 
         self.assertEqual(1, len(self.entry.update_listeners))
         listener = self.entry.update_listeners[0]
@@ -1875,8 +1875,8 @@ class LocalSummaryAccessTest(unittest.TestCase):
         finally:
             self.adapter.collect_home_summary = original_collect_home_summary
 
-    def test_view_does_not_read_home_when_a_stale_pointer_outlives_hasc(self) -> None:
-        """A retained runtime pointer must not outlive the loaded HASC entry."""
+    def test_view_does_not_read_home_when_a_stale_pointer_outlives_hausmanhub(self) -> None:
+        """A retained runtime pointer must not outlive the loaded HausmanHub entry."""
 
         self.assertEqual(
             [self.entry],
@@ -1904,7 +1904,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual(503, response.status)
         self.assertEqual({"message"}, set(response.payload))
 
-    def test_view_fails_closed_if_a_second_saved_hasc_entry_appears(self) -> None:
+    def test_view_fails_closed_if_a_second_saved_hausmanhub_entry_appears(self) -> None:
         """The retained view must not leak counts during a corrupt live pair."""
 
         self.hass.config_entries.entries.append(
@@ -1914,7 +1914,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                     "direct_execution_status": "direct_execution_blocked",
                 },
                 {},
-                "synthetic-hasc-second",
+                "synthetic-hausmanhub-second",
             )
         )
 
@@ -1925,23 +1925,23 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual(503, response.status)
         self.assertEqual({"message"}, set(response.payload))
 
-    def test_unload_clears_only_hasc_owned_state_values(self) -> None:
-        """Turning HASC off must not leave its old counts or touch another state."""
+    def test_unload_clears_only_hausmanhub_owned_state_values(self) -> None:
+        """Turning HausmanHub off must not leave its old counts or touch another state."""
 
-        hasc_state = "sensor.hausman_hub_hasc_entities_count"
-        self.hass.entity_registry.entities["hasc-owned"] = SimpleNamespace(
+        hausmanhub_state = "sensor.hausman_hub_entities_count"
+        self.hass.entity_registry.entities["hausmanhub-owned"] = SimpleNamespace(
             domain="sensor",
-            entity_id=hasc_state,
+            entity_id=hausmanhub_state,
             config_entry_id=self.entry.entry_id,
             disabled_by=None,
         )
-        self.hass.states.values[hasc_state] = SimpleNamespace(state="7")
+        self.hass.states.values[hausmanhub_state] = SimpleNamespace(state="7")
 
         self.assertTrue(asyncio.run(self.integration.async_unload_entry(self.hass, self.entry)))
 
-        self.assertEqual([hasc_state], self.hass.states.removed)
-        self.assertNotIn(hasc_state, self.hass.states.values)
-        self.assertIn("hasc-owned", self.hass.entity_registry.entities)
+        self.assertEqual([hausmanhub_state], self.hass.states.removed)
+        self.assertNotIn(hausmanhub_state, self.hass.states.values)
+        self.assertIn("hausmanhub-owned", self.hass.entity_registry.entities)
         self.assertEqual([], self.hass.entity_registry.removed)
         self.assertIn("sensor.synthetic_private_temperature", self.hass.states.values)
         self.assertEqual(1, len(self.entry.update_listeners))
@@ -1950,8 +1950,8 @@ class LocalSummaryAccessTest(unittest.TestCase):
 
         self.assertEqual([], self.entry.update_listeners)
 
-    def test_failed_unload_keeps_the_current_hasc_state_and_page(self) -> None:
-        """A failed unload must not leave a half-cleared HASC display behind."""
+    def test_failed_unload_keeps_the_current_hausmanhub_state_and_page(self) -> None:
+        """A failed unload must not leave a half-cleared HausmanHub display behind."""
 
         failed_hass = FakeHomeAssistant(unload_succeeds=False)
         failed_entry = FakeEntry(
@@ -1964,22 +1964,22 @@ class LocalSummaryAccessTest(unittest.TestCase):
         failed_hass.config_entries.entries = [failed_entry]
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(failed_hass, failed_entry)))
 
-        hasc_state = "sensor.hausman_hub_hasc_entities_count"
-        failed_hass.entity_registry.entities["hasc-owned"] = SimpleNamespace(
+        hausmanhub_state = "sensor.hausman_hub_entities_count"
+        failed_hass.entity_registry.entities["hausmanhub-owned"] = SimpleNamespace(
             domain="sensor",
-            entity_id=hasc_state,
+            entity_id=hausmanhub_state,
             config_entry_id=failed_entry.entry_id,
             disabled_by=None,
         )
-        failed_hass.states.values[hasc_state] = SimpleNamespace(state="7")
+        failed_hass.states.values[hausmanhub_state] = SimpleNamespace(state="7")
 
         self.assertFalse(
             asyncio.run(self.integration.async_unload_entry(failed_hass, failed_entry))
         )
 
         self.assertEqual([], failed_hass.states.removed)
-        self.assertIn(hasc_state, failed_hass.states.values)
-        self.assertIn("hasc-owned", failed_hass.entity_registry.entities)
+        self.assertIn(hausmanhub_state, failed_hass.states.values)
+        self.assertIn("hausmanhub-owned", failed_hass.entity_registry.entities)
         self.assertEqual([], failed_hass.entity_registry.removed)
         self.assertEqual(1, len(failed_entry.update_listeners))
         response = asyncio.run(
@@ -2006,7 +2006,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual([], unsafe_hass.http.views)
 
     def test_setup_with_the_optional_page_closed_keeps_only_the_count_display(self) -> None:
-        """Closing the page must not remove the nine safe HASC count sensors."""
+        """Closing the page must not remove the nine safe HausmanHub count sensors."""
 
         closed_hass = FakeHomeAssistant()
         closed_entry = FakeEntry(
@@ -2075,14 +2075,14 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 unsafe_hass = FakeHomeAssistant()
                 unsafe_entry = FakeEntry(dict(data), dict(options))
                 unsafe_hass.config_entries.entries = [unsafe_entry]
-                saved_hasc_state = "sensor.hausman_hub_hasc_entities_count"
-                unsafe_hass.entity_registry.entities["saved-hasc"] = SimpleNamespace(
+                saved_hausmanhub_state = "sensor.hausman_hub_entities_count"
+                unsafe_hass.entity_registry.entities["saved-hausmanhub"] = SimpleNamespace(
                     domain="sensor",
-                    entity_id=saved_hasc_state,
+                    entity_id=saved_hausmanhub_state,
                     config_entry_id=unsafe_entry.entry_id,
                     disabled_by=None,
                 )
-                unsafe_hass.states.values[saved_hasc_state] = SimpleNamespace(state="7")
+                unsafe_hass.states.values[saved_hausmanhub_state] = SimpleNamespace(state="7")
 
                 self.assertFalse(
                     asyncio.run(self.integration.async_setup_entry(unsafe_hass, unsafe_entry))
@@ -2090,9 +2090,9 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertEqual({}, unsafe_hass.data)
                 self.assertEqual([], unsafe_hass.http.views)
                 self.assertEqual([], unsafe_hass.config_entries.forwarded)
-                self.assertEqual([saved_hasc_state], unsafe_hass.states.removed)
-                self.assertNotIn(saved_hasc_state, unsafe_hass.states.values)
-                self.assertEqual([saved_hasc_state], unsafe_hass.entity_registry.removed)
+                self.assertEqual([saved_hausmanhub_state], unsafe_hass.states.removed)
+                self.assertNotIn(saved_hausmanhub_state, unsafe_hass.states.values)
+                self.assertEqual([saved_hausmanhub_state], unsafe_hass.entity_registry.removed)
                 self.assertEqual(
                     [],
                     unsafe_hass.entity_registry.async_entries_for_config_entry(
@@ -2106,18 +2106,18 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 )
 
     def test_setup_rejects_multiple_saved_entries_and_clears_only_their_records(self) -> None:
-        """A corrupt pair of saved HASC entries must not expose either display."""
+        """A corrupt pair of saved HausmanHub entries must not expose either display."""
 
         safe_data = {
             "mode": "read-only",
             "direct_execution_status": "direct_execution_blocked",
         }
-        first_entry = FakeEntry(dict(safe_data), {}, "synthetic-hasc-first")
-        second_entry = FakeEntry(dict(safe_data), {}, "synthetic-hasc-second")
+        first_entry = FakeEntry(dict(safe_data), {}, "synthetic-hausmanhub-first")
+        second_entry = FakeEntry(dict(safe_data), {}, "synthetic-hausmanhub-second")
         duplicate_hass = FakeHomeAssistant()
         duplicate_hass.config_entries.entries = [first_entry, second_entry]
-        first_state = "sensor.hausman_hub_hasc_first_saved_count"
-        second_state = "sensor.hausman_hub_hasc_second_saved_count"
+        first_state = "sensor.hausman_hub_first_saved_count"
+        second_state = "sensor.hausman_hub_second_saved_count"
         duplicate_hass.entity_registry.entities["first-saved"] = SimpleNamespace(
             domain="sensor",
             entity_id=first_state,
@@ -2159,10 +2159,10 @@ class LocalSummaryAccessTest(unittest.TestCase):
             duplicate_hass.states.values,
         )
 
-    def test_second_saved_entry_closes_an_already_running_hasc_display(self) -> None:
+    def test_second_saved_entry_closes_an_already_running_hausmanhub_display(self) -> None:
         """A live corrupt pair must close the existing display before cleanup."""
 
-        first_state = "sensor.hausman_hub_hasc_first_running_count"
+        first_state = "sensor.hausman_hub_first_running_count"
         self.hass.entity_registry.entities["first-running"] = SimpleNamespace(
             domain="sensor",
             entity_id=first_state,
@@ -2176,7 +2176,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 "direct_execution_status": "direct_execution_blocked",
             },
             {},
-            "synthetic-hasc-second",
+            "synthetic-hausmanhub-second",
         )
         self.hass.is_running = True
         self.hass.config_entries.entries.append(second_entry)

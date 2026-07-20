@@ -1,4 +1,4 @@
-"""Pure contract tests for HASC's first opt-in control canary."""
+"""Pure contract tests for HausmanHub's first opt-in control canary."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ class CanaryControlContractTest(unittest.TestCase):
             True,
             "5m",
             True,
-            "input_boolean.hasc_canary",
+            "input_boolean.hausmanhub_canary",
         )
         configuration = effective_configuration(
             create_initial_entry("read-only"),
@@ -54,7 +54,7 @@ class CanaryControlContractTest(unittest.TestCase):
         self.assertEqual(
             {
                 "canary_control_enabled": True,
-                "canary_control_target": "input_boolean.hasc_canary",
+                "canary_control_target": "input_boolean.hausmanhub_canary",
                 "climate_bridge_mode": "disabled",
                 "local_summary_enabled": True,
                 "mode": "read-only",
@@ -64,10 +64,10 @@ class CanaryControlContractTest(unittest.TestCase):
         )
         command = canary_control_command(
             configuration,
-            "input_boolean.hasc_canary",
+            "input_boolean.hausmanhub_canary",
             True,
         )
-        self.assertEqual("input_boolean.hasc_canary", command.target_entity_id)
+        self.assertEqual("input_boolean.hausmanhub_canary", command.target_entity_id)
         self.assertTrue(command.turn_on)
 
     def test_disarming_drops_a_previously_visible_target(self) -> None:
@@ -100,7 +100,7 @@ class CanaryControlContractTest(unittest.TestCase):
                 "disabled target retained",
                 {
                     CANARY_CONTROL_ENABLED_FIELD: False,
-                    CANARY_CONTROL_TARGET_FIELD: "input_boolean.hasc_canary",
+                    CANARY_CONTROL_TARGET_FIELD: "input_boolean.hausmanhub_canary",
                 },
             ),
             (
@@ -114,7 +114,7 @@ class CanaryControlContractTest(unittest.TestCase):
                 "truth-like arm value",
                 {
                     CANARY_CONTROL_ENABLED_FIELD: "true",
-                    CANARY_CONTROL_TARGET_FIELD: "input_boolean.hasc_canary",
+                    CANARY_CONTROL_TARGET_FIELD: "input_boolean.hausmanhub_canary",
                 },
             ),
         ):
@@ -131,21 +131,21 @@ class CanaryControlContractTest(unittest.TestCase):
                 True,
                 "5m",
                 True,
-                "input_boolean.hasc_canary",
+                "input_boolean.hausmanhub_canary",
             ),
         )
 
         for configuration, target, action in (
-            (disabled, "input_boolean.hasc_canary", True),
+            (disabled, "input_boolean.hausmanhub_canary", True),
             (armed, "input_boolean.other", True),
-            (armed, "input_boolean.hasc_canary", 1),
+            (armed, "input_boolean.hausmanhub_canary", 1),
         ):
             with self.subTest(target=target, action=action):
                 with self.assertRaises(CanaryControlViolation):
                     canary_control_command(configuration, target, action)
 
     def test_diagnostics_report_scope_but_never_target(self) -> None:
-        target = "input_boolean.hasc_canary"
+        target = "input_boolean.hausmanhub_canary"
         snapshot = diagnostics_snapshot(
             create_initial_entry("shadow"),
             create_options("shadow", True, "15m", True, target),

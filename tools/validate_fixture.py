@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate one synthetic HASC fixture without accessing any runtime."""
+"""Validate one synthetic HausmanHub fixture without accessing any runtime."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hasc_validation import (
+from hausmanhub_validation import (
     validate_common_inventory,
     validate_diagnostics_contract,
     validate_shadow_evidence,

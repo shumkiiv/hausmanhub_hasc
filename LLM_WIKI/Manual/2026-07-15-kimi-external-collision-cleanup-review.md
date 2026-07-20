@@ -9,15 +9,15 @@ and its documentation changed. The integration package did not change.
 
 ## What changed
 
-The empty check reserves one external record with an HASC-like name. It now
-saves the record's identity, source, and lack of HASC or device ownership.
-After HASC is removed, the check requires the same external record to remain
+The empty check reserves one external record with an HausmanHub-like name. It now
+saves the record's identity, source, and lack of HausmanHub or device ownership.
+After HausmanHub is removed, the check requires the same external record to remain
 unchanged.
 
 ## Review outcome
 
-Kimi returned `NO FINDINGS`. It confirmed that the new check runs after HASC
-removal, covers the intended identity and ownership fields, and adds no HASC
+Kimi returned `NO FINDINGS`. It confirmed that the new check runs after HausmanHub
+removal, covers the intended identity and ownership fields, and adds no HausmanHub
 runtime capability, home data, control, or network access.
 
 ## Verification
