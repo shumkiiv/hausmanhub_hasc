@@ -9,7 +9,11 @@ import time
 from typing import Protocol
 
 from ..domain.climate import ClimateRegistry
-from ..domain.climate_observation import ClimateObservationViolation
+from ..domain.climate_demand import ClimateDemandSnapshot
+from ..domain.climate_observation import (
+    ClimateObservationSnapshot,
+    ClimateObservationViolation,
+)
 from ..domain.climate_bridge import ClimateBridgeMode
 from ..domain.configuration import SafeConfiguration
 from ..domain.contours import ContourDefinition, ContourMode, ContourRegistry
@@ -30,6 +34,7 @@ from .climate_evidence import (
     public_intent_context,
 )
 from .climate_import import ClimateImportSnapshot
+from .climate_demands import build_climate_demand_snapshot
 from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
 from .climate_observations import (
     build_climate_observation_snapshot,
@@ -762,35 +767,53 @@ class ClimateRuntime:
             contour = self._contours.contour(CLIMATE_CONTOUR_ID)
             if contour is None:
                 return None
-            snapshot = None
-            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
-                try:
-                    snapshot = await self._async_refresh_unlocked(
-                        persist_evidence=False,
-                        record_evidence=False,
-                    )
-                except ClimateRuntimeUnavailable:
-                    snapshot = None
-            observed_at = self._safe_now()
+            observation = await self._async_native_climate_observation_unlocked()
+            return build_climate_target_snapshot(contour, observation)
+
+    async def async_native_climate_demands(self) -> ClimateDemandSnapshot | None:
+        """Calculate room needs without choosing or commanding equipment."""
+
+        async with self._lock:
+            contour = self._contours.contour(CLIMATE_CONTOUR_ID)
+            if contour is None:
+                return None
+            observation = await self._async_native_climate_observation_unlocked()
+            targets = build_climate_target_snapshot(contour, observation)
+            return build_climate_demand_snapshot(targets, observation)
+
+    async def _async_native_climate_observation_unlocked(
+        self,
+    ) -> ClimateObservationSnapshot:
+        """Read one observation without saving evidence or creating commands."""
+
+        snapshot = None
+        if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
             try:
-                observation = (
-                    unavailable_climate_observation_snapshot(
-                        self._registry,
-                        observed_at=observed_at,
-                    )
-                    if snapshot is None
-                    else build_climate_observation_snapshot(
-                        self._registry,
-                        snapshot,
-                        observed_at=observed_at,
-                    )
+                snapshot = await self._async_refresh_unlocked(
+                    persist_evidence=False,
+                    record_evidence=False,
                 )
-            except ClimateObservationViolation:
-                observation = unavailable_climate_observation_snapshot(
+            except ClimateRuntimeUnavailable:
+                snapshot = None
+        observed_at = self._safe_now()
+        try:
+            return (
+                unavailable_climate_observation_snapshot(
                     self._registry,
                     observed_at=observed_at,
                 )
-            return build_climate_target_snapshot(contour, observation)
+                if snapshot is None
+                else build_climate_observation_snapshot(
+                    self._registry,
+                    snapshot,
+                    observed_at=observed_at,
+                )
+            )
+        except ClimateObservationViolation:
+            return unavailable_climate_observation_snapshot(
+                self._registry,
+                observed_at=observed_at,
+            )
 
     async def async_readiness(self) -> dict[str, object]:
         """Return redacted bridge and registry readiness to a local admin."""

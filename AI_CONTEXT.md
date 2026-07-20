@@ -121,6 +121,26 @@ Last updated: 2026-07-20.
   nonblocking precision notes were closed before commit by tightening docs,
   covering stale data, avoiding evidence-ledger mutation, and ignoring retained
   cache in disabled mode.
+- Version 1.8.3 completes roadmap item 24. The pure demand layer combines one
+  internal observation with the resolved room target and reports heating,
+  cooling, and humidifying as independent required/not-required/unavailable
+  channels. New cooling uses the working core's exact inclusive 0.7 C start
+  gap; heating retains the native preview's strict 0.5 C comfort band; and
+  humidifying is required only when humidity is more than five points below
+  target. Stale observations, missing values, and suspect temperature never
+  become required demand, while temperature and humidity availability remain
+  isolated. This is raw comfort demand only: season conflicts, running-device
+  hysteresis, equipment policy, safety priority, intents, and commands are not
+  part of the layer. The runtime reads observation, targets, and demand once
+  without evidence mutation and ignores retained state when disabled. All 30
+  frozen cases map to deterministic raw demand, including the exact 25.7/25.6
+  cooling boundary and the dry-room humidity anchor. Roadmap item 25 must
+  resolve heating/cooling conflicts without adding execution authority. The
+  source climate module and Android repository remain unchanged. The final
+  staged tree passed 402 local tests, HACS/package/boundary/Android checks, and
+  disposable Home Assistant Core 2026.6.4/2026.7.0. Independent read-only
+  review passed with no substantial findings in OpenCode session
+  `ses_080dc1768ffekUBX1A0v30rMvR`.
 - Workspace boundary: this thread may change only HausmanHub and its integration
   wrapper. The Android application is developed separately in
   `/home/ivsh/projects/УД-android`; it may be inspected only read-only for
