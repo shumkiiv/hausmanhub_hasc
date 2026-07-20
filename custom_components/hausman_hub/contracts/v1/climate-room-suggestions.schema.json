@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/climate-room-suggestions.schema.json",
+  "title": "HASC climate room suggestions v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "generated_at",
+    "snapshot_revision",
+    "data_status",
+    "assignment_allowed",
+    "confirmation_required",
+    "display_names",
+    "suggestions"
+  ],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "hausman-hasc-climate-room-suggestions"},
+        "version": {"const": 1}
+      }
+    },
+    "generated_at": {"type": "integer", "minimum": 0},
+    "snapshot_revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "data_status": {"enum": ["current", "stale"]},
+    "assignment_allowed": {"type": "boolean"},
+    "confirmation_required": {"const": true},
+    "display_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confidence", "reason"],
+      "properties": {
+        "confidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["high", "none"],
+          "properties": {
+            "high": {"const": "Комната определена"},
+            "none": {"const": "Нет безопасного предложения"}
+          }
+        },
+        "reason": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "detected_room",
+            "already_configured",
+            "device_unavailable",
+            "unsupported_device",
+            "data_stale",
+            "device_missing",
+            "registry_mismatch",
+            "room_unavailable"
+          ],
+          "properties": {
+            "detected_room": {"const": "Устройство найдено в этой комнате"},
+            "already_configured": {"const": "Устройство уже назначено этой комнате"},
+            "device_unavailable": {"const": "Устройство сейчас недоступно"},
+            "unsupported_device": {"const": "Тип устройства не поддерживается"},
+            "data_stale": {"const": "Нужно обновить данные"},
+            "device_missing": {"const": "Настроенное устройство больше не найдено"},
+            "registry_mismatch": {"const": "Текущая привязка не совпадает с настройкой HASC"},
+            "room_unavailable": {"const": "Комната сейчас недоступна для выбора"}
+          }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {"$ref": "#/$defs/suggestion"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"data_status": {"const": "stale"}}},
+      "then": {
+        "properties": {
+          "assignment_allowed": {"const": false},
+          "suggestions": {
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/suggestion"},
+                {
+                  "properties": {
+                    "candidate_status": {"const": "data_stale"},
+                    "suggested_room_id": {"type": "null"},
+                    "suggested_room_name": {"type": "null"},
+                    "confidence": {"const": "none"},
+                    "reason": {"const": "data_stale"},
+                    "can_accept": {"const": false}
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "suggestions": {
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/suggestion"},
+                {"properties": {"candidate_status": {"not": {"const": "data_stale"}}}}
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"assignment_allowed": {"const": true}}},
+      "then": {
+        "properties": {
+          "suggestions": {
+            "contains": {
+              "type": "object",
+              "required": ["can_accept"],
+              "properties": {"can_accept": {"const": true}}
+            },
+            "minContains": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "suggestions": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "required": ["can_accept"],
+                "properties": {"can_accept": {"const": true}}
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stable_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "candidate_status": {
+      "enum": [
+        "available",
+        "already_configured",
+        "unavailable",
+        "unsupported",
+        "data_stale",
+        "source_missing",
+        "registry_mismatch"
+      ]
+    },
+    "reason": {
+      "enum": [
+        "detected_room",
+        "already_configured",
+        "device_unavailable",
+        "unsupported_device",
+        "data_stale",
+        "device_missing",
+        "registry_mismatch",
+        "room_unavailable"
+      ]
+    },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "device_name",
+        "candidate_status",
+        "suggested_room_id",
+        "suggested_room_name",
+        "confidence",
+        "reason",
+        "can_accept"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string", "pattern": "^candidate_[0-9]{4}$"},
+        "device_name": {"$ref": "#/$defs/name"},
+        "candidate_status": {"$ref": "#/$defs/candidate_status"},
+        "suggested_room_id": {
+          "oneOf": [{"$ref": "#/$defs/stable_id"}, {"type": "null"}]
+        },
+        "suggested_room_name": {
+          "oneOf": [{"$ref": "#/$defs/name"}, {"type": "null"}]
+        },
+        "confidence": {"enum": ["high", "none"]},
+        "reason": {"$ref": "#/$defs/reason"},
+        "can_accept": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"suggested_room_id": {"type": "null"}}},
+          "then": {
+            "properties": {
+              "suggested_room_name": {"type": "null"},
+              "confidence": {"const": "none"},
+              "can_accept": {"const": false}
+            }
+          },
+          "else": {
+            "properties": {
+              "suggested_room_name": {"$ref": "#/$defs/name"},
+              "confidence": {"const": "high"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"can_accept": {"const": true}}},
+          "then": {
+            "properties": {
+              "candidate_status": {"const": "available"},
+              "suggested_room_id": {"$ref": "#/$defs/stable_id"},
+              "suggested_room_name": {"$ref": "#/$defs/name"},
+              "confidence": {"const": "high"},
+              "reason": {"const": "detected_room"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "candidate_status": {"const": "available"},
+              "can_accept": {"const": false}
+            },
+            "required": ["candidate_status", "can_accept"]
+          },
+          "then": {
+            "properties": {
+              "suggested_room_id": {"type": "null"},
+              "suggested_room_name": {"type": "null"},
+              "confidence": {"const": "none"},
+              "reason": {"const": "room_unavailable"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"candidate_status": {"const": "already_configured"}}},
+          "then": {
+            "properties": {
+              "suggested_room_id": {"$ref": "#/$defs/stable_id"},
+              "suggested_room_name": {"$ref": "#/$defs/name"},
+              "confidence": {"const": "high"},
+              "reason": {"const": "already_configured"},
+              "can_accept": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"candidate_status": {"const": "unavailable"}}},
+          "then": {
+            "properties": {
+              "suggested_room_id": {"$ref": "#/$defs/stable_id"},
+              "suggested_room_name": {"$ref": "#/$defs/name"},
+              "confidence": {"const": "high"},
+              "reason": {"const": "device_unavailable"},
+              "can_accept": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"candidate_status": {"const": "unsupported"}}},
+          "then": {
+            "properties": {
+              "suggested_room_id": {"$ref": "#/$defs/stable_id"},
+              "suggested_room_name": {"$ref": "#/$defs/name"},
+              "confidence": {"const": "high"},
+              "reason": {"const": "unsupported_device"},
+              "can_accept": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"candidate_status": {"const": "data_stale"}}},
+          "then": {
+            "properties": {
+              "suggested_room_id": {"type": "null"},
+              "suggested_room_name": {"type": "null"},
+              "confidence": {"const": "none"},
+              "reason": {"const": "data_stale"},
+              "can_accept": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"candidate_status": {"const": "source_missing"}}},
+          "then": {
+            "properties": {
+              "suggested_room_id": {"type": "null"},
+              "suggested_room_name": {"type": "null"},
+              "confidence": {"const": "none"},
+              "reason": {"const": "device_missing"},
+              "can_accept": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"candidate_status": {"const": "registry_mismatch"}}},
+          "then": {
+            "properties": {
+              "suggested_room_id": {"type": "null"},
+              "suggested_room_name": {"type": "null"},
+              "confidence": {"const": "none"},
+              "reason": {"const": "registry_mismatch"},
+              "can_accept": {"const": false}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

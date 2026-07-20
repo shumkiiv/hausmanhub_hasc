@@ -204,6 +204,20 @@ Last updated: 2026-07-20.
   `ses_082149289ffetmVMUsPAlvHXps`; the final Codex audit corrected unavailable
   configured-device status and timestamp-only revision churn and found no
   remaining issue.
+- Version 1.7.2 completed the thirteenth HASC-only roadmap item. The new strict
+  `hausman-hasc-climate-room-suggestions` v1 contract links response-local
+  candidate references to rooms only through the explicit fresh source room
+  relation. It never guesses from device names and never assigns or saves.
+  Every suggestion requires confirmation and has fixed Russian confidence and
+  reason labels. Stale data removes all room suggestions; missing sources and
+  registry mismatches remain suggestion-free; unavailable or unsupported
+  devices may explain their detected room but cannot be accepted. The format
+  shares the candidate snapshot revision and remains internal until the item
+  14 administrative draft route. The final staged tree passed 331 local tests
+  and both supported Home Assistant Core checks. OpenCode stopped before review
+  with token-refresh `401` in session `ses_0820c85d8ffesZEl7NOXnUq5NF`; the
+  final Codex audit strengthened schema relations among status, reason,
+  confidence, suggested room, and acceptance and found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

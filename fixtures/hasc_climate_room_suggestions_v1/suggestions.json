@@ -1,0 +1,49 @@
+{
+  "contract": {
+    "name": "hausman-hasc-climate-room-suggestions",
+    "version": 1
+  },
+  "generated_at": 1784280000000,
+  "snapshot_revision": 4815781905896336,
+  "data_status": "current",
+  "assignment_allowed": true,
+  "confirmation_required": true,
+  "display_names": {
+    "confidence": {
+      "high": "Комната определена",
+      "none": "Нет безопасного предложения"
+    },
+    "reason": {
+      "detected_room": "Устройство найдено в этой комнате",
+      "already_configured": "Устройство уже назначено этой комнате",
+      "device_unavailable": "Устройство сейчас недоступно",
+      "unsupported_device": "Тип устройства не поддерживается",
+      "data_stale": "Нужно обновить данные",
+      "device_missing": "Настроенное устройство больше не найдено",
+      "registry_mismatch": "Текущая привязка не совпадает с настройкой HASC",
+      "room_unavailable": "Комната сейчас недоступна для выбора"
+    }
+  },
+  "suggestions": [
+    {
+      "candidate_id": "candidate_0001",
+      "device_name": "Kids humidifier",
+      "candidate_status": "available",
+      "suggested_room_id": "kids",
+      "suggested_room_name": "Kids",
+      "confidence": "high",
+      "reason": "detected_room",
+      "can_accept": true
+    },
+    {
+      "candidate_id": "candidate_0002",
+      "device_name": "Living AC",
+      "candidate_status": "already_configured",
+      "suggested_room_id": "living",
+      "suggested_room_name": "Living room",
+      "confidence": "high",
+      "reason": "already_configured",
+      "can_accept": false
+    }
+  ]
+}

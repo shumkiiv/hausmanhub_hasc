@@ -17,6 +17,8 @@ CLIMATE_DEVICE_CANDIDATES_CONTRACT_NAME = "hausman-hasc-climate-device-candidate
 CLIMATE_DEVICE_CANDIDATES_CONTRACT_VERSION = 1
 MAX_CLIMATE_DEVICE_CANDIDATES = 1024
 JSON_SAFE_INTEGER_MAXIMUM = 9_007_199_254_740_991
+CLIMATE_ROOM_SUGGESTIONS_CONTRACT_NAME = "hausman-hasc-climate-room-suggestions"
+CLIMATE_ROOM_SUGGESTIONS_CONTRACT_VERSION = 1
 
 _ROOM_STATUS_NAMES = {
     "available": "Можно выбрать",
@@ -31,6 +33,20 @@ _CANDIDATE_STATUS_NAMES = {
     "data_stale": "Нужно обновить данные",
     "source_missing": "Устройство больше не найдено",
     "registry_mismatch": "Нужно проверить привязку устройства",
+}
+_SUGGESTION_CONFIDENCE_NAMES = {
+    "high": "Комната определена",
+    "none": "Нет безопасного предложения",
+}
+_SUGGESTION_REASON_NAMES = {
+    "detected_room": "Устройство найдено в этой комнате",
+    "already_configured": "Устройство уже назначено этой комнате",
+    "device_unavailable": "Устройство сейчас недоступно",
+    "unsupported_device": "Тип устройства не поддерживается",
+    "data_stale": "Нужно обновить данные",
+    "device_missing": "Настроенное устройство больше не найдено",
+    "registry_mismatch": "Текущая привязка не совпадает с настройкой HASC",
+    "room_unavailable": "Комната сейчас недоступна для выбора",
 }
 
 
@@ -242,6 +258,93 @@ def climate_device_candidates(
             "candidate_status": dict(_CANDIDATE_STATUS_NAMES),
         },
         "candidates": candidates,
+    }
+
+
+def climate_room_suggestions(
+    registry: ClimateRegistry,
+    snapshot: ClimateImportSnapshot,
+) -> dict[str, object]:
+    """Suggest only explicit source-room matches and never assign automatically."""
+
+    rooms_payload = climate_available_rooms(registry, snapshot)
+    candidates_payload = climate_device_candidates(registry, snapshot)
+    room_by_id = {room["id"]: room for room in rooms_payload["rooms"]}  # type: ignore[index]
+    suggestions: list[dict[str, object]] = []
+    for candidate in candidates_payload["candidates"]:  # type: ignore[index]
+        candidate_status = candidate["status"]
+        suggested_room_id: object = None
+        suggested_room_name: object = None
+        confidence = "none"
+        if candidate_status == "already_configured":
+            proposal_room_id = candidate["configured_room_id"]
+        elif candidate_status in {"available", "unavailable", "unsupported"}:
+            proposal_room_id = candidate["room_id"]
+        else:
+            proposal_room_id = None
+
+        proposal_room = (
+            room_by_id.get(proposal_room_id)
+            if isinstance(proposal_room_id, str)
+            else None
+        )
+        if proposal_room is not None and proposal_room["status"] == "available":
+            suggested_room_id = proposal_room["id"]
+            suggested_room_name = proposal_room["name"]
+            confidence = "high"
+
+        can_accept = bool(
+            candidate_status == "available"
+            and proposal_room is not None
+            and proposal_room["selectable"] is True
+        )
+        if candidate_status == "available":
+            reason = "detected_room" if can_accept else "room_unavailable"
+        elif candidate_status == "already_configured":
+            reason = "already_configured"
+        elif candidate_status == "unavailable":
+            reason = "device_unavailable"
+        elif candidate_status == "unsupported":
+            reason = "unsupported_device"
+        elif candidate_status == "data_stale":
+            reason = "data_stale"
+        elif candidate_status == "source_missing":
+            reason = "device_missing"
+        elif candidate_status == "registry_mismatch":
+            reason = "registry_mismatch"
+        else:  # pragma: no cover - candidate statuses are closed above
+            raise ValueError("climate candidate status is unsupported")
+
+        suggestions.append(
+            {
+                "candidate_id": candidate["candidate_id"],
+                "device_name": candidate["name"],
+                "candidate_status": candidate_status,
+                "suggested_room_id": suggested_room_id,
+                "suggested_room_name": suggested_room_name,
+                "confidence": confidence,
+                "reason": reason,
+                "can_accept": can_accept,
+            }
+        )
+
+    return {
+        "contract": {
+            "name": CLIMATE_ROOM_SUGGESTIONS_CONTRACT_NAME,
+            "version": CLIMATE_ROOM_SUGGESTIONS_CONTRACT_VERSION,
+        },
+        "generated_at": candidates_payload["generated_at"],
+        "snapshot_revision": candidates_payload["snapshot_revision"],
+        "data_status": candidates_payload["data_status"],
+        "assignment_allowed": any(
+            suggestion["can_accept"] is True for suggestion in suggestions
+        ),
+        "confirmation_required": True,
+        "display_names": {
+            "confidence": dict(_SUGGESTION_CONFIDENCE_NAMES),
+            "reason": dict(_SUGGESTION_REASON_NAMES),
+        },
+        "suggestions": suggestions,
     }
 
 

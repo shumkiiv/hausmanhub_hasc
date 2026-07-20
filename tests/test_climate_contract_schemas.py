@@ -26,6 +26,7 @@ from custom_components.hausman_hub.application.climate_registry import registry_
 from custom_components.hausman_hub.application.climate_setup import (
     climate_available_rooms,
     climate_device_candidates,
+    climate_room_suggestions,
 )
 from custom_components.hausman_hub.application.contours import (
     build_climate_contour_setup,
@@ -70,6 +71,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hasc_climate_v1/canary-preflight.json": "v1/climate-canary-preflight.schema.json",
             "hasc_climate_rooms_v1/rooms.json": "v1/climate-rooms.schema.json",
             "hasc_climate_device_candidates_v1/candidates.json": "v1/climate-device-candidates.schema.json",
+            "hasc_climate_room_suggestions_v1/suggestions.json": "v1/climate-room-suggestions.schema.json",
             "hasc_climate_v2/home.json": "v2/climate-home.schema.json",
             "hasc_climate_v3/home.json": "v3/climate-home.schema.json",
             "hasc_climate_v4/home.json": "v4/climate-home.schema.json",
@@ -132,11 +134,13 @@ class ClimateContractSchemasTest(unittest.TestCase):
         admin = admin_climate_import_snapshot(registry, snapshot)
         rooms = climate_available_rooms(registry, snapshot)
         candidates = climate_device_candidates(registry, snapshot)
+        suggestions = climate_room_suggestions(registry, snapshot)
 
         validator("v12/climate-home.schema.json").validate(home)
         validator("v1/climate-admin-import.schema.json").validate(admin)
         validator("v1/climate-rooms.schema.json").validate(rooms)
         validator("v1/climate-device-candidates.schema.json").validate(candidates)
+        validator("v1/climate-room-suggestions.schema.json").validate(suggestions)
         serialized_home = json.dumps(home, ensure_ascii=True, sort_keys=True)
         self.assertNotIn("source_id", serialized_home)
         self.assertNotIn("entity_id", serialized_home)
