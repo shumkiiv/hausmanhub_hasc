@@ -205,6 +205,76 @@ def ready_evidence_store(
 
 
 class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_setup_options_do_not_advance_or_save_shadow_evidence(self) -> None:
+        bridge = MemoryBridge()
+        registry = registry_from_payload(registry_payload())
+        evidence_store = ready_evidence_store()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry),
+            bridge_client=bridge,
+            evidence_store=evidence_store,
+        )
+        await runtime.async_start()
+        evidence_before = evidence_store.evidence.as_storage_payload()  # type: ignore[union-attr]
+        saves_before = list(evidence_store.saved)
+
+        await runtime.async_climate_setup_options()
+
+        self.assertEqual(
+            evidence_before,
+            evidence_store.evidence.as_storage_payload(),  # type: ignore[union-attr]
+        )
+        self.assertEqual(saves_before, evidence_store.saved)
+        self.assertEqual([], bridge.executed)
+
+    async def test_contour_draft_reads_once_without_saving_or_commanding(self) -> None:
+        bridge = MemoryBridge()
+        registry = registry_from_payload({"version": 1, "rooms": [], "devices": []})
+        registry_store = MemoryStore(registry)
+        contour_store = MemoryContourStore()
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=registry_store,
+            contour_store=contour_store,
+            bridge_client=bridge,
+        )
+        await runtime.async_start()
+        fetches_before = bridge.fetch_count
+        options = await runtime.async_climate_setup_options()
+        revision = options["snapshot_revision"]
+        self.assertEqual(fetches_before + 1, bridge.fetch_count)
+
+        draft = await runtime.async_create_contour_draft(
+            {
+                "snapshot_revision": revision,
+                "name": "Климат",
+                "mode": "automatic",
+                "rooms": [
+                    {
+                        "room_id": "kids",
+                        "target_temperature": 25.0,
+                        "target_humidity": 45,
+                        "strategy": "normal",
+                        "devices": [
+                            {
+                                "candidate_id": "candidate_0001",
+                                "type": "humidifier",
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual("created", draft["status"])
+        self.assertEqual(fetches_before + 2, bridge.fetch_count)
+        self.assertEqual([], bridge.executed)
+        self.assertEqual([], registry_store.saved)
+        self.assertEqual([], contour_store.saved)
+
     async def test_schedule_switches_profile_and_uses_existing_typed_executor_once(
         self,
     ) -> None:

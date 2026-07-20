@@ -1,0 +1,499 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/climate-setup-options.schema.json",
+  "title": "Варианты настройки климатического контура HASC v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "generated_at",
+    "snapshot_revision",
+    "data_status",
+    "draft_creation_allowed",
+    "display_names",
+    "rooms",
+    "devices"
+  ],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "hausman-hasc-climate-setup-options"
+        },
+        "version": {
+          "const": 1
+        }
+      }
+    },
+    "generated_at": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "snapshot_revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "data_status": {
+      "enum": [
+        "current",
+        "stale"
+      ]
+    },
+    "draft_creation_allowed": {
+      "type": "boolean"
+    },
+    "display_names": {
+      "$ref": "#/$defs/display_names"
+    },
+    "rooms": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/room"
+      }
+    },
+    "devices": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/device"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "draft_creation_allowed": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "devices": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "can_add"
+              ],
+              "properties": {
+                "can_add": {
+                  "const": true
+                }
+              }
+            },
+            "minContains": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "devices": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "can_add"
+                ],
+                "properties": {
+                  "can_add": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_status": {
+            "const": "stale"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "draft_creation_allowed": {
+            "const": false
+          },
+          "rooms": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "data_stale"
+                },
+                "selectable": {
+                  "const": false
+                }
+              }
+            }
+          },
+          "devices": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "data_stale"
+                },
+                "can_add": {
+                  "const": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stable_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^candidate_[0-9]{4}$"
+    },
+    "device_type": {
+      "enum": [
+        "air_conditioner",
+        "radiator_thermostat",
+        "humidifier",
+        "floor_heating",
+        "temperature_sensor",
+        "humidity_sensor"
+      ]
+    },
+    "nullable_device_type": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/device_type"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "room_status": {
+      "enum": [
+        "available",
+        "data_stale",
+        "source_missing"
+      ]
+    },
+    "device_status": {
+      "enum": [
+        "available",
+        "already_configured",
+        "unavailable",
+        "unsupported",
+        "data_stale",
+        "source_missing",
+        "registry_mismatch"
+      ]
+    },
+    "suggestion_reason": {
+      "enum": [
+        "detected_room",
+        "already_configured",
+        "device_unavailable",
+        "unsupported_device",
+        "data_stale",
+        "device_missing",
+        "registry_mismatch",
+        "room_unavailable"
+      ]
+    },
+    "nullable_stable_id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/stable_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullable_name": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/name"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "status",
+        "selectable"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stable_id"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "status": {
+          "$ref": "#/$defs/room_status"
+        },
+        "selectable": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "selectable": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "selectable": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "name",
+        "room_id",
+        "suggested_types",
+        "recommended_type",
+        "status",
+        "suggested_room_id",
+        "suggested_room_name",
+        "reason",
+        "can_add"
+      ],
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/candidate_id"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "room_id": {
+          "$ref": "#/$defs/stable_id"
+        },
+        "suggested_types": {
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/device_type"
+          }
+        },
+        "recommended_type": {
+          "$ref": "#/$defs/nullable_device_type"
+        },
+        "status": {
+          "$ref": "#/$defs/device_status"
+        },
+        "suggested_room_id": {
+          "$ref": "#/$defs/nullable_stable_id"
+        },
+        "suggested_room_name": {
+          "$ref": "#/$defs/nullable_name"
+        },
+        "reason": {
+          "$ref": "#/$defs/suggestion_reason"
+        },
+        "can_add": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "can_add": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "available"
+              },
+              "reason": {
+                "const": "detected_room"
+              },
+              "suggested_types": {
+                "minItems": 1
+              },
+              "recommended_type": {
+                "$ref": "#/$defs/device_type"
+              },
+              "suggested_room_id": {
+                "$ref": "#/$defs/stable_id"
+              },
+              "suggested_room_name": {
+                "$ref": "#/$defs/name"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "display_names": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "room_status",
+        "device_types",
+        "device_status",
+        "suggestion_reasons",
+        "modes",
+        "strategies"
+      ],
+      "properties": {
+        "room_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "data_stale",
+            "source_missing"
+          ],
+          "properties": {
+            "available": {"const": "Можно выбрать"},
+            "data_stale": {"const": "Нужно обновить данные"},
+            "source_missing": {"const": "Комната больше не найдена"}
+          }
+        },
+        "device_types": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "air_conditioner",
+            "radiator_thermostat",
+            "humidifier",
+            "floor_heating",
+            "temperature_sensor",
+            "humidity_sensor"
+          ],
+          "properties": {
+            "air_conditioner": {"const": "Кондиционер"},
+            "radiator_thermostat": {"const": "Термоголовка радиатора"},
+            "humidifier": {"const": "Увлажнитель"},
+            "floor_heating": {"const": "Тёплый пол"},
+            "temperature_sensor": {"const": "Датчик температуры"},
+            "humidity_sensor": {"const": "Датчик влажности"}
+          }
+        },
+        "device_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "already_configured",
+            "unavailable",
+            "unsupported",
+            "data_stale",
+            "source_missing",
+            "registry_mismatch"
+          ],
+          "properties": {
+            "available": {"const": "Можно добавить"},
+            "already_configured": {"const": "Уже добавлено"},
+            "unavailable": {"const": "Устройство недоступно"},
+            "unsupported": {"const": "Тип устройства не поддерживается"},
+            "data_stale": {"const": "Нужно обновить данные"},
+            "source_missing": {"const": "Устройство больше не найдено"},
+            "registry_mismatch": {"const": "Нужно проверить привязку устройства"}
+          }
+        },
+        "suggestion_reasons": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "detected_room",
+            "already_configured",
+            "device_unavailable",
+            "unsupported_device",
+            "data_stale",
+            "device_missing",
+            "registry_mismatch",
+            "room_unavailable"
+          ],
+          "properties": {
+            "detected_room": {"const": "Устройство найдено в этой комнате"},
+            "already_configured": {"const": "Устройство уже назначено этой комнате"},
+            "device_unavailable": {"const": "Устройство сейчас недоступно"},
+            "unsupported_device": {"const": "Тип устройства не поддерживается"},
+            "data_stale": {"const": "Нужно обновить данные"},
+            "device_missing": {"const": "Настроенное устройство больше не найдено"},
+            "registry_mismatch": {"const": "Текущая привязка не совпадает с настройкой HASC"},
+            "room_unavailable": {"const": "Комната сейчас недоступна для выбора"}
+          }
+        },
+        "modes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observe",
+            "automatic"
+          ],
+          "properties": {
+            "observe": {"const": "Только наблюдение"},
+            "automatic": {"const": "Автоматическое управление"}
+          }
+        },
+        "strategies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "soft",
+            "normal",
+            "aggressive"
+          ],
+          "properties": {
+            "soft": {"const": "Плавно"},
+            "normal": {"const": "Обычно"},
+            "aggressive": {"const": "Быстро"}
+          }
+        }
+      }
+    }
+  }
+}

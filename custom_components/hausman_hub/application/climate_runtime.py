@@ -34,6 +34,7 @@ from .climate_registry import (
     registry_from_payload,
     registry_to_payload,
 )
+from .climate_setup import climate_setup_options, create_climate_contour_draft
 from .contours import (
     CLIMATE_CONTOUR_ID,
     ContourRegistryViolation,
@@ -240,6 +241,29 @@ class ClimateRuntime:
         async with self._lock:
             snapshot = await self._async_refresh_unlocked()
             return admin_climate_import_snapshot(self._registry, snapshot)
+
+    async def async_create_contour_draft(
+        self,
+        payload: object,
+    ) -> dict[str, object]:
+        """Create an unsaved draft after one read-only discovery refresh."""
+
+        async with self._lock:
+            snapshot = await self._async_refresh_unlocked(
+                persist_evidence=False,
+                record_evidence=False,
+            )
+            return create_climate_contour_draft(self._registry, snapshot, payload)
+
+    async def async_climate_setup_options(self) -> dict[str, object]:
+        """Return current safe choices for the local climate setup form."""
+
+        async with self._lock:
+            snapshot = await self._async_refresh_unlocked(
+                persist_evidence=False,
+                record_evidence=False,
+            )
+            return climate_setup_options(self._registry, snapshot)
 
     async def async_registry_import_snapshot(self) -> ClimateImportSnapshot:
         """Refresh one typed read-only snapshot for the local options wizard."""
@@ -907,6 +931,7 @@ class ClimateRuntime:
         self,
         *,
         persist_evidence: bool = True,
+        record_evidence: bool = True,
     ) -> ClimateImportSnapshot:
         client = self._require_client()
         try:
@@ -915,7 +940,10 @@ class ClimateRuntime:
             self.last_error = type(error).__name__
             raise ClimateRuntimeUnavailable("climate state is unavailable") from error
         self._snapshot = snapshot
-        if self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW:
+        if (
+            self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW
+            and record_evidence
+        ):
             try:
                 evidence = self._require_evidence()
                 changed = evidence.record_observation(

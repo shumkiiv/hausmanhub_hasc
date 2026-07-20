@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hausman.local/hasc/contracts/v1/climate-draft-request.schema.json",
+  "title": "Запрос черновика климатического контура HASC v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshot_revision",
+    "name",
+    "mode",
+    "rooms"
+  ],
+  "properties": {
+    "snapshot_revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "name": {
+      "$ref": "#/$defs/name"
+    },
+    "mode": {
+      "enum": [
+        "observe",
+        "automatic"
+      ]
+    },
+    "rooms": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/room"
+      }
+    }
+  },
+  "$defs": {
+    "stable_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^candidate_[0-9]{4}$"
+    },
+    "device_type": {
+      "enum": [
+        "air_conditioner",
+        "radiator_thermostat",
+        "humidifier",
+        "floor_heating",
+        "temperature_sensor",
+        "humidity_sensor"
+      ]
+    },
+    "strategy": {
+      "enum": [
+        "soft",
+        "normal",
+        "aggressive"
+      ]
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "type"
+      ],
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/candidate_id"
+        },
+        "type": {
+          "$ref": "#/$defs/device_type"
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "room_id",
+        "target_temperature",
+        "target_humidity",
+        "strategy",
+        "devices"
+      ],
+      "properties": {
+        "room_id": {
+          "$ref": "#/$defs/stable_id"
+        },
+        "target_temperature": {
+          "type": "number",
+          "minimum": 18,
+          "maximum": 28,
+          "multipleOf": 0.5
+        },
+        "target_humidity": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 70,
+          "multipleOf": 5
+        },
+        "strategy": {
+          "$ref": "#/$defs/strategy"
+        },
+        "devices": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/device"
+          }
+        }
+      }
+    }
+  }
+}

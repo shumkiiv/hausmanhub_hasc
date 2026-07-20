@@ -27,6 +27,7 @@ from .application.contour_override import TemporaryTemperatureViolation
 from .application.climate_evidence import ClimateEvidenceViolation
 from .application.climate_registry import ClimateRegistryViolation
 from .application.climate_runtime import ClimateRuntime, ClimateRuntimeUnavailable
+from .application.climate_setup import ClimateSetupViolation
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -36,6 +37,7 @@ DOMAIN = "hausman_hub"
 DATA_CLIMATE_RUNTIME = "climate_runtime"
 DATA_CLIMATE_VIEWS = "climate_views"
 ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
+ADMIN_DRAFT_PATH = "/api/hausman_hub/v1/admin/climate-drafts"
 ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
 ADMIN_REGISTRY_PREVIEW_PATH = "/api/hausman_hub/v1/admin/climate-registry-preview"
 ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
@@ -67,6 +69,7 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             TemporaryTemperatureView(hass),
             ClimateActionView(hass),
             ClimateAdminImportView(hass),
+            ClimateAdminDraftView(hass),
             ClimateAdminRegistryView(hass),
             ClimateAdminRegistryPreviewView(hass),
             ClimateAdminReadinessView(hass),
@@ -352,6 +355,63 @@ class ClimateAdminImportView(_ClimateView):
         except Exception:
             return self._unavailable()
         return self.json(payload, headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminDraftView(_ClimateView):
+    """Create an unsaved climate contour draft for one local administrator."""
+
+    url = ADMIN_DRAFT_PATH
+    name = "api:hausman_hub:climate_admin_drafts"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_DRAFT_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            result = await runtime.async_climate_setup_options()
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(result, headers=NO_STORE_HEADERS)
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_DRAFT_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+            result = await runtime.async_create_contour_draft(payload)
+        except ClimateSetupViolation as error:
+            status = (
+                HTTPStatus.CONFLICT
+                if error.code in {"snapshot_changed", "data_stale"}
+                else HTTPStatus.BAD_REQUEST
+            )
+            return self.json_message(
+                "Не удалось создать черновик климатического контура.",
+                status,
+                headers=NO_STORE_HEADERS,
+            )
+        except ValueError:
+            return self.json_message(
+                "Запрос черновика климатического контура заполнен неверно.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        except Exception:
+            return self._unavailable()
+        return self.json(result, headers=NO_STORE_HEADERS)
 
 
 class ClimateAdminRegistryView(_ClimateView):

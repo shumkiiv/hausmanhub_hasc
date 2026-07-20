@@ -218,6 +218,23 @@ Last updated: 2026-07-20.
   with token-refresh `401` in session `ses_0820c85d8ffesZEl7NOXnUq5NF`; the
   final Codex audit strengthened schema relations among status, reason,
   confidence, suggested room, and acceptance and found no remaining issue.
+- Version 1.7.3 completed the fourteenth HASC-only roadmap item. One fixed
+  local-admin route, `/api/hausman_hub/v1/admin/climate-drafts`, now exposes
+  strict setup choices through GET and creates a deterministic unsaved draft
+  through POST. The request binds response-local candidate references to an
+  exact JSON-safe snapshot revision, rejects changed or stale discovery data,
+  validates per-room comfort ranges and detected device kinds, and never
+  exposes source or entity IDs. GET and POST perform only a bridge state read:
+  they save neither registry nor contours, send no commands, and do not even
+  advance in-memory shadow-readiness evidence. The response explicitly keeps
+  `save_allowed` false and `validation_required` true for item 15. The final
+  staged tree passed 340 local tests, the HACS/package/boundary checks, Android
+  model compatibility, and Home Assistant Core 2026.6.4 and 2026.7.0. The
+  independent Kimi review could not start because provider session
+  `ses_081f59898ffeL2TSbbZKMf8fYg` returned `Unexpected server error`
+  (`err_26c09fac`). The final Codex audit added the missing GET surface needed
+  to obtain candidate references and prevented setup reads from changing
+  shadow evidence; it found no remaining issue.
 - The final architecture was clarified on 2026-07-20: HASC must ultimately
   contain the complete currently working climate algorithm. During migration,
   the existing module remains read-only and serves as a behavior oracle through

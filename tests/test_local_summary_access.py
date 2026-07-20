@@ -736,6 +736,41 @@ class LocalSummaryAccessTest(unittest.TestCase):
         )
         self.assertEqual(403, tablet_response.status)
 
+        draft_path = "/api/hausman_hub/v1/admin/climate-drafts"
+        draft = views[draft_path]
+        draft_request = {
+            "snapshot_revision": 1,
+            "name": "Климат",
+            "mode": "automatic",
+            "rooms": [],
+        }
+        self.assertEqual(
+            503,
+            asyncio.run(
+                draft.post(
+                    FakeJsonRequest(
+                        "127.0.0.1",
+                        admin,
+                        draft_path,
+                        draft_request,
+                    )
+                )
+            ).status,
+        )
+        self.assertEqual(
+            403,
+            asyncio.run(
+                draft.post(
+                    FakeJsonRequest(
+                        "127.0.0.1",
+                        tablet,
+                        draft_path,
+                        draft_request,
+                    )
+                )
+            ).status,
+        )
+
         preflight_path = "/api/hausman_hub/v1/admin/climate-canary-preflight"
         preflight = views[preflight_path]
         invalid_admin_response = asyncio.run(
@@ -1009,6 +1044,148 @@ class LocalSummaryAccessTest(unittest.TestCase):
         )
         self.assertEqual(403, forbidden_preflight.status)
         self.assertEqual([], bridge.executed)
+
+    def test_local_admin_creates_unsaved_climate_draft_and_tablet_cannot(self) -> None:
+        """The first setup POST returns only a draft and performs no write."""
+
+        from custom_components.hausman_hub.application.climate_import import (
+            import_climate_state,
+        )
+        from custom_components.hausman_hub.application.climate_registry import (
+            registry_from_payload,
+        )
+        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
+        from custom_components.hausman_hub.domain.contours import ContourRegistry
+        from tests.test_climate_import import source_payload
+
+        registry = registry_from_payload({"version": 1, "rooms": [], "devices": []})
+
+        class Store:
+            def __init__(self) -> None:
+                self.saved = []
+
+            async def async_load(self):
+                return registry
+
+            async def async_save(self, value):
+                self.saved.append(value)
+
+        class ContourStore:
+            def __init__(self) -> None:
+                self.saved = []
+
+            async def async_load(self):
+                return ContourRegistry()
+
+            async def async_save(self, value):
+                self.saved.append(value)
+
+        class Bridge:
+            def __init__(self) -> None:
+                self.executed = []
+
+            async def async_fetch_state(self):
+                return import_climate_state(source_payload())
+
+            async def async_execute(self, plan):
+                self.executed.append(plan)
+                return {"ok": True}
+
+        store = Store()
+        contour_store = ContourStore()
+        bridge = Bridge()
+        runtime = ClimateRuntime(
+            entry_id=self.entry.entry_id,
+            configuration=SafeConfiguration(
+                mode="shadow",
+                climate_bridge_mode=ClimateBridgeMode.MANAGED,
+            ),
+            registry_store=store,
+            contour_store=contour_store,
+            bridge_client=bridge,
+        )
+        asyncio.run(runtime.async_start())
+        self.hass.data["hausman_hub"]["climate_runtime"] = runtime
+        path = "/api/hausman_hub/v1/admin/climate-drafts"
+        view = {item.url: item for item in self.hass.http.views}[path]
+        owner = reader_user("system-admin", admin=True)
+        options_response = asyncio.run(
+            view.get(FakeRequest("192.168.1.20", owner, path=path))
+        )
+        self.assertEqual(200, options_response.status)
+        self.assertTrue(options_response.payload["draft_creation_allowed"])
+        self.assertEqual(
+            "hausman-hasc-climate-setup-options",
+            options_response.payload["contract"]["name"],
+        )
+        revision = options_response.payload["snapshot_revision"]
+        request = {
+            "snapshot_revision": revision,
+            "name": "Климат",
+            "mode": "automatic",
+            "rooms": [
+                {
+                    "room_id": "living",
+                    "target_temperature": 25.0,
+                    "target_humidity": 45,
+                    "strategy": "normal",
+                    "devices": [
+                        {
+                            "candidate_id": "candidate_0002",
+                            "type": "air_conditioner",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        response = asyncio.run(
+            view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    owner,
+                    path,
+                    request,
+                )
+            )
+        )
+
+        self.assertEqual(200, response.status)
+        self.assertEqual("created", response.payload["status"])
+        self.assertFalse(response.payload["save_allowed"])
+        self.assertEqual("no-store", response.headers.get("Cache-Control"))
+        self.assertEqual([], store.saved)
+        self.assertEqual([], contour_store.saved)
+        self.assertEqual([], bridge.executed)
+        changed_request = dict(request)
+        changed_request["snapshot_revision"] = revision + 1
+        changed_response = asyncio.run(
+            view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    owner,
+                    path,
+                    changed_request,
+                )
+            )
+        )
+        self.assertEqual(409, changed_response.status)
+        self.assertEqual([], store.saved)
+        self.assertEqual([], contour_store.saved)
+        self.assertEqual([], bridge.executed)
+        for remote, user in (
+            ("192.168.1.20", reader_user("system-users")),
+            ("8.8.8.8", reader_user("system-admin", admin=True)),
+        ):
+            with self.subTest(remote=remote):
+                self.assertEqual(
+                    403,
+                    asyncio.run(
+                        view.post(FakeJsonRequest(remote, user, path, request))
+                    ).status,
+                )
 
     def test_managed_contour_routes_apply_once_and_confirm_engine_state(self) -> None:
         """The tablet may apply only saved settings through the managed contour."""
@@ -1352,7 +1529,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(15, len(self.hass.http.views))
+        self.assertEqual(16, len(self.hass.http.views))
         self.assertEqual(
             1,
             sum(
@@ -1641,7 +1818,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual(14, len(closed_hass.http.views))
+        self.assertEqual(15, len(closed_hass.http.views))
         self.assertEqual(
             {
                 "/api/hausman_hub/v1/capabilities",
@@ -1652,6 +1829,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 "/api/hausman_hub/v1/contours/temporary-temperature",
                 "/api/hausman_hub/v1/actions",
                 "/api/hausman_hub/v1/admin/climate-import",
+                "/api/hausman_hub/v1/admin/climate-drafts",
                 "/api/hausman_hub/v1/admin/climate-registry",
                 "/api/hausman_hub/v1/admin/climate-registry-preview",
                 "/api/hausman_hub/v1/admin/climate-readiness",

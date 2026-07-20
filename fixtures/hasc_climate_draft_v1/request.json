@@ -1,0 +1,31 @@
+{
+  "snapshot_revision": 8115739542118920,
+  "name": "Климат дома",
+  "mode": "automatic",
+  "rooms": [
+    {
+      "room_id": "living",
+      "target_temperature": 25.0,
+      "target_humidity": 45,
+      "strategy": "normal",
+      "devices": [
+        {
+          "candidate_id": "candidate_0002",
+          "type": "air_conditioner"
+        }
+      ]
+    },
+    {
+      "room_id": "kids",
+      "target_temperature": 24.0,
+      "target_humidity": 50,
+      "strategy": "soft",
+      "devices": [
+        {
+          "candidate_id": "candidate_0001",
+          "type": "humidifier"
+        }
+      ]
+    }
+  ]
+}
