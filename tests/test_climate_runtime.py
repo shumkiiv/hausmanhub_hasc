@@ -34,6 +34,9 @@ from custom_components.hausman_hub.domain.climate_bridge import (
     ClimateBridgeMode,
     climate_bridge_target,
 )
+from custom_components.hausman_hub.domain.climate_observation import (
+    ClimateDataStatus,
+)
 from custom_components.hausman_hub.domain.configuration import SafeConfiguration
 from custom_components.hausman_hub.domain.native_climate import native_climate_policy
 from custom_components.hausman_hub.domain.contours import ClimateProfile, ContourRegistry
@@ -1263,6 +1266,119 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual("unavailable", result["status"])
+        self.assertEqual(0, bridge.fetch_count)
+        self.assertEqual([], bridge.executed)
+
+    async def test_native_contour_targets_read_state_but_never_post(self) -> None:
+        bridge = MemoryBridge()
+        evidence_store = ready_evidence_store()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            evidence_store=evidence_store,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        evidence_before = evidence_store.evidence.as_storage_payload()  # type: ignore[union-attr]
+        saves_before = list(evidence_store.saved)
+
+        result = await runtime.async_native_climate_targets()
+
+        self.assertIsNotNone(result)
+        self.assertEqual(25.0, result.room("living").target_temperature)  # type: ignore[union-attr]
+        self.assertIs(
+            result.room("living").observation_status,  # type: ignore[union-attr]
+            ClimateDataStatus.FRESH,
+        )
+        self.assertFalse(result.commands_enabled)  # type: ignore[union-attr]
+        self.assertEqual(
+            evidence_before,
+            evidence_store.evidence.as_storage_payload(),  # type: ignore[union-attr]
+        )
+        self.assertEqual(saves_before, evidence_store.saved)
+        self.assertEqual([], bridge.executed)
+
+    async def test_native_contour_targets_keep_stale_status_without_posting(self) -> None:
+        bridge = MemoryBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        payload = source_payload()
+        bridge.snapshot = import_climate_state(
+            payload,
+            now_ms=payload["generatedAt"] + 5 * 60 * 1000 + 1,  # type: ignore[operator]
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.SHADOW),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            now_ms=lambda: 1784280300001,
+        )
+        await runtime.async_start()
+
+        result = await runtime.async_native_climate_targets()
+
+        self.assertIsNotNone(result)
+        self.assertIs(
+            result.room("living").observation_status,  # type: ignore[union-attr]
+            ClimateDataStatus.STALE,
+        )
+        self.assertEqual(25.0, result.room("living").target_temperature)  # type: ignore[union-attr]
+        self.assertEqual([], bridge.executed)
+
+    async def test_disabled_native_contour_targets_do_not_read_or_post(self) -> None:
+        bridge = MemoryBridge()
+        registry, contours = build_climate_contour_setup(
+            bridge.snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=25.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.DISABLED),
+            registry_store=MemoryStore(registry),
+            contour_store=MemoryContourStore(contours),
+            bridge_client=bridge,
+            now_ms=lambda: 1784280005000,
+        )
+        await runtime.async_start()
+        # A snapshot retained from an earlier mode must not bypass DISABLED.
+        runtime._snapshot = bridge.snapshot
+
+        result = await runtime.async_native_climate_targets()
+
+        self.assertIsNotNone(result)
+        self.assertIs(
+            result.room("living").observation_status,  # type: ignore[union-attr]
+            ClimateDataStatus.UNAVAILABLE,
+        )
         self.assertEqual(0, bridge.fetch_count)
         self.assertEqual([], bridge.executed)
 

@@ -101,6 +101,26 @@ Last updated: 2026-07-20.
   read-only review passed in OpenCode session
   `ses_0810846a3ffe8paQjkDJAIZrfr`; its only non-blocking future-kind note was
   closed by making reference display-name coverage complete.
+- Version 1.8.2 completes roadmap item 23. The pure climate-target layer
+  resolves each contour room from its saved day/night profile, keeping the
+  selected profile temperature separate from the effective temperature. An
+  explicit temporary override replaces temperature only; humidity and strategy
+  remain those of the active profile. Each result carries the internal
+  observation's fresh/stale/unavailable status, but missing observations never
+  erase the user's saved comfort configuration. Target snapshots contain only
+  stable HausmanHub contour/room IDs and cannot select equipment, build an
+  intent, call Home Assistant, or authorize execution. The runtime exposes a
+  read-only seam for the configured contour and never posts from it. All 30
+  frozen reference cases resolve the exact recorded target temperature and
+  humidity. Roadmap item 24 must determine heating, cooling, and humidifying
+  demand from these targets without adding execution authority. The source
+  climate module and Android repository remain unchanged. The final staged
+  tree passed 394 local tests, HACS/package/boundary/Android checks, and
+  disposable Home Assistant Core 2026.6.4/2026.7.0. Independent read-only
+  review passed in OpenCode session `ses_080f72f34ffeKIcMnGgNggCfaW`; all four
+  nonblocking precision notes were closed before commit by tightening docs,
+  covering stale data, avoiding evidence-ledger mutation, and ignoring retained
+  cache in disabled mode.
 - Workspace boundary: this thread may change only HausmanHub and its integration
   wrapper. The Android application is developed separately in
   `/home/ivsh/projects/УД-android`; it may be inspected only read-only for

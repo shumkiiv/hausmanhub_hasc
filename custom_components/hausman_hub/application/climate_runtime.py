@@ -14,6 +14,7 @@ from ..domain.climate_bridge import ClimateBridgeMode
 from ..domain.configuration import SafeConfiguration
 from ..domain.contours import ContourDefinition, ContourMode, ContourRegistry
 from ..domain.native_climate import NativeClimatePolicy, preview_native_climate
+from ..domain.climate_targets import ClimateTargetSnapshot
 from .android_climate import admin_climate_import_snapshot, android_climate_snapshot
 from .climate_canary_preflight import climate_canary_preflight
 from .climate_commands import (
@@ -30,7 +31,10 @@ from .climate_evidence import (
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
-from .climate_observations import build_climate_observation_snapshot
+from .climate_observations import (
+    build_climate_observation_snapshot,
+    unavailable_climate_observation_snapshot,
+)
 from .climate_registry import (
     reconcile_climate_registry,
     registry_from_payload,
@@ -46,6 +50,7 @@ from .climate_setup import (
     update_climate_schedule,
     validate_climate_contour_draft,
 )
+from .climate_targets import build_climate_target_snapshot
 from .contours import (
     CLIMATE_CONTOUR_ID,
     ContourRegistryViolation,
@@ -749,6 +754,43 @@ class ClimateRuntime:
                 observation = None
             decision = preview_native_climate(policy, self._registry, observation)
             return decision.as_payload()
+
+    async def async_native_climate_targets(self) -> ClimateTargetSnapshot | None:
+        """Resolve current HausmanHub contour targets without creating commands."""
+
+        async with self._lock:
+            contour = self._contours.contour(CLIMATE_CONTOUR_ID)
+            if contour is None:
+                return None
+            snapshot = None
+            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
+                try:
+                    snapshot = await self._async_refresh_unlocked(
+                        persist_evidence=False,
+                        record_evidence=False,
+                    )
+                except ClimateRuntimeUnavailable:
+                    snapshot = None
+            observed_at = self._safe_now()
+            try:
+                observation = (
+                    unavailable_climate_observation_snapshot(
+                        self._registry,
+                        observed_at=observed_at,
+                    )
+                    if snapshot is None
+                    else build_climate_observation_snapshot(
+                        self._registry,
+                        snapshot,
+                        observed_at=observed_at,
+                    )
+                )
+            except ClimateObservationViolation:
+                observation = unavailable_climate_observation_snapshot(
+                    self._registry,
+                    observed_at=observed_at,
+                )
+            return build_climate_target_snapshot(contour, observation)
 
     async def async_readiness(self) -> dict[str, object]:
         """Return redacted bridge and registry readiness to a local admin."""
