@@ -2074,5 +2074,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-21T15:20:09+03:00.
+- Last sync: 2026-07-21T15:21:22+03:00.
 <!-- llm-wiki-sync:end -->
