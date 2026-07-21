@@ -356,6 +356,32 @@ Last updated: 2026-07-21.
   repository remain unchanged. The final staged tree passed 513 local tests,
   the HACS/package/boundary/Android checks, and disposable Home Assistant
   Core   2026.6.4/2026.7.0.
+- Version 1.9.8 completes roadmap item 36 sub-step 36d. Settings
+  application no longer uses the external Climate API: manual contour
+  apply, scheduled day/night switching, temporary temperature, and return
+  to schedule run the native chain "persist desired contour state → native
+  HA observation → native plan → all-or-nothing scope preflight → strict HA
+  calls through the single strict executor → bounded (about two seconds)
+  observation verification". The pure planner lives in
+  `application/climate_application.py` with models in
+  `climate_application_models.py`; the trial executor boundary is
+  generalized to `ClimateStrictHaCallExecutor`, and the skeleton still
+  finds HA service calls only in `switch.py` and `climate_ha_executor.py`.
+  Apply and schedule require every active contour room fully managed and
+  ready (one blocked room cancels every call); temporary temperature checks
+  only its own room. Disabled, shadow, and canary reject before reading
+  native state. Persistence order: apply writes nothing, schedule saves
+  profiles and the period marker first (a denied transition is not retried
+  by the timer), temporary set/clear saves the override change first.
+  Receipt v1 is unchanged: confirmed/pending/partial/unavailable with
+  bounded reasons; a duplicate request id only re-observes and may promote
+  to confirmed. The independent one-minute managed controller stays
+  unchanged and may later reapply a divergent plan. The external module
+  still serves the Android public snapshot, apply preview, readiness,
+  setup wizards, shadow evidence, and the legacy canary `/actions` route
+  (sub-steps 36e-36g). The final tree passed 571 local tests; release
+  gate, disposable Core checks, and independent review are recorded in
+  the final report of the 36d session.
 - Version 1.9.7 completes roadmap item 36 sub-step 36c. The whole internal
   climate pipeline (preview, targets, demands, resolutions, equipment,
   stability, policy, isolation, comparison, call translation, trial and
@@ -1977,5 +2003,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-21T09:23:20+03:00.
+- Last sync: 2026-07-21T12:16:29+03:00.
 <!-- llm-wiki-sync:end -->

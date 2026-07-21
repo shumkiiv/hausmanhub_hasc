@@ -29,3 +29,6 @@ venv/
 LLM_WIKI/Context.md
 LLM_WIKI/00_Index.md
 LLM_WIKI/Sessions/
+
+# Local agent plans and run state
+.omo/
