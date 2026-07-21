@@ -356,6 +356,23 @@ Last updated: 2026-07-21.
   repository remain unchanged. The final staged tree passed 513 local tests,
   the HACS/package/boundary/Android checks, and disposable Home Assistant
   Core   2026.6.4/2026.7.0.
+- Version 1.9.6 completes roadmap item 36 sub-step 36b. The pure
+  `application/climate_ha_observations.py` adapter builds the internal
+  observation snapshot directly from Home Assistant states through the
+  version-2 registry bindings: room temperature/humidity from passive
+  sensor endpoints (with a climate-entity `current_temperature` fallback),
+  window from the room binding, mode and observed targets from the local
+  contour, device activity from state plus `hvac_action`, AC transitions
+  and short-cycle counts from restart protection memory, outdoor
+  temperature (also feeding the heat-load rule), presence, and central
+  heating from the home bindings. The day period comes from the local
+  contour schedule; season stays honestly unknown. Missing, unavailable,
+  stale, or non-numeric values stay unknown and never become permissive.
+  The adapter consumes an abstract `ClimateHaStateView` and imports no
+  Home Assistant code; the HA wrapper arrives with the runtime switch in
+  36c. Execution behavior is unchanged. The final staged tree passed 539
+  local tests, the HACS/package/boundary/Android checks, and disposable
+  Home Assistant Core 2026.6.4/2026.7.0.
 - Version 1.9.5 completes roadmap item 36 sub-step 36a. The climate registry
   moves to schema version 2 with HausmanHub's own Home Assistant observation
   bindings: a room may hold an optional window binary sensor, a passive
@@ -1937,5 +1954,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-21T07:30:33+03:00.
+- Last sync: 2026-07-21T07:51:13+03:00.
 <!-- llm-wiki-sync:end -->
