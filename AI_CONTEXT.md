@@ -356,6 +356,25 @@ Last updated: 2026-07-21.
   repository remain unchanged. The final staged tree passed 513 local tests,
   the HACS/package/boundary/Android checks, and disposable Home Assistant
   Core   2026.6.4/2026.7.0.
+- Version 1.13.0 completes roadmap item 36 sub-step 36f3. Startup in
+  MANAGED and DISABLED never reads the external module; the bridge
+  client is constructed only for SHADOW and CANARY (their evidence
+  purpose), and `_require_client` now enforces that in every path, so
+  legacy shadow-evidence, canary-preflight, and canary-action routes
+  cannot touch the bridge outside those modes. The bridge target is
+  optional for MANAGED (a legacy saved target is accepted but unused)
+  and required for SHADOW/CANARY. The contour wizard tries native
+  discovery first and falls back to the one-time bridge address form
+  only when native discovery is unavailable; saving a contour without
+  a bridge target is allowed. Disabled-mode admin wizards observe
+  natively (explicit discovery) while the disabled control pipeline
+  keeps its no-observe gate. Review returned FAIL (disabled wizard
+  fell back to the bridge form; `_require_client` allowed managed
+  bridge contact); one fix iteration resolved both with poison
+  regressions and the follow-up passed. The final tree passed 630
+  local tests, the full release gate, and disposable Core 2026.6.4 and
+  2026.7.0. Remaining: 36g retires shadow/canary, the legacy actions
+  route, and the bridge itself.
 - Version 1.12.0 completes roadmap item 36 sub-step 36f2. All climate
   setup wizards (setup options, current setup, contour draft
   create/validate/save, registry import snapshot) now build their
@@ -2117,5 +2136,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-21T22:08:19+03:00.
+- Last sync: 2026-07-21T22:38:49+03:00.
 <!-- llm-wiki-sync:end -->
