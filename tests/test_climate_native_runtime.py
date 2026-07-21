@@ -1757,3 +1757,123 @@ class HomeAssistantStateViewTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
+    """36e2 poison acceptance: managed projections never touch the bridge."""
+
+    async def test_managed_projections_run_without_the_bridge(self) -> None:
+        bridge = PoisonBridge()
+        view = MutableStateView(safe_stop_states())
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            ReflectingStrictExecutor(view),
+            bridge_client=bridge,
+        )
+        await instance.async_start()
+        fetches_after_start = bridge.fetch_count
+
+        public = await instance.async_public_snapshot()
+        contours = await instance.async_contours_snapshot()
+        preview = await instance.async_contour_apply_preview()
+        readiness = await instance.async_readiness()
+        admin = await instance.async_admin_import_snapshot()
+
+        self.assertEqual("hausman-hub-home", public["contract"]["name"])
+        self.assertEqual(12, public["contract"]["version"])
+        self.assertEqual("living", public["rooms"][0]["id"])  # type: ignore[index]
+        self.assertEqual("hausman-hub-contours", contours["contract"]["name"])
+        self.assertEqual(
+            "hausman-hub-contour-apply-preview", preview["contract"]["name"]
+        )
+        self.assertEqual("ready", preview["status"])
+        self.assertEqual(
+            "hausman-hub-climate-readiness", readiness["contract"]["name"]
+        )
+        self.assertEqual("ready", readiness["status"])
+        self.assertEqual(
+            "synthetic-ac-source-living",
+            admin["candidates"][0]["source_id"],  # type: ignore[index]
+        )
+        self.assertEqual(fetches_after_start, bridge.fetch_count)
+        self.assertEqual(0, bridge.execute_count)
+
+    async def test_disabled_projections_never_touch_the_bridge(self) -> None:
+        bridge = PoisonBridge()
+        view = CountingStateView(healthy_states(ac_state="cool"))
+        instance = runtime(
+            ClimateBridgeMode.DISABLED,
+            view,
+            bridge,
+            scope=ClimateControlScope.MANAGED,
+        )
+        await instance.async_start()
+
+        contours = await instance.async_contours_snapshot()
+        readiness = await instance.async_readiness()
+        for call in (
+            instance.async_public_snapshot,
+            instance.async_admin_import_snapshot,
+            instance.async_contour_apply_preview,
+        ):
+            with self.assertRaises(ClimateRuntimeUnavailable):
+                await call()
+
+        self.assertEqual("unavailable", contours["contours"][0]["status"])  # type: ignore[index]
+        self.assertEqual("disabled", readiness["status"])
+        self.assertEqual(["bridge_disabled"], readiness["reasons"])
+        self.assertEqual(0, bridge.fetch_count)
+        self.assertEqual(0, bridge.execute_count)
+
+    async def test_shadow_projections_still_read_the_bridge(self) -> None:
+        bridge = PoisonBridge()
+        view = CountingStateView(healthy_states(ac_state="cool"))
+        instance = runtime(
+            ClimateBridgeMode.SHADOW,
+            view,
+            bridge,
+            scope=ClimateControlScope.CANARY,
+        )
+        await instance.async_start()
+        fetches_after_start = bridge.fetch_count
+
+        contours = await instance.async_contours_snapshot()
+
+        self.assertEqual("unavailable", contours["contours"][0]["status"])  # type: ignore[index]
+        self.assertGreater(bridge.fetch_count, fetches_after_start)
+
+    async def test_managed_projections_fail_closed_without_a_state_view(
+        self,
+    ) -> None:
+        bridge = PoisonBridge()
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(
+                native_registry(ClimateControlScope.MANAGED)
+            ),
+            contour_store=MemoryStore(native_contours()),
+            bridge_client=bridge,
+            strict_ha_call_executor=None,
+            ha_state_view=None,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+        fetches_after_start = bridge.fetch_count
+
+        for call in (
+            instance.async_public_snapshot,
+            instance.async_admin_import_snapshot,
+        ):
+            with self.assertRaises(ClimateRuntimeUnavailable):
+                await call()
+        contours = await instance.async_contours_snapshot()
+        readiness = await instance.async_readiness()
+
+        self.assertEqual("unavailable", contours["contours"][0]["status"])  # type: ignore[index]
+        self.assertEqual("unavailable", readiness["status"])
+        self.assertEqual(["climate_state_unavailable"], readiness["reasons"])
+        self.assertEqual(fetches_after_start, bridge.fetch_count)
+        self.assertEqual(0, bridge.execute_count)

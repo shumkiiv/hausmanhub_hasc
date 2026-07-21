@@ -62,6 +62,13 @@ from .climate_ha_observations import (
 )
 from .climate_import import ClimateImportSnapshot
 from .climate_isolation import build_isolated_climate_policy_snapshot
+from .climate_native_projections import (
+    native_admin_climate_import_snapshot,
+    native_android_climate_snapshot,
+    native_climate_readiness,
+    native_contour_apply_preview,
+    native_contour_snapshot,
+)
 from .climate_comparison import build_climate_comparison_snapshot
 from .climate_demands import build_climate_demand_snapshot
 from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
@@ -340,6 +347,24 @@ class ClimateRuntime:
         """Refresh and return the private-id-free tablet contract."""
 
         async with self._lock:
+            if self.configuration.climate_bridge_mode is ClimateBridgeMode.MANAGED:
+                observation = await self._async_native_climate_observation_unlocked()
+                if observation.data_status is ClimateDataStatus.UNAVAILABLE:
+                    raise ClimateRuntimeUnavailable("climate state is unavailable")
+                return native_android_climate_snapshot(
+                    self._registry,
+                    observation,
+                    contours=self._contours,
+                    bridge_mode=self.configuration.climate_bridge_mode,
+                    canary_room_id=self.configuration.climate_canary_room_id,
+                    candidate_ready=False,
+                    pending_room_ids=tuple(
+                        room.room_id
+                        for room in self._registry.rooms
+                        if self._operations.room_has_pending(room.room_id)
+                    ),
+                    local_now=self._local_now(),
+                )
             snapshot = await self._async_refresh_unlocked()
             candidate_ready = (
                 self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY
@@ -367,6 +392,14 @@ class ClimateRuntime:
         """Refresh and return private discovery data for a local admin."""
 
         async with self._lock:
+            if self.configuration.climate_bridge_mode is ClimateBridgeMode.MANAGED:
+                observation = await self._async_native_climate_observation_unlocked()
+                if observation.data_status is ClimateDataStatus.UNAVAILABLE:
+                    raise ClimateRuntimeUnavailable("climate state is unavailable")
+                return native_admin_climate_import_snapshot(
+                    self._registry,
+                    observation,
+                )
             snapshot = await self._async_refresh_unlocked()
             return admin_climate_import_snapshot(self._registry, snapshot)
 
@@ -526,6 +559,25 @@ class ClimateRuntime:
         """Return public contour status using the existing climate engine."""
 
         async with self._lock:
+            if self.configuration.climate_bridge_mode is ClimateBridgeMode.MANAGED:
+                try:
+                    observation = (
+                        await self._async_native_climate_observation_unlocked()
+                    )
+                except ClimateRuntimeUnavailable:
+                    observation = None
+                if (
+                    observation is not None
+                    and observation.data_status is ClimateDataStatus.UNAVAILABLE
+                ):
+                    observation = None
+                return native_contour_snapshot(
+                    self._contours,
+                    self._registry,
+                    observation,
+                    settings_apply_enabled=True,
+                    local_now=self._local_now(),
+                )
             snapshot = self._snapshot
             if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
                 try:
@@ -553,10 +605,15 @@ class ClimateRuntime:
                 raise ClimateRuntimeUnavailable(
                     "contour settings require the normal existing-engine connection"
                 )
-            self._require_client()
             contour = self._climate_contour()
-            snapshot = await self._async_refresh_unlocked(persist_evidence=False)
-            return _legacy_contour_apply_preview(contour, snapshot)
+            observation = await self._async_native_climate_observation_unlocked()
+            return native_contour_apply_preview(
+                contour,
+                self._registry,
+                self.configuration.climate_bridge_mode,
+                observation,
+                fingerprint=contour_fingerprint(contour),
+            )
 
     async def async_apply_contour(self, payload: object) -> ContourApplyReceipt:
         """Idempotently apply three supported settings after explicit consent."""
@@ -1348,6 +1405,23 @@ class ClimateRuntime:
 
         async with self._lock:
             mode = self.configuration.climate_bridge_mode
+            if mode is ClimateBridgeMode.MANAGED:
+                try:
+                    observation = (
+                        await self._async_native_climate_observation_unlocked()
+                    )
+                except ClimateRuntimeUnavailable:
+                    observation = None
+                if (
+                    observation is not None
+                    and observation.data_status is ClimateDataStatus.UNAVAILABLE
+                ):
+                    observation = None
+                return native_climate_readiness(
+                    self._registry,
+                    observation,
+                    bridge_mode=mode,
+                )
             if mode is ClimateBridgeMode.DISABLED:
                 return self._readiness_payload(
                     status="disabled",

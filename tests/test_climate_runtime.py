@@ -1237,7 +1237,9 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 "available"
             ]
         )
-        self.assertEqual(3, preview["command_count"])
+        # The preview reports the strict HA plan call count, not the legacy
+        # bridge command count: one hvac-mode call covers this divergence.
+        self.assertEqual(1, preview["command_count"])
         self.assertEqual("confirmed", receipt.status.value)
         self.assertEqual(1, receipt.accepted_count)
         self.assertEqual(1, receipt.confirmed_room_count)

@@ -1276,7 +1276,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             "Ночь",
             apply_form["description_placeholders"]["active_profile"],
         )
-        self.assertEqual("2", apply_form["description_placeholders"]["command_count"])
+        # Native strict HA plan call count, formerly the bridge command count.
+        self.assertEqual("1", apply_form["description_placeholders"]["command_count"])
         refused = await options_flow.async_step_climate_contour_apply_confirm(
             {"confirm_contour_apply": False}
         )

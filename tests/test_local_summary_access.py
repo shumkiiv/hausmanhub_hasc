@@ -1804,7 +1804,8 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, preview.status)
-        self.assertEqual(3, preview.payload["command_count"])
+        # Native strict HA plan call count, formerly the bridge command count.
+        self.assertEqual(1, preview.payload["command_count"])
         apply_path = "/api/hausman_hub/v1/contours/apply"
         request = {
             "request_id": "tablet-managed-contour-1",
