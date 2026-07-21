@@ -127,6 +127,9 @@ CLIMATE_ADMIN_SCHEDULE_UPDATE_PATH = "/api/hausman_hub/v1/admin/climate-schedule
 CLIMATE_ADMIN_REGISTRY_PATH = "/api/hausman_hub/v1/admin/climate-registry"
 CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH = "/api/hausman_hub/v1/admin/climate-registry-preview"
 CLIMATE_ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
+CLIMATE_ADMIN_PANEL_PATH = "/api/hausman_hub/v1/admin/panel"
+CLIMATE_ADMIN_PANEL_APPLY_PATH = "/api/hausman_hub/v1/admin/panel/apply"
+CLIMATE_ADMIN_PANEL_TEMPORARY_PATH = "/api/hausman_hub/v1/admin/panel/temporary-temperature"
 CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH = "/api/hausman_hub/v1/admin/climate-shadow-evidence"
 CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH = "/api/hausman_hub/v1/admin/climate-canary-preflight"
 CLIMATE_OPERATION_PATH = "/api/hausman_hub/v1/operations"
@@ -148,6 +151,9 @@ CLIMATE_API_PATHS = (
     CLIMATE_ADMIN_REGISTRY_PATH,
     CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH,
     CLIMATE_ADMIN_READINESS_PATH,
+    CLIMATE_ADMIN_PANEL_PATH,
+    CLIMATE_ADMIN_PANEL_APPLY_PATH,
+    CLIMATE_ADMIN_PANEL_TEMPORARY_PATH,
     CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
     CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH,
     CLIMATE_OPERATION_PATH,
@@ -2314,6 +2320,9 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
         CLIMATE_ADMIN_REGISTRY_PATH: {"GET", "POST", "OPTIONS"},
         CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_READINESS_PATH: {"GET", "OPTIONS"},
+        CLIMATE_ADMIN_PANEL_PATH: {"GET", "OPTIONS"},
+        CLIMATE_ADMIN_PANEL_APPLY_PATH: {"POST", "OPTIONS"},
+        CLIMATE_ADMIN_PANEL_TEMPORARY_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH: {"POST", "OPTIONS"},
         CLIMATE_OPERATION_PATH: {"POST", "OPTIONS"},
