@@ -24,3 +24,8 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Generated wiki sync indexes (quote historical session titles)
+LLM_WIKI/Context.md
+LLM_WIKI/00_Index.md
+LLM_WIKI/Sessions/
