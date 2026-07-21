@@ -2,16 +2,30 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime
 import unittest
+from unittest.mock import AsyncMock, patch
+from typing import assert_never
 
 from custom_components.hausman_hub.application.climate_ha_observations import (
     ClimateHaEntityState,
 )
 from custom_components.hausman_hub.application.climate_runtime import (
     ClimateRuntime,
+    ClimateRuntimeUnavailable,
 )
 from custom_components.hausman_hub.application.configuration import (
     SafeConfiguration,
+)
+from custom_components.hausman_hub.application.contours import (
+    with_applied_climate_schedule_profile,
+    with_climate_schedule,
+    with_climate_temporary_temperature,
+)
+from custom_components.hausman_hub.application.contour_apply import (
+    ContourApplyStatus,
+    ContourApplyViolation,
 )
 from custom_components.hausman_hub.climate_ha_state_view import (
     HomeAssistantClimateStateView,
@@ -29,6 +43,7 @@ from custom_components.hausman_hub.domain.climate import (
 )
 from custom_components.hausman_hub.domain.climate_isolation import ClimateRoomIsolationStatus
 from custom_components.hausman_hub.domain.climate_trial import ClimateTrialStatus
+from custom_components.hausman_hub.domain.climate_ha_calls import ClimateHaService
 from custom_components.hausman_hub.domain.climate_bridge import (
     ClimateBridgeMode,
     climate_bridge_target,
@@ -57,12 +72,14 @@ class PoisonBridge:
 
     def __init__(self) -> None:
         self.fetch_count = 0
+        self.execute_count = 0
 
     async def async_fetch_state(self):
         self.fetch_count += 1
         raise RuntimeError("external climate module is gone")
 
     async def async_execute(self, plan):
+        self.execute_count += 1
         raise RuntimeError("external climate module is gone")
 
 
@@ -98,6 +115,69 @@ class RecordingTrialExecutor:
     async def async_execute(self, calls) -> int:
         self.calls.append(calls)
         return len(calls)
+
+
+class MutableStateView(CountingStateView):
+    def __init__(self, states: dict[str, ClimateHaEntityState]) -> None:
+        super().__init__(states)
+        self.broken = False
+
+    def entity_state(self, entity_id: str) -> ClimateHaEntityState | None:
+        if self.broken:
+            raise RuntimeError("native state view is broken")
+        return super().entity_state(entity_id)
+
+
+class ReflectingStrictExecutor:
+    def __init__(
+        self,
+        view: MutableStateView,
+        *,
+        reflect_on_execute: bool = True,
+        completed_count: int | None = None,
+        break_view_after_execute: bool = False,
+    ) -> None:
+        self._view = view
+        self._reflect_on_execute = reflect_on_execute
+        self._completed_count = completed_count
+        self._break_view_after_execute = break_view_after_execute
+        self.calls: list[tuple[object, ...]] = []
+
+    async def async_execute(self, calls) -> int:
+        self.calls.append(calls)
+        if self._reflect_on_execute:
+            self.reflect_latest_calls()
+        if self._break_view_after_execute:
+            self._view.broken = True
+        return len(calls) if self._completed_count is None else self._completed_count
+
+    def reflect_latest_calls(self) -> None:
+        for call in self.calls[-1]:
+            current = self._view._states[call.entity_id]
+            attributes = dict(current.attributes)
+            match call.service:
+                case ClimateHaService.CLIMATE_SET_HVAC_MODE:
+                    state = call.hvac_mode.value
+                case ClimateHaService.CLIMATE_SET_TEMPERATURE:
+                    state = current.state
+                    attributes["temperature"] = call.temperature
+                case ClimateHaService.CLIMATE_SET_FAN_MODE:
+                    state = current.state
+                    attributes["fan_mode"] = call.fan_mode.value
+                case ClimateHaService.HUMIDIFIER_TURN_ON:
+                    state = "on"
+                case ClimateHaService.HUMIDIFIER_TURN_OFF:
+                    state = "off"
+                case ClimateHaService.HUMIDIFIER_SET_HUMIDITY:
+                    state = current.state
+                    attributes["humidity"] = call.humidity
+                case unreachable:
+                    assert_never(unreachable)
+            self._view._states[call.entity_id] = replace(
+                current,
+                state=state,
+                attributes=attributes,
+            )
 
 
 def ha_state(
@@ -192,13 +272,152 @@ def native_contours() -> ContourRegistry:
     )
 
 
-def healthy_states(ac_state: str = "off") -> dict[str, ClimateHaEntityState]:
+def two_actuator_registry() -> ClimateRegistry:
+    registry = native_registry(ClimateControlScope.MANAGED)
+    return ClimateRegistry(
+        rooms=registry.rooms,
+        devices=(
+            *registry.devices,
+            ClimateDevice(
+                device_id="living_humidifier",
+                name="Living humidifier",
+                room_id="living",
+                kind=ClimateDeviceKind.HUMIDIFIER,
+                source_id="synthetic-humidifier-source-living",
+                control_scope=ClimateControlScope.MANAGED,
+                control_owner=ClimateControlOwner.CLIMATE_CORE,
+                capabilities=(
+                    ClimateCapability.POWER,
+                    ClimateCapability.TARGET_HUMIDITY,
+                ),
+                endpoints=(
+                    ClimateEndpoint(
+                        ClimateEndpointRole.CONTROL,
+                        "humidifier.living",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def two_actuator_contours() -> ContourRegistry:
+    contours = native_contours()
+    contour = contours.contour("climate")
+    if contour is None:
+        raise AssertionError("native climate contour is unavailable")
+    return replace(
+        contours,
+        contours=(
+            replace(
+                contour,
+                rooms=(
+                    replace(
+                        contour.rooms[0],
+                        device_ids=(
+                            "living_ac",
+                            "living_temperature",
+                            "living_humidifier",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def temporary_native_contours() -> ContourRegistry:
+    scheduled = with_climate_schedule(
+        native_contours(),
+        enabled=True,
+        day_start="07:00",
+        night_start="23:00",
+    )
+    return with_applied_climate_schedule_profile(scheduled, ClimateProfile.DAY)
+
+
+def temporary_two_actuator_contours() -> ContourRegistry:
+    scheduled = with_climate_schedule(
+        two_actuator_contours(),
+        enabled=True,
+        day_start="07:00",
+        night_start="23:00",
+    )
+    return with_applied_climate_schedule_profile(scheduled, ClimateProfile.DAY)
+
+
+def unrelated_broken_room_registry() -> ClimateRegistry:
+    registry = native_registry(ClimateControlScope.MANAGED)
+    return ClimateRegistry(
+        rooms=(*registry.rooms, ClimateRoom("kids", "Kids room")),
+        devices=(
+            *registry.devices,
+            ClimateDevice(
+                device_id="kids_ac",
+                name="Kids AC",
+                room_id="kids",
+                kind=ClimateDeviceKind.AIR_CONDITIONER,
+                source_id="synthetic-ac-source-kids",
+                control_scope=ClimateControlScope.MANAGED,
+                control_owner=ClimateControlOwner.CLIMATE_CORE,
+                capabilities=(
+                    ClimateCapability.POWER,
+                    ClimateCapability.TARGET_TEMPERATURE,
+                    ClimateCapability.HVAC_MODE,
+                    ClimateCapability.FAN_MODE,
+                ),
+                endpoints=(
+                    ClimateEndpoint(ClimateEndpointRole.CONTROL, "climate.kids_ac"),
+                ),
+            ),
+        ),
+    )
+
+
+def unrelated_broken_room_contours() -> ContourRegistry:
+    contours = temporary_native_contours()
+    contour = contours.contour("climate")
+    if contour is None:
+        raise AssertionError("native climate contour is unavailable")
+    return replace(
+        contours,
+        contours=(
+            replace(
+                contour,
+                rooms=(
+                    *contour.rooms,
+                    replace(
+                        contour.rooms[0],
+                        room_id="kids",
+                        device_ids=("kids_ac",),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def healthy_states(ac_state: str = "cool") -> dict[str, ClimateHaEntityState]:
     entries = (
         ha_state("climate.living_ac", ac_state),
-        ha_state("sensor.living_temperature", "26.5"),
+        ha_state("sensor.living_temperature", "24.0"),
         ha_state("binary_sensor.living_window", "off"),
     )
     return {entry.entity_id: entry for entry in entries}
+
+
+def safe_stop_states() -> dict[str, ClimateHaEntityState]:
+    states = healthy_states()
+    window = states["binary_sensor.living_window"]
+    states[window.entity_id] = replace(window, state="on")
+    return states
+
+
+def two_actuator_states() -> dict[str, ClimateHaEntityState]:
+    states = safe_stop_states()
+    humidifier = ha_state("humidifier.living", "on")
+    states[humidifier.entity_id] = humidifier
+    return states
 
 
 def configuration(mode: ClimateBridgeMode) -> SafeConfiguration:
@@ -226,9 +445,32 @@ def runtime(
         registry_store=MemoryStore(native_registry(scope)),
         contour_store=MemoryStore(native_contours()),
         bridge_client=bridge,
-        trial_executor=executor,
+        strict_ha_call_executor=executor,
         ha_state_view=view,
         now_ms=lambda: NOW,
+    )
+
+
+def native_application_runtime(
+    mode: ClimateBridgeMode,
+    view: MutableStateView,
+    executor: ReflectingStrictExecutor,
+    *,
+    bridge_client: PoisonBridge | None,
+    scope: ClimateControlScope = ClimateControlScope.MANAGED,
+    contours: ContourRegistry | None = None,
+    registry: ClimateRegistry | None = None,
+) -> ClimateRuntime:
+    return ClimateRuntime(
+        entry_id="entry",
+        configuration=configuration(mode),
+        registry_store=MemoryStore(registry or native_registry(scope)),
+        contour_store=MemoryStore(contours or native_contours()),
+        bridge_client=bridge_client,
+        strict_ha_call_executor=executor,
+        ha_state_view=view,
+        now_ms=lambda: NOW,
+        local_now=lambda: datetime(2026, 7, 19, 12, 0),
     )
 
 
@@ -359,7 +601,7 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(humidifier_registry),
             contour_store=MemoryStore(humidifier_contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
         )
@@ -462,7 +704,7 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
             ),
             contour_store=MemoryStore(native_contours()),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             now_ms=lambda: NOW,
         )
         await instance.async_start()
@@ -474,6 +716,968 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(receipts[0].status, ClimateTrialStatus.DENIED)
         self.assertEqual([], executor.calls)
         self.assertEqual(fetches_after_start, bridge.fetch_count)
+
+
+class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
+    async def test_apply_works_without_a_bridge_client(self) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(native_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(
+                native_registry(ClimateControlScope.MANAGED)
+            ),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+
+        receipt = await instance.async_apply_contour(
+            {
+                "request_id": "native-apply-no-bridge",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+
+        self.assertIs(receipt.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(1, len(executor.calls))
+        self.assertEqual(receipt.command_count, receipt.accepted_count)
+        self.assertEqual([], contour_store.saved)
+
+    async def test_temporary_actions_work_without_a_bridge_dependency(self) -> None:
+        scheduled = temporary_native_contours()
+        overridden = with_climate_temporary_temperature(
+            scheduled,
+            room_id="living",
+            target_temperature=23.5,
+        )
+        for action, target_temperature, contours in (
+            ("set", 23.0, scheduled),
+            ("clear", None, overridden),
+        ):
+            for bridge_name, bridge_client in (
+                ("none", None),
+                ("poison", PoisonBridge()),
+            ):
+                with self.subTest(action=action, bridge=bridge_name):
+                    view = MutableStateView(safe_stop_states())
+                    executor = ReflectingStrictExecutor(view)
+                    instance = native_application_runtime(
+                        ClimateBridgeMode.MANAGED,
+                        view,
+                        executor,
+                        bridge_client=bridge_client,
+                        contours=contours,
+                    )
+                    await instance.async_start()
+                    bridge_baseline = (
+                        None
+                        if bridge_client is None
+                        else (
+                            bridge_client.fetch_count,
+                            bridge_client.execute_count,
+                        )
+                    )
+
+                    receipt = await instance.async_temporary_temperature(
+                        {
+                            "request_id": (
+                                f"native-temporary-{action}-{bridge_name}"
+                            ),
+                            "contour_id": "climate",
+                            "room_id": "living",
+                            "action": action,
+                            "target_temperature": target_temperature,
+                            "confirm": True,
+                        },
+                        datetime(2026, 7, 19, 12, 0),
+                    )
+
+                    self.assertIs(receipt.status, ContourApplyStatus.CONFIRMED)
+                    self.assertEqual(1, receipt.command_count)
+                    self.assertEqual(1, receipt.accepted_count)
+                    self.assertEqual(1, len(executor.calls))
+                    if bridge_client is not None:
+                        self.assertEqual(
+                            bridge_baseline,
+                            (bridge_client.fetch_count, bridge_client.execute_count),
+                        )
+
+    async def test_apply_never_uses_the_poison_bridge(self) -> None:
+        bridge = PoisonBridge()
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=bridge,
+        )
+        await instance.async_start()
+        bridge_baseline = (bridge.fetch_count, bridge.execute_count)
+
+        applied = await instance.async_apply_contour(
+            {
+                "request_id": "native-apply-poison",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+        self.assertEqual(
+            bridge_baseline,
+            (bridge.fetch_count, bridge.execute_count),
+        )
+
+        self.assertIs(applied.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(1, len(executor.calls))
+
+    async def test_schedule_uses_native_application_without_the_poison_bridge(
+        self,
+    ) -> None:
+        bridge = PoisonBridge()
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(temporary_native_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(native_registry(ClimateControlScope.MANAGED)),
+            contour_store=contour_store,
+            bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 23, 0),
+        )
+        await instance.async_start()
+        bridge_baseline = (bridge.fetch_count, bridge.execute_count)
+
+        receipt = await instance.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 0)
+        )
+
+        if receipt is None:
+            self.fail("schedule did not produce a receipt")
+        self.assertIs(receipt.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(
+            bridge_baseline,
+            (bridge.fetch_count, bridge.execute_count),
+        )
+        self.assertEqual(1, len(contour_store.saved))
+        self.assertEqual(1, len(executor.calls))
+
+    async def test_schedule_noops_before_persistence_or_observation_outside_managed(
+        self,
+    ) -> None:
+        for mode in (
+            ClimateBridgeMode.DISABLED,
+            ClimateBridgeMode.SHADOW,
+            ClimateBridgeMode.CANARY,
+        ):
+            with self.subTest(mode=mode):
+                bridge = PoisonBridge()
+                view = MutableStateView(safe_stop_states())
+                executor = ReflectingStrictExecutor(view)
+                contour_store = MemoryStore(temporary_native_contours())
+                instance = ClimateRuntime(
+                    entry_id="entry",
+                    configuration=configuration(mode),
+                    registry_store=MemoryStore(
+                        native_registry(ClimateControlScope.MANAGED)
+                    ),
+                    contour_store=contour_store,
+                    bridge_client=bridge,
+                    strict_ha_call_executor=executor,
+                    ha_state_view=view,
+                    now_ms=lambda: NOW,
+                    local_now=lambda: datetime(2026, 7, 19, 23, 0),
+                )
+                await instance.async_start()
+                reads_after_start = view.reads
+                fetches_after_start = bridge.fetch_count
+
+                receipt = await instance.async_run_climate_schedule(
+                    datetime(2026, 7, 19, 23, 0)
+                )
+
+                self.assertIsNone(receipt)
+                self.assertEqual([], contour_store.saved)
+                self.assertEqual(reads_after_start, view.reads)
+                self.assertEqual(fetches_after_start, bridge.fetch_count)
+                self.assertEqual(0, bridge.execute_count)
+                self.assertEqual([], executor.calls)
+
+    async def test_denied_schedule_persists_period_and_never_retries_a_partial_contour(
+        self,
+    ) -> None:
+        base_registry = native_registry(ClimateControlScope.MANAGED)
+        base_contours = temporary_native_contours()
+        base_contour = base_contours.contour("climate")
+        if base_contour is None:
+            raise AssertionError("native climate contour is unavailable")
+        kids_room = ClimateRoom(
+            "kids",
+            "Kids room",
+            window_entity_id="binary_sensor.kids_window",
+        )
+        kids_ac = ClimateDevice(
+            device_id="kids_ac",
+            name="Kids AC",
+            room_id="kids",
+            kind=ClimateDeviceKind.AIR_CONDITIONER,
+            source_id="synthetic-ac-source-kids",
+            control_scope=ClimateControlScope.CANARY,
+            control_owner=ClimateControlOwner.CLIMATE_CORE,
+            capabilities=(
+                ClimateCapability.POWER,
+                ClimateCapability.TARGET_TEMPERATURE,
+                ClimateCapability.HVAC_MODE,
+                ClimateCapability.FAN_MODE,
+            ),
+            endpoints=(
+                ClimateEndpoint(ClimateEndpointRole.CONTROL, "climate.kids_ac"),
+            ),
+        )
+        kids_temperature = ClimateDevice(
+            device_id="kids_temperature",
+            name="Kids temperature",
+            room_id="kids",
+            kind=ClimateDeviceKind.TEMPERATURE_SENSOR,
+            source_id="synthetic-temperature-source-kids",
+            control_scope=ClimateControlScope.OBSERVED,
+            control_owner=ClimateControlOwner.OBSERVED,
+            capabilities=(),
+            endpoints=(
+                ClimateEndpoint(
+                    ClimateEndpointRole.TEMPERATURE,
+                    "sensor.kids_temperature",
+                ),
+            ),
+        )
+        registry = ClimateRegistry(
+            rooms=(*base_registry.rooms, kids_room),
+            devices=(*base_registry.devices, kids_ac, kids_temperature),
+        )
+        kids_contour_room = ClimateContourRoom(
+            room_id="kids",
+            device_ids=("kids_ac", "kids_temperature"),
+            day_profile=base_contour.rooms[0].day_profile,
+            night_profile=base_contour.rooms[0].night_profile,
+            active_profile=ClimateProfile.DAY,
+        )
+        contours = replace(
+            base_contours,
+            contours=(
+                replace(
+                    base_contour,
+                    rooms=(*base_contour.rooms, kids_contour_room),
+                ),
+            ),
+        )
+        states = safe_stop_states()
+        states.update(
+            {
+                "climate.kids_ac": ha_state("climate.kids_ac", "cool"),
+                "sensor.kids_temperature": ha_state("sensor.kids_temperature", "24.0"),
+                "binary_sensor.kids_window": ha_state("binary_sensor.kids_window", "off"),
+            }
+        )
+        view = MutableStateView(states)
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(contours)
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(registry),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 23, 0),
+        )
+        await instance.async_start()
+
+        receipt = await instance.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 0)
+        )
+        repeated = await instance.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 1)
+        )
+
+        if receipt is None:
+            self.fail("schedule did not produce a receipt")
+        self.assertIs(receipt.status, ContourApplyStatus.UNAVAILABLE)
+        self.assertEqual(0, receipt.command_count)
+        self.assertEqual([], executor.calls)
+        self.assertEqual(1, len(contour_store.saved))
+        stored = contour_store.value.contour("climate")
+        if stored is None:
+            self.fail("climate contour is unavailable")
+        self.assertIs(stored.schedule.last_applied_profile, ClimateProfile.NIGHT)
+        self.assertIsNone(repeated)
+
+    async def test_schedule_confirms_delayed_convergence_without_reexecution(
+        self,
+    ) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=None,
+            contours=temporary_native_contours(),
+        )
+        await instance.async_start()
+
+        async def converge(_: float) -> None:
+            executor.reflect_latest_calls()
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(side_effect=converge),
+        ) as sleep:
+            receipt = await instance.async_run_climate_schedule(
+                datetime(2026, 7, 19, 23, 0)
+            )
+
+        if receipt is None:
+            self.fail("schedule did not produce a receipt")
+        self.assertIs(receipt.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(1, sleep.await_count)
+        self.assertEqual(1, len(executor.calls))
+
+    async def test_schedule_timeout_stays_pending_without_timer_reexecution(
+        self,
+    ) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=None,
+            contours=temporary_native_contours(),
+        )
+        await instance.async_start()
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(),
+        ) as sleep:
+            receipt = await instance.async_run_climate_schedule(
+                datetime(2026, 7, 19, 23, 0)
+            )
+        repeated = await instance.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 1)
+        )
+
+        if receipt is None:
+            self.fail("schedule did not produce a receipt")
+        self.assertIs(receipt.status, ContourApplyStatus.PENDING)
+        self.assertEqual(("state_not_confirmed",), receipt.reasons)
+        self.assertEqual(10, sleep.await_count)
+        self.assertEqual(1, len(executor.calls))
+        self.assertIsNone(repeated)
+
+    async def test_non_managed_modes_deny_before_native_reads_or_bridge_calls(self) -> None:
+        for mode in (
+            ClimateBridgeMode.DISABLED,
+            ClimateBridgeMode.SHADOW,
+            ClimateBridgeMode.CANARY,
+        ):
+            with self.subTest(mode=mode):
+                bridge = PoisonBridge()
+                view = MutableStateView(safe_stop_states())
+                executor = ReflectingStrictExecutor(view)
+                instance = native_application_runtime(
+                    mode,
+                    view,
+                    executor,
+                    bridge_client=bridge,
+                    contours=temporary_native_contours(),
+                )
+                await instance.async_start()
+                reads_after_start = view.reads
+                fetches_after_start = bridge.fetch_count
+
+                with self.assertRaises(ClimateRuntimeUnavailable):
+                    await instance.async_apply_contour(
+                        {
+                            "request_id": f"native-mode-apply-{mode.value}",
+                            "contour_id": "climate",
+                            "confirm": True,
+                        }
+                    )
+                with self.assertRaises(ClimateRuntimeUnavailable):
+                    await instance.async_temporary_temperature(
+                        {
+                            "request_id": f"native-mode-temp-{mode.value}",
+                            "contour_id": "climate",
+                            "room_id": "living",
+                            "action": "set",
+                            "target_temperature": 23.0,
+                            "confirm": True,
+                        },
+                        datetime(2026, 7, 19, 12, 0),
+                    )
+                with self.assertRaises(ClimateRuntimeUnavailable):
+                    await instance.async_temporary_temperature(
+                        {
+                            "request_id": f"native-mode-clear-{mode.value}",
+                            "contour_id": "climate",
+                            "room_id": "living",
+                            "action": "clear",
+                            "target_temperature": None,
+                            "confirm": True,
+                        },
+                        datetime(2026, 7, 19, 12, 5),
+                    )
+
+                self.assertEqual(reads_after_start, view.reads)
+                self.assertEqual(fetches_after_start, bridge.fetch_count)
+                self.assertEqual(0, bridge.execute_count)
+                self.assertEqual([], executor.calls)
+
+    async def test_broken_native_view_denies_apply_without_executor_or_bridge(self) -> None:
+        bridge = PoisonBridge()
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=bridge,
+        )
+        await instance.async_start()
+        fetches_after_start = bridge.fetch_count
+        view.broken = True
+
+        receipt = await instance.async_apply_contour(
+            {
+                "request_id": "native-broken-view",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+
+        self.assertIs(receipt.status, ContourApplyStatus.UNAVAILABLE)
+        self.assertEqual(("engine_rejected",), receipt.reasons)
+        self.assertEqual(0, receipt.command_count)
+        self.assertEqual([], executor.calls)
+        self.assertEqual(fetches_after_start, bridge.fetch_count)
+        self.assertEqual(0, bridge.execute_count)
+
+    async def test_broken_native_view_denies_schedule_without_calls(self) -> None:
+        bridge = PoisonBridge()
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=bridge,
+            contours=temporary_native_contours(),
+        )
+        await instance.async_start()
+        bridge_baseline = (bridge.fetch_count, bridge.execute_count)
+        view.broken = True
+
+        receipt = await instance.async_run_climate_schedule(
+            datetime(2026, 7, 19, 23, 0)
+        )
+
+        if receipt is None:
+            self.fail("schedule did not produce a receipt")
+        self.assertIs(receipt.status, ContourApplyStatus.UNAVAILABLE)
+        self.assertEqual(("engine_rejected",), receipt.reasons)
+        self.assertEqual(0, receipt.command_count)
+        self.assertEqual([], executor.calls)
+        self.assertEqual(
+            bridge_baseline,
+            (bridge.fetch_count, bridge.execute_count),
+        )
+
+    async def test_preflight_denial_never_executes_a_partial_contour_batch(self) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=None,
+            scope=ClimateControlScope.CANARY,
+        )
+        await instance.async_start()
+
+        receipt = await instance.async_apply_contour(
+            {
+                "request_id": "native-preflight-denied",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+
+        self.assertIs(receipt.status, ContourApplyStatus.UNAVAILABLE)
+        self.assertEqual(0, receipt.command_count)
+        self.assertEqual([], executor.calls)
+
+    async def test_zero_and_partial_executor_results_map_without_polling(self) -> None:
+        for completed_count, status in (
+            (0, ContourApplyStatus.UNAVAILABLE),
+            (1, ContourApplyStatus.PARTIAL),
+        ):
+            with self.subTest(completed_count=completed_count):
+                view = MutableStateView(
+                    two_actuator_states()
+                    if completed_count
+                    else safe_stop_states()
+                )
+                executor = ReflectingStrictExecutor(
+                    view,
+                    completed_count=completed_count,
+                )
+                instance = native_application_runtime(
+                    ClimateBridgeMode.MANAGED,
+                    view,
+                    executor,
+                    bridge_client=None,
+                    registry=(two_actuator_registry() if completed_count else None),
+                    contours=(two_actuator_contours() if completed_count else None),
+                )
+                await instance.async_start()
+
+                receipt = await instance.async_apply_contour(
+                    {
+                        "request_id": f"native-short-{completed_count}",
+                        "contour_id": "climate",
+                        "confirm": True,
+                    }
+                )
+
+                self.assertIs(receipt.status, status)
+                self.assertEqual(completed_count, receipt.accepted_count)
+                self.assertEqual(("command_result_unavailable",), receipt.reasons)
+                self.assertEqual(1, len(executor.calls))
+
+    async def test_polling_confirms_delayed_native_convergence_without_reexecution(
+        self,
+    ) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=None,
+        )
+        await instance.async_start()
+
+        async def converge(_: float) -> None:
+            executor.reflect_latest_calls()
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(side_effect=converge),
+        ) as sleep:
+            receipt = await instance.async_apply_contour(
+                {
+                    "request_id": "native-delayed-convergence",
+                    "contour_id": "climate",
+                    "confirm": True,
+                }
+            )
+
+        self.assertIs(receipt.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(1, sleep.await_count)
+        self.assertEqual(1, len(executor.calls))
+
+    async def test_poll_timeout_and_broken_post_observation_stay_pending(self) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=None,
+        )
+        await instance.async_start()
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(),
+        ) as sleep:
+            timed_out = await instance.async_apply_contour(
+                {
+                    "request_id": "native-poll-timeout",
+                    "contour_id": "climate",
+                    "confirm": True,
+                }
+            )
+
+        self.assertIs(timed_out.status, ContourApplyStatus.PENDING)
+        self.assertEqual(("state_not_confirmed",), timed_out.reasons)
+        self.assertEqual(10, sleep.await_count)
+        self.assertEqual(1, len(executor.calls))
+
+        broken_view = MutableStateView(safe_stop_states())
+        broken_executor = ReflectingStrictExecutor(
+            broken_view,
+            break_view_after_execute=True,
+        )
+        broken = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            broken_view,
+            broken_executor,
+            bridge_client=None,
+        )
+        await broken.async_start()
+
+        unavailable_verification = await broken.async_apply_contour(
+            {
+                "request_id": "native-verification-unavailable",
+                "contour_id": "climate",
+                "confirm": True,
+            }
+        )
+
+        self.assertIs(unavailable_verification.status, ContourApplyStatus.PENDING)
+        self.assertEqual(
+            ("verification_unavailable",),
+            unavailable_verification.reasons,
+        )
+        self.assertEqual(1, len(broken_executor.calls))
+
+    async def test_duplicate_reobserves_and_promotes_without_reexecution(self) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
+        instance = native_application_runtime(
+            ClimateBridgeMode.MANAGED,
+            view,
+            executor,
+            bridge_client=None,
+        )
+        await instance.async_start()
+        request = {
+            "request_id": "native-duplicate-promotion",
+            "contour_id": "climate",
+            "confirm": True,
+        }
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            pending = await instance.async_apply_contour(request)
+        executor.reflect_latest_calls()
+        promoted = await instance.async_apply_contour(dict(request))
+
+        self.assertIs(pending.status, ContourApplyStatus.PENDING)
+        self.assertIs(promoted.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(1, len(executor.calls))
+        with self.assertRaises(ContourApplyViolation):
+            await instance.async_temporary_temperature(
+                {
+                    "request_id": request["request_id"],
+                    "contour_id": "climate",
+                    "room_id": "living",
+                    "action": "set",
+                    "target_temperature": 23.0,
+                    "confirm": True,
+                },
+                datetime(2026, 7, 19, 12, 0),
+            )
+
+    async def test_duplicate_clear_pending_reobserves_without_a_second_write_or_batch(
+        self,
+    ) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(temporary_native_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(
+                native_registry(ClimateControlScope.MANAGED)
+            ),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+        await instance.async_temporary_temperature(
+            {
+                "request_id": "duplicate-clear-pending-set",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.0,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 0),
+        )
+        current = view._states["climate.living_ac"]
+        view._states[current.entity_id] = replace(current, state="cool")
+        executor._reflect_on_execute = False
+        request = {
+            "request_id": "duplicate-clear-pending",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "clear",
+            "target_temperature": None,
+            "confirm": True,
+        }
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            first = await instance.async_temporary_temperature(
+                request,
+                datetime(2026, 7, 19, 12, 5),
+            )
+        duplicate = await instance.async_temporary_temperature(
+            dict(request),
+            datetime(2026, 7, 19, 12, 6),
+        )
+
+        self.assertIs(first.status, ContourApplyStatus.PENDING)
+        self.assertIs(duplicate.status, ContourApplyStatus.PENDING)
+        self.assertEqual(2, len(contour_store.saved))
+        self.assertEqual(2, len(executor.calls))
+
+    async def test_duplicate_clear_unavailable_reobserves_without_a_second_batch(
+        self,
+    ) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(temporary_native_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(
+                native_registry(ClimateControlScope.MANAGED)
+            ),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+        await instance.async_temporary_temperature(
+            {
+                "request_id": "duplicate-clear-unavailable-set",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.0,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 0),
+        )
+        current = view._states["climate.living_ac"]
+        view._states[current.entity_id] = replace(current, state="cool")
+        executor._reflect_on_execute = False
+        executor._completed_count = 0
+        request = {
+            "request_id": "duplicate-clear-unavailable",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "clear",
+            "target_temperature": None,
+            "confirm": True,
+        }
+
+        first = await instance.async_temporary_temperature(
+            request,
+            datetime(2026, 7, 19, 12, 5),
+        )
+        duplicate = await instance.async_temporary_temperature(
+            dict(request),
+            datetime(2026, 7, 19, 12, 6),
+        )
+
+        self.assertIs(first.status, ContourApplyStatus.UNAVAILABLE)
+        self.assertIs(duplicate.status, ContourApplyStatus.UNAVAILABLE)
+        self.assertEqual(2, len(contour_store.saved))
+        self.assertEqual(2, len(executor.calls))
+
+    async def test_duplicate_clear_promotes_pending_receipt_without_reexecution(
+        self,
+    ) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(temporary_native_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(
+                native_registry(ClimateControlScope.MANAGED)
+            ),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+        await instance.async_temporary_temperature(
+            {
+                "request_id": "duplicate-clear-promote-set",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.0,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 0),
+        )
+        current = view._states["climate.living_ac"]
+        view._states[current.entity_id] = replace(current, state="cool")
+        executor._reflect_on_execute = False
+        request = {
+            "request_id": "duplicate-clear-promote",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "clear",
+            "target_temperature": None,
+            "confirm": True,
+        }
+
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            pending = await instance.async_temporary_temperature(
+                request,
+                datetime(2026, 7, 19, 12, 5),
+            )
+        executor.reflect_latest_calls()
+        promoted = await instance.async_temporary_temperature(
+            dict(request),
+            datetime(2026, 7, 19, 12, 6),
+        )
+
+        self.assertIs(pending.status, ContourApplyStatus.PENDING)
+        self.assertIs(promoted.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(2, len(contour_store.saved))
+        self.assertEqual(2, len(executor.calls))
+
+    async def test_duplicate_clear_partial_reobserves_without_a_second_batch(self) -> None:
+        view = MutableStateView(two_actuator_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(temporary_two_actuator_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(two_actuator_registry()),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+        await instance.async_temporary_temperature(
+            {
+                "request_id": "duplicate-clear-partial-set",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.0,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 0),
+        )
+        for entity_id, state in view._states.items():
+            if entity_id in {"climate.living_ac", "humidifier.living"}:
+                view._states[entity_id] = replace(
+                    state,
+                    state="cool" if entity_id.startswith("climate.") else "on",
+                )
+        executor._reflect_on_execute = False
+        executor._completed_count = 1
+        request = {
+            "request_id": "duplicate-clear-partial",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "clear",
+            "target_temperature": None,
+            "confirm": True,
+        }
+
+        first = await instance.async_temporary_temperature(
+            request,
+            datetime(2026, 7, 19, 12, 5),
+        )
+        duplicate = await instance.async_temporary_temperature(
+            dict(request),
+            datetime(2026, 7, 19, 12, 6),
+        )
+
+        self.assertIs(first.status, ContourApplyStatus.PARTIAL)
+        self.assertIs(duplicate.status, ContourApplyStatus.PARTIAL)
+        self.assertEqual(2, len(contour_store.saved))
+        self.assertEqual(2, len(executor.calls))
+
+    async def test_temporary_set_and_clear_ignore_an_unrelated_broken_room(self) -> None:
+        view = MutableStateView(safe_stop_states())
+        executor = ReflectingStrictExecutor(view)
+        contour_store = MemoryStore(unrelated_broken_room_contours())
+        instance = ClimateRuntime(
+            entry_id="entry",
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=MemoryStore(unrelated_broken_room_registry()),
+            contour_store=contour_store,
+            bridge_client=None,
+            strict_ha_call_executor=executor,
+            ha_state_view=view,
+            now_ms=lambda: NOW,
+            local_now=lambda: datetime(2026, 7, 19, 12, 0),
+        )
+        await instance.async_start()
+
+        set_receipt = await instance.async_temporary_temperature(
+            {
+                "request_id": "unrelated-broken-set",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "set",
+                "target_temperature": 23.0,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 0),
+        )
+        clear_receipt = await instance.async_temporary_temperature(
+            {
+                "request_id": "unrelated-broken-clear",
+                "contour_id": "climate",
+                "room_id": "living",
+                "action": "clear",
+                "target_temperature": None,
+                "confirm": True,
+            },
+            datetime(2026, 7, 19, 12, 5),
+        )
+
+        self.assertIs(set_receipt.status, ContourApplyStatus.CONFIRMED)
+        self.assertIs(clear_receipt.status, ContourApplyStatus.CONFIRMED)
+        self.assertEqual(2, len(contour_store.saved))
 
 
 class _FakeState:

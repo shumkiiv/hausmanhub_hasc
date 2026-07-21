@@ -6,6 +6,8 @@ from dataclasses import replace
 import json
 from datetime import datetime
 import unittest
+from typing import assert_never
+from unittest.mock import AsyncMock, patch
 
 from custom_components.hausman_hub.application.climate_commands import (
     ClimateCommandRejected,
@@ -396,6 +398,134 @@ class ReflectingContourBridge(MemoryBridge):
         return {"ok": True}
 
 
+class ReflectingNativeStateView:
+    def __init__(self, states: dict[str, ClimateHaEntityState]) -> None:
+        self.states = states
+        self.read_count = 0
+
+    def entity_state(self, entity_id: str) -> ClimateHaEntityState | None:
+        self.read_count += 1
+        return self.states.get(entity_id)
+
+
+class PersistedScheduleStateView(ReflectingNativeStateView):
+    def __init__(
+        self,
+        states: dict[str, ClimateHaEntityState],
+        contour_store: MemoryContourStore,
+    ) -> None:
+        super().__init__(states)
+        self._contour_store = contour_store
+
+    def entity_state(self, entity_id: str) -> ClimateHaEntityState | None:
+        if len(self._contour_store.saved) != 1:
+            raise AssertionError("schedule must persist before native observation")
+        contour = self._contour_store.registry.contour("climate")
+        if contour is None or contour.schedule.last_applied_profile is not ClimateProfile.NIGHT:
+            raise AssertionError("schedule profile marker must be persisted")
+        return super().entity_state(entity_id)
+
+
+class ReflectingStrictExecutor:
+    def __init__(
+        self,
+        state_view: ReflectingNativeStateView,
+        *,
+        reflect: bool = True,
+        fail: bool = False,
+    ) -> None:
+        self._state_view = state_view
+        self._reflect = reflect
+        self._fail = fail
+        self.batches: list[tuple[object, ...]] = []
+
+    async def async_execute(self, calls) -> int:
+        self.batches.append(calls)
+        if self._fail:
+            raise RuntimeError("synthetic strict execution failure")
+        if self._reflect:
+            self.reflect_latest_batch()
+        return len(calls)
+
+    def reflect_latest_batch(self) -> None:
+        for call in self.batches[-1]:
+            current = self._state_view.states[call.entity_id]
+            attributes = dict(current.attributes)
+            match call.service:
+                case ClimateHaService.CLIMATE_SET_HVAC_MODE:
+                    state = call.hvac_mode.value
+                case ClimateHaService.CLIMATE_SET_TEMPERATURE:
+                    state = current.state
+                    attributes["temperature"] = call.temperature
+                case ClimateHaService.CLIMATE_SET_FAN_MODE:
+                    state = current.state
+                    attributes["fan_mode"] = call.fan_mode.value
+                case ClimateHaService.HUMIDIFIER_TURN_ON:
+                    state = "on"
+                case ClimateHaService.HUMIDIFIER_TURN_OFF:
+                    state = "off"
+                case ClimateHaService.HUMIDIFIER_SET_HUMIDITY:
+                    state = current.state
+                    attributes["humidity"] = call.humidity
+                case unreachable:
+                    assert_never(unreachable)
+            self._state_view.states[call.entity_id] = replace(
+                current,
+                state=state,
+                attributes=attributes,
+            )
+
+
+def native_application_inputs(
+    registry: ClimateRegistry,
+) -> tuple[ClimateRegistry, ReflectingNativeStateView]:
+    bound = with_native_observation_bindings(registry)
+    rooms = tuple(
+        replace(room, window_entity_id=f"binary_sensor.{room.room_id}_window")
+        for room in bound.rooms
+    )
+    devices = tuple(
+        replace(device, control_scope=ClimateControlScope.MANAGED)
+        if device.kind is ClimateDeviceKind.AIR_CONDITIONER
+        else device
+        for device in bound.devices
+    )
+    native_registry = ClimateRegistry(
+        rooms=rooms,
+        devices=devices,
+        home=bound.home,
+        version=bound.version,
+    )
+    states: dict[str, ClimateHaEntityState] = {}
+    for room in native_registry.rooms:
+        states[room.window_entity_id] = ClimateHaEntityState(
+            entity_id=room.window_entity_id,
+            state="on",
+            attributes={},
+            last_updated_ms=1784280005000,
+        )
+    for device in native_registry.devices:
+        if device.kind is ClimateDeviceKind.TEMPERATURE_SENSOR:
+            endpoint = device.endpoint(ClimateEndpointRole.TEMPERATURE)
+            if endpoint is not None:
+                states[endpoint.entity_id] = ClimateHaEntityState(
+                    entity_id=endpoint.entity_id,
+                    state="24.0",
+                    attributes={},
+                    last_updated_ms=1784280005000,
+                )
+        elif device.kind is ClimateDeviceKind.AIR_CONDITIONER:
+            endpoint = device.endpoint(ClimateEndpointRole.CONTROL)
+            if endpoint is not None:
+                states[endpoint.entity_id] = ClimateHaEntityState(
+                    entity_id=endpoint.entity_id,
+                    state="cool",
+                    attributes={},
+                    last_updated_ms=1784280005000,
+                )
+    return native_registry, ReflectingNativeStateView(states)
+
+
 def configuration(mode: ClimateBridgeMode) -> SafeConfiguration:
     return SafeConfiguration(
         mode="shadow",
@@ -630,10 +760,10 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(original_contours, contour_store.registry)
         self.assertEqual([], bridge.executed)
 
-    async def test_schedule_switches_profile_and_uses_existing_typed_executor_once(
+    async def test_schedule_persists_before_native_observation_and_executes_once(
         self,
     ) -> None:
-        bridge = ReflectingContourBridge()
+        bridge = MemoryBridge()
         registry, contours = build_climate_contour_setup(
             bridge.snapshot,
             room_ids=["living"],
@@ -671,12 +801,17 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             night_start="23:00",
         )
         contour_store = MemoryContourStore(contours)
+        registry, initial_view = native_application_inputs(registry)
+        state_view = PersistedScheduleStateView(initial_view.states, contour_store)
+        executor = ReflectingStrictExecutor(state_view)
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=configuration(ClimateBridgeMode.MANAGED),
             registry_store=MemoryStore(registry),
             contour_store=contour_store,
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=lambda: "9" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -689,8 +824,9 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             datetime(2026, 7, 19, 23, 1)
         )
 
-        self.assertIsNotNone(receipt)
-        self.assertEqual("confirmed", receipt.status.value)  # type: ignore[union-attr]
+        if receipt is None:
+            self.fail("schedule did not produce a receipt")
+        self.assertEqual("confirmed", receipt.status.value)
         self.assertEqual(
             {
                 "code": "apply_schedule_profile",
@@ -699,20 +835,27 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 "target_temperature": None,
                 "profile": "night",
             },
-            receipt.as_payload()["action"],  # type: ignore[union-attr]
+            receipt.as_payload()["action"],
         )
         self.assertIsNone(repeated)
+        scheduled_contour = contour_store.registry.contour("climate")
+        if scheduled_contour is None:
+            self.fail("climate contour is unavailable")
         self.assertEqual(
             "night",
-            contour_store.registry.contour("climate").rooms[0].active_profile.value,  # type: ignore[union-attr]
+            scheduled_contour.rooms[0].active_profile.value,
         )
         self.assertEqual(
-            ["set_room_target", "set_room_mode"],
-            [plan.action for plan in bridge.executed],
+            "night",
+            scheduled_contour.schedule.last_applied_profile.value,
         )
+        self.assertEqual(1, len(contour_store.saved))
+        self.assertGreater(state_view.read_count, 0)
+        self.assertEqual(1, len(executor.batches))
+        self.assertEqual([], bridge.executed)
 
     async def test_disabled_schedule_and_matching_period_send_no_commands(self) -> None:
-        bridge = ReflectingContourBridge()
+        bridge = MemoryBridge()
         registry, contours = build_climate_contour_setup(
             bridge.snapshot,
             room_ids=["living"],
@@ -754,7 +897,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
     async def test_new_schedule_applies_current_period_once_even_if_profile_matches(
         self,
     ) -> None:
-        bridge = ReflectingContourBridge()
+        bridge = MemoryBridge()
         registry, contours = build_climate_contour_setup(
             bridge.snapshot,
             room_ids=["living"],
@@ -772,12 +915,16 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             night_start="23:00",
         )
         contour_store = MemoryContourStore(contours)
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view)
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=configuration(ClimateBridgeMode.MANAGED),
             registry_store=MemoryStore(registry),
             contour_store=contour_store,
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
         )
         await runtime.async_start()
 
@@ -788,24 +935,24 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             datetime(2026, 7, 19, 12, 1)
         )
 
-        self.assertIsNotNone(first)
+        if first is None:
+            self.fail("schedule did not produce a receipt")
         self.assertIsNone(second)
+        scheduled_contour = contour_store.registry.contour("climate")
+        if scheduled_contour is None:
+            self.fail("climate contour is unavailable")
         self.assertEqual(
             "day",
-            contour_store.registry.contour(  # type: ignore[union-attr]
-                "climate"
-            ).schedule.last_applied_profile.value,
+            scheduled_contour.schedule.last_applied_profile.value,
         )
-        self.assertEqual(3, len(bridge.executed))
+        self.assertEqual(1, len(contour_store.saved))
+        self.assertEqual([], executor.batches)
+        self.assertEqual([], bridge.executed)
 
     async def test_temporary_temperature_applies_one_room_and_returns_to_schedule(
         self,
     ) -> None:
-        bridge = ReflectingContourBridge()
-        bridge.payload["rooms"][0]["mode"] = "auto"  # type: ignore[index]
-        bridge.payload["rooms"][0]["targets"]["temperature"] = 25  # type: ignore[index]
-        bridge.payload["rooms"][0]["targets"]["targetStrategy"] = "normal"  # type: ignore[index]
-        bridge.snapshot = import_climate_state(bridge.payload)
+        bridge = MemoryBridge()
         registry, contours = build_climate_contour_setup(
             bridge.snapshot,
             room_ids=["living"],
@@ -827,6 +974,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             contours,
             ClimateProfile.DAY,
         )
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view)
         contour_store = MemoryContourStore(contours)
         runtime = ClimateRuntime(
             entry_id="entry",
@@ -834,6 +983,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=contour_store,
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=iter(("4" * 32, "5" * 32)).__next__,
             now_ms=lambda: 1784280005000,
         )
@@ -877,14 +1028,12 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual("confirmed", restored.status.value)
-        self.assertEqual(1, restored.command_count)
+        self.assertEqual(0, restored.command_count)
         room = contour_store.registry.contour("climate").rooms[0]  # type: ignore[union-attr]
         self.assertIsNone(room.temporary_override)
         self.assertEqual(25.0, room.target_temperature)
-        self.assertEqual(
-            ["set_room_target", "set_room_target"],
-            [plan.action for plan in bridge.executed],
-        )
+        self.assertEqual([], bridge.executed)
+        self.assertEqual(1, len(executor.batches))
 
     async def test_next_schedule_period_clears_temporary_temperature(self) -> None:
         bridge = ReflectingContourBridge()
@@ -928,6 +1077,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             contours,
             ClimateProfile.DAY,
         )
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view)
         contour_store = MemoryContourStore(contours)
         runtime = ClimateRuntime(
             entry_id="entry",
@@ -935,6 +1086,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=contour_store,
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=iter(("6" * 32, "7" * 32)).__next__,
             now_ms=lambda: 1784280005000,
         )
@@ -960,6 +1113,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(room.temporary_override)
         self.assertEqual("night", room.active_profile.value)
         self.assertEqual(22.0, room.target_temperature)
+        self.assertEqual([], bridge.executed)
 
     async def test_ambiguous_temporary_command_is_persisted_and_never_reposted(
         self,
@@ -985,6 +1139,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             contours,
             ClimateProfile.DAY,
         )
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view, fail=True)
         contour_store = MemoryContourStore(contours)
         runtime = ClimateRuntime(
             entry_id="entry",
@@ -992,6 +1148,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=contour_store,
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=lambda: "8" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -1022,7 +1180,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("unavailable", first.status.value)
         self.assertEqual(first, second)
-        self.assertEqual(1, len(bridge.executed))
+        self.assertEqual([], bridge.executed)
+        self.assertEqual(1, len(executor.batches))
         room = contour_store.registry.contour("climate").rooms[0]  # type: ignore[union-attr]
         self.assertEqual(23.5, room.target_temperature)
         self.assertEqual(25.0, room.profile_settings.target_temperature)
@@ -1041,12 +1200,16 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             target_humidity=45,
             strategy="normal",
         )
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view)
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=configuration(ClimateBridgeMode.MANAGED),
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=lambda: "1" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -1076,17 +1239,11 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(3, preview["command_count"])
         self.assertEqual("confirmed", receipt.status.value)
-        self.assertEqual(3, receipt.accepted_count)
+        self.assertEqual(1, receipt.accepted_count)
         self.assertEqual(1, receipt.confirmed_room_count)
         self.assertEqual(receipt, duplicate)
-        self.assertEqual(
-            [
-                "set_room_target_strategy",
-                "set_room_target",
-                "set_room_mode",
-            ],
-            [plan.action for plan in bridge.executed],
-        )
+        self.assertEqual([], bridge.executed)
+        self.assertEqual(1, len(executor.batches))
 
     async def test_contour_apply_pending_retry_only_rereads_and_never_reposts(
         self,
@@ -1105,12 +1262,16 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             target_humidity=45,
             strategy="normal",
         )
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view, reflect=False)
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=configuration(ClimateBridgeMode.MANAGED),
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=lambda: "2" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -1121,13 +1282,17 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             "confirm": True,
         }
 
-        first = await runtime.async_apply_contour(request)
+        with patch(
+            "custom_components.hausman_hub.application.climate_runtime.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            first = await runtime.async_apply_contour(request)
         second = await runtime.async_apply_contour(request)
 
         self.assertEqual("pending", first.status.value)
         self.assertEqual("pending", second.status.value)
-        self.assertEqual(1, len(bridge.executed))
-        self.assertGreaterEqual(bridge.fetch_count, 4)
+        self.assertEqual([], bridge.executed)
+        self.assertEqual(1, len(executor.batches))
 
     async def test_ambiguous_contour_apply_is_reserved_and_not_retried(self) -> None:
         bridge = AmbiguousBridge()
@@ -1144,12 +1309,16 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             target_humidity=45,
             strategy="normal",
         )
+        registry, state_view = native_application_inputs(registry)
+        executor = ReflectingStrictExecutor(state_view, fail=True)
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=configuration(ClimateBridgeMode.MANAGED),
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
+            strict_ha_call_executor=executor,
+            ha_state_view=state_view,
             operation_id_factory=lambda: "3" * 32,
             now_ms=lambda: 1784280005000,
         )
@@ -1165,7 +1334,8 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("unavailable", first.status.value)
         self.assertEqual(first, second)
-        self.assertEqual(1, len(bridge.executed))
+        self.assertEqual([], bridge.executed)
+        self.assertEqual(1, len(executor.batches))
 
     async def test_contour_setup_uses_existing_engine_and_never_posts(self) -> None:
         bridge = MemoryBridge()
@@ -2325,7 +2495,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -2395,7 +2565,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -2434,7 +2604,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -2470,7 +2640,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(scoped_registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=scoped_state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -2489,7 +2659,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -2548,7 +2718,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=failing,
+            strict_ha_call_executor=failing,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -2629,7 +2799,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
             registry_store=MemoryStore(registry),
             contour_store=MemoryContourStore(contours),
             bridge_client=bridge,
-            trial_executor=executor,
+            strict_ha_call_executor=executor,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
