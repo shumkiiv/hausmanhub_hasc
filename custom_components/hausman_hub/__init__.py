@@ -82,6 +82,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_start_climate_schedule(hass, entry, climate_runtime)
     await async_start_climate_trial(hass, entry, climate_runtime)
     register_climate_api(hass, climate_runtime)
+    from .panel import async_register_hausmanhub_panel
+
+    await async_register_hausmanhub_panel(hass)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
@@ -201,4 +204,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _clear_hausmanhub_state_values(hass, entry)
         clear_local_summary_access(hass, entry)
         clear_climate_api(hass, entry.entry_id)
+        from .panel import unregister_hausmanhub_panel
+
+        unregister_hausmanhub_panel(hass)
     return unloaded
