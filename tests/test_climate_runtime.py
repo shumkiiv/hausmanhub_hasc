@@ -325,7 +325,7 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_contour_draft_reads_once_without_saving_or_commanding(self) -> None:
         bridge = MemoryBridge()
-        registry = registry_from_payload({"version": 1, "rooms": [], "devices": []})
+        registry = registry_from_payload({"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []})
         registry_store = MemoryStore(registry)
         contour_store = MemoryContourStore()
         runtime = ClimateRuntime(

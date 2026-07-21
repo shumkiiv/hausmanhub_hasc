@@ -1272,6 +1272,21 @@ class HausmanHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
 
+def _empty_climate_registry_draft() -> dict[str, Any]:
+    """Return the exact empty version-2 registry draft without bindings."""
+
+    return {
+        "version": 2,
+        "home": {
+            "outdoor_temperature_entity_id": None,
+            "presence_entity_id": None,
+            "central_heating_entity_id": None,
+        },
+        "rooms": [],
+        "devices": [],
+    }
+
+
 class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     """Edit observation settings and the opt-in input-boolean canary."""
 
@@ -3071,7 +3086,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             if action == "advanced_json":
                 return await self.async_step_climate_registry_json()
             if action == "reset_registry":
-                self._registry_draft = {"version": 1, "rooms": [], "devices": []}
+                self._registry_draft = _empty_climate_registry_draft()
                 return await self._async_preview_registry_draft(runtime)
             if action == "review_registry":
                 return await self._async_preview_registry_draft(runtime)
@@ -3339,6 +3354,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 room = {
                     "id": user_input.get(CLIMATE_ROOM_ID_FIELD),
                     "name": user_input.get(CLIMATE_ROOM_NAME_FIELD),
+                    "window_entity_id": None,
                 }
                 candidate["rooms"] = [
                     value
@@ -3521,7 +3537,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     def _copy_registry_draft(self) -> dict[str, Any]:
         draft = self._registry_draft
         if not isinstance(draft, Mapping):
-            return {"version": 1, "rooms": [], "devices": []}
+            return _empty_climate_registry_draft()
         return json.loads(json.dumps(draft, ensure_ascii=False))
 
     def _validate_registry_draft(self, draft: object) -> None:

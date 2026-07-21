@@ -1,6 +1,6 @@
 # HausmanHub AI Context
 
-Last updated: 2026-07-20.
+Last updated: 2026-07-21.
 
 ## Project state
 
@@ -356,6 +356,20 @@ Last updated: 2026-07-20.
   repository remain unchanged. The final staged tree passed 513 local tests,
   the HACS/package/boundary/Android checks, and disposable Home Assistant
   Core   2026.6.4/2026.7.0.
+- Version 1.9.5 completes roadmap item 36 sub-step 36a. The climate registry
+  moves to schema version 2 with HausmanHub's own Home Assistant observation
+  bindings: a room may hold an optional window binary sensor, a passive
+  sensor may hold one observation endpoint strictly matching its kind, and a
+  new home environment block holds optional outdoor-temperature, presence,
+  and central-heating entities with strict domain validation. Stored version
+  1 registries migrate once to version 2 with every new binding absent, so
+  an old configuration never becomes permissive. Execution behavior is
+  unchanged: observation and commands still use the external Climate API
+  path; sub-steps 36b-36g (native observation adapter, runtime switch, local
+  desired-state application, native projections, bridge-independent control
+  mode, poisoned-bridge acceptance) are recorded in the roadmap. The final
+  staged tree passed 527 local tests, the HACS/package/boundary/Android
+  checks, and disposable Home Assistant Core 2026.6.4/2026.7.0.
 - Version 1.9.4 completes roadmap item 35. Ownership now expands one verified
   room at a time. A strict promotion operation moves one room to HausmanHub
   management only with every guard agreeing: the room is in the contour,
@@ -1923,5 +1937,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-20T23:42:42+03:00.
+- Last sync: 2026-07-21T07:30:33+03:00.
 <!-- llm-wiki-sync:end -->

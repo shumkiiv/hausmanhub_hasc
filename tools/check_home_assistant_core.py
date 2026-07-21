@@ -3055,7 +3055,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         )
         assert_result(
             await registry.json(),
-            {"version": 1, "rooms": [], "devices": []},
+            {"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []},
             "new disabled climate registry must be empty and versioned",
         )
         assert_local_summary_response_is_not_stored(
@@ -3233,7 +3233,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
         preview = await client.post(
             CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH,
             headers=owner_headers,
-            json={"version": 1, "rooms": [], "devices": []},
+            json={"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []},
         )
         assert_result(
             preview.status,
@@ -3961,7 +3961,7 @@ async def async_assert_shadow_climate_end_to_end(
         reset_registry = await home_client.post(
             CLIMATE_ADMIN_REGISTRY_PATH,
             headers=owner_headers,
-            json={"version": 1, "rooms": [], "devices": []},
+            json={"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []},
         )
         assert_result(
             reset_registry.status,

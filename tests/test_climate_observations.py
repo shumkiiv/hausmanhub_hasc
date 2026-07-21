@@ -75,7 +75,7 @@ class ClimateObservationTest(unittest.TestCase):
 
     def test_missing_mismatched_and_unregistered_devices_are_fail_closed(self) -> None:
         payload = registry_payload()
-        payload["rooms"].append({"id": "office", "name": "Office"})  # type: ignore[union-attr]
+        payload["rooms"].append({"id": "office", "name": "Office", "window_entity_id": None})  # type: ignore[union-attr]
         payload["devices"][0]["source_id"] = "missing-private-source"  # type: ignore[index]
         registry = registry_from_payload(payload)
         observation = build_climate_observation_snapshot(

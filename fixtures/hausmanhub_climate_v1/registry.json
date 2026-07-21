@@ -1,8 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
+  "home": {
+    "outdoor_temperature_entity_id": null,
+    "presence_entity_id": null,
+    "central_heating_entity_id": null
+  },
   "rooms": [
-    {"id": "living", "name": "Living room"},
-    {"id": "kids", "name": "Kids"}
+    {"id": "living", "name": "Living room", "window_entity_id": null},
+    {"id": "kids", "name": "Kids", "window_entity_id": null}
   ],
   "devices": [
     {

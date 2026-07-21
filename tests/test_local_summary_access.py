@@ -725,7 +725,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(200, admin_response.status)
-        self.assertEqual({"version": 1, "rooms": [], "devices": []}, admin_response.payload)
+        self.assertEqual({"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []}, admin_response.payload)
         tablet_response = asyncio.run(
             registry.get(
                 FakeRequest(
@@ -1117,7 +1117,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
         from custom_components.hausman_hub.domain.contours import ContourRegistry
         from tests.test_climate_import import source_payload
 
-        registry = registry_from_payload({"version": 1, "rooms": [], "devices": []})
+        registry = registry_from_payload({"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []})
 
         class Store:
             def __init__(self) -> None:

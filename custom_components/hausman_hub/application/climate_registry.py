@@ -14,9 +14,11 @@ from ..domain.climate import (
     ClimateDeviceKind,
     ClimateEndpoint,
     ClimateEndpointRole,
+    ClimateHomeEnvironment,
     ClimateModelViolation,
     ClimateRegistry,
     ClimateRoom,
+    LEGACY_REGISTRY_VERSION,
     REGISTRY_VERSION,
 )
 from .climate_import import ClimateImportSnapshot
@@ -51,8 +53,20 @@ def registry_to_payload(registry: ClimateRegistry) -> dict[str, object]:
 
     return {
         "version": registry.version,
+        "home": {
+            "outdoor_temperature_entity_id": (
+                registry.home.outdoor_temperature_entity_id
+            ),
+            "presence_entity_id": registry.home.presence_entity_id,
+            "central_heating_entity_id": registry.home.central_heating_entity_id,
+        },
         "rooms": [
-            {"id": room.room_id, "name": room.name} for room in registry.rooms
+            {
+                "id": room.room_id,
+                "name": room.name,
+                "window_entity_id": room.window_entity_id,
+            }
+            for room in registry.rooms
         ],
         "devices": [
             {
@@ -77,14 +91,41 @@ def registry_to_payload(registry: ClimateRegistry) -> dict[str, object]:
 def registry_from_payload(payload: object) -> ClimateRegistry:
     """Load an exact persisted/admin registry without permissive coercion."""
 
-    root = _exact_mapping(payload, {"version", "rooms", "devices"}, "registry")
+    root = _exact_mapping(
+        payload,
+        {"version", "home", "rooms", "devices"},
+        "registry",
+    )
     if type(root["version"]) is not int or root["version"] != REGISTRY_VERSION:
         raise ClimateRegistryViolation("unsupported climate registry version")
+    home = _exact_mapping(
+        root["home"],
+        {
+            "outdoor_temperature_entity_id",
+            "presence_entity_id",
+            "central_heating_entity_id",
+        },
+        "registry home",
+    )
     rooms = _bounded_list(root["rooms"], "registry rooms", 128)
     devices = _bounded_list(root["devices"], "registry devices", 512)
     try:
         return ClimateRegistry(
             version=root["version"],
+            home=ClimateHomeEnvironment(
+                outdoor_temperature_entity_id=_optional_entity(
+                    home["outdoor_temperature_entity_id"],
+                    "outdoor temperature entity",
+                ),
+                presence_entity_id=_optional_entity(
+                    home["presence_entity_id"],
+                    "presence entity",
+                ),
+                central_heating_entity_id=_optional_entity(
+                    home["central_heating_entity_id"],
+                    "central heating entity",
+                ),
+            ),
             rooms=tuple(_room(value, index) for index, value in enumerate(rooms)),
             devices=tuple(
                 _device(value, index) for index, value in enumerate(devices)
@@ -92,6 +133,44 @@ def registry_from_payload(payload: object) -> ClimateRegistry:
         )
     except (ClimateModelViolation, ValueError) as error:
         raise ClimateRegistryViolation(str(error)) from error
+
+
+def migrate_climate_registry_payload(
+    storage_version: int,
+    payload: object,
+) -> dict[str, object]:
+    """Migrate a stored version-1 registry to the exact current shape once.
+
+    The legacy shape carries no native observation bindings, so every new
+    field migrates to an absent binding. An absent binding keeps the matching
+    observation fact unknown; it never becomes a permissive default.
+    """
+
+    if storage_version == REGISTRY_VERSION:
+        # Home Assistant also calls the migrate hook when only the minor
+        # version differs; the exact round trip keeps that path safe.
+        return registry_to_payload(registry_from_payload(payload))
+    if storage_version != LEGACY_REGISTRY_VERSION:
+        raise ClimateRegistryViolation("unsupported stored climate registry version")
+    root = _exact_mapping(payload, {"version", "rooms", "devices"}, "stored registry")
+    if root.get("version") != LEGACY_REGISTRY_VERSION:
+        raise ClimateRegistryViolation(
+            "stored climate registry version does not match storage"
+        )
+    rooms = _bounded_list(root["rooms"], "registry rooms", 128)
+    devices = _bounded_list(root["devices"], "registry devices", 512)
+    try:
+        migrated = ClimateRegistry(
+            rooms=tuple(
+                _legacy_room(value, index) for index, value in enumerate(rooms)
+            ),
+            devices=tuple(
+                _device(value, index) for index, value in enumerate(devices)
+            ),
+        )
+    except (ClimateModelViolation, ValueError) as error:
+        raise ClimateRegistryViolation(str(error)) from error
+    return registry_to_payload(migrated)
 
 
 def reconcile_climate_registry(
@@ -128,8 +207,25 @@ def reconcile_climate_registry(
 
 
 def _room(value: object, index: int) -> ClimateRoom:
-    item = _exact_mapping(value, {"id", "name"}, f"room {index}")
+    item = _exact_mapping(value, {"id", "name", "window_entity_id"}, f"room {index}")
+    return ClimateRoom(
+        room_id=item["id"],  # type: ignore[arg-type]
+        name=item["name"],  # type: ignore[arg-type]
+        window_entity_id=_optional_entity(item["window_entity_id"], "window entity"),
+    )
+
+
+def _legacy_room(value: object, index: int) -> ClimateRoom:
+    item = _exact_mapping(value, {"id", "name"}, f"stored room {index}")
     return ClimateRoom(room_id=item["id"], name=item["name"])  # type: ignore[arg-type]
+
+
+def _optional_entity(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ClimateRegistryViolation(f"{label} must be an entity or unavailable")
+    return value
 
 
 def _device(value: object, index: int) -> ClimateDevice:

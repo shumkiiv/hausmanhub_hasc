@@ -38,7 +38,7 @@ def load_json(path: Path) -> object:
 
 
 def empty_registry() -> object:
-    return registry_from_payload({"version": 1, "rooms": [], "devices": []})
+    return registry_from_payload({"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []})
 
 
 class ClimateSetupDraftTest(unittest.TestCase):

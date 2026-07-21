@@ -7,14 +7,23 @@ payloads are built separately and never expose an endpoint entity identifier.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 import re
 
 
-REGISTRY_VERSION = 1
+REGISTRY_VERSION = 2
+LEGACY_REGISTRY_VERSION = 1
 _STABLE_ID = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _ENTITY_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
+
+_WINDOW_ENTITY_DOMAINS = frozenset({"binary_sensor"})
+_OUTDOOR_TEMPERATURE_ENTITY_DOMAINS = frozenset({"sensor"})
+_PRESENCE_ENTITY_DOMAINS = frozenset({"binary_sensor", "person", "device_tracker"})
+_CENTRAL_HEATING_ENTITY_DOMAINS = frozenset(
+    {"binary_sensor", "switch", "input_boolean"}
+)
+_PASSIVE_OBSERVATION_ENTITY_DOMAINS = frozenset({"sensor"})
 
 
 class ClimateModelViolation(ValueError):
@@ -97,6 +106,10 @@ _PASSIVE_KINDS = frozenset(
         ClimateDeviceKind.HUMIDITY_SENSOR,
     }
 )
+_PASSIVE_OBSERVATION_ROLES = {
+    ClimateDeviceKind.TEMPERATURE_SENSOR: ClimateEndpointRole.TEMPERATURE,
+    ClimateDeviceKind.HUMIDITY_SENSOR: ClimateEndpointRole.HUMIDITY,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,10 +118,47 @@ class ClimateRoom:
 
     room_id: str
     name: str
+    window_entity_id: str | None = None
 
     def __post_init__(self) -> None:
         _require_stable_id(self.room_id, "room id")
         _require_name(self.name, "room name")
+        _optional_entity_domain(
+            self.window_entity_id,
+            _WINDOW_ENTITY_DOMAINS,
+            "room window entity",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ClimateHomeEnvironment:
+    """Optional private Home Assistant bindings for home-wide climate facts.
+
+    Every binding is deliberately optional: an absent binding keeps the
+    corresponding observation fact honestly unknown instead of inventing a
+    permissive value.
+    """
+
+    outdoor_temperature_entity_id: str | None = None
+    presence_entity_id: str | None = None
+    central_heating_entity_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _optional_entity_domain(
+            self.outdoor_temperature_entity_id,
+            _OUTDOOR_TEMPERATURE_ENTITY_DOMAINS,
+            "outdoor temperature entity",
+        )
+        _optional_entity_domain(
+            self.presence_entity_id,
+            _PRESENCE_ENTITY_DOMAINS,
+            "presence entity",
+        )
+        _optional_entity_domain(
+            self.central_heating_entity_id,
+            _CENTRAL_HEATING_ENTITY_DOMAINS,
+            "central heating entity",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +231,17 @@ class ClimateDevice:
                 raise ClimateModelViolation("passive sensor must not have a control endpoint")
             if self.control_scope is not ClimateControlScope.OBSERVED:
                 raise ClimateModelViolation("passive sensor must remain observed")
+            observation_role = _PASSIVE_OBSERVATION_ROLES[self.kind]
+            for endpoint in self.endpoints:
+                if endpoint.role is not observation_role:
+                    raise ClimateModelViolation(
+                        "passive sensor endpoint role must match its kind"
+                    )
+                _require_entity_domain(
+                    endpoint.entity_id,
+                    _PASSIVE_OBSERVATION_ENTITY_DOMAINS,
+                    "passive sensor observation entity",
+                )
         elif len(control_endpoints) != 1:
             source_managed = (
                 not control_endpoints
@@ -212,11 +273,14 @@ class ClimateRegistry:
 
     rooms: tuple[ClimateRoom, ...] = ()
     devices: tuple[ClimateDevice, ...] = ()
+    home: ClimateHomeEnvironment = field(default_factory=ClimateHomeEnvironment)
     version: int = REGISTRY_VERSION
 
     def __post_init__(self) -> None:
         if self.version != REGISTRY_VERSION:
             raise ClimateModelViolation("unsupported climate registry version")
+        if not isinstance(self.home, ClimateHomeEnvironment):
+            raise ClimateModelViolation("home environment bindings are required")
         _require_unique((room.room_id for room in self.rooms), "room ids")
         _require_unique((device.device_id for device in self.devices), "device ids")
         _require_unique((device.source_id for device in self.devices), "device source ids")
@@ -246,6 +310,27 @@ class ClimateRegistry:
 def _require_stable_id(value: object, label: str) -> None:
     if not isinstance(value, str) or not _STABLE_ID.fullmatch(value):
         raise ClimateModelViolation(f"{label} must be a stable lowercase id")
+
+
+def _require_entity_domain(
+    value: object,
+    domains: frozenset[str],
+    label: str,
+) -> None:
+    if not isinstance(value, str) or not _ENTITY_ID.fullmatch(value):
+        raise ClimateModelViolation(f"{label} must be one Home Assistant entity")
+    if value.partition(".")[0] not in domains:
+        raise ClimateModelViolation(f"{label} has an unsupported entity domain")
+
+
+def _optional_entity_domain(
+    value: object,
+    domains: frozenset[str],
+    label: str,
+) -> None:
+    if value is None:
+        return
+    _require_entity_domain(value, domains, label)
 
 
 def _require_name(value: object, label: str) -> None:

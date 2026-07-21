@@ -40,8 +40,15 @@ def load_json(path: Path) -> object:
 def one_room_registry() -> object:
     return registry_from_payload(
         {
-            "version": 1,
-            "rooms": [{"id": "living", "name": "Гостиная"}],
+            "version": 2,
+            "home": {
+                "outdoor_temperature_entity_id": None,
+                "presence_entity_id": None,
+                "central_heating_entity_id": None,
+            },
+            "rooms": [
+                {"id": "living", "name": "Гостиная", "window_entity_id": None}
+            ],
             "devices": [],
         }
     )

@@ -167,7 +167,7 @@ class ClimateContractSchemasTest(unittest.TestCase):
         candidates = climate_device_candidates(registry, snapshot)
         suggestions = climate_room_suggestions(registry, snapshot)
         draft_registry = registry_from_payload(
-            {"version": 1, "rooms": [], "devices": []}
+            {"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []}
         )
         draft_request = load_json(
             ROOT / "fixtures" / "hausmanhub_climate_draft_v1" / "request.json"

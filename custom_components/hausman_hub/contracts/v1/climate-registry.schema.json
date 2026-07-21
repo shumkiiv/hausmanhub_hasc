@@ -1,22 +1,33 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/shumkiiv/hausmanhub_hacs/contracts/v1/climate-registry.schema.json",
-  "title": "HausmanHub private climate registry v1",
+  "title": "HausmanHub private climate registry, contract v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "rooms", "devices"],
+  "required": ["version", "home", "rooms", "devices"],
   "properties": {
-    "version": {"const": 1},
+    "version": {"const": 2},
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outdoor_temperature_entity_id", "presence_entity_id", "central_heating_entity_id"],
+      "properties": {
+        "outdoor_temperature_entity_id": {"$ref": "#/$defs/optional_entity_id"},
+        "presence_entity_id": {"$ref": "#/$defs/optional_entity_id"},
+        "central_heating_entity_id": {"$ref": "#/$defs/optional_entity_id"}
+      }
+    },
     "rooms": {
       "type": "array",
       "maxItems": 128,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name"],
+        "required": ["id", "name", "window_entity_id"],
         "properties": {
           "id": {"$ref": "#/$defs/stable_id"},
-          "name": {"$ref": "#/$defs/name"}
+          "name": {"$ref": "#/$defs/name"},
+          "window_entity_id": {"$ref": "#/$defs/optional_entity_id"}
         }
       }
     },
@@ -60,6 +71,12 @@
   },
   "$defs": {
     "stable_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
-    "name": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^\\S(?:.*\\S)?$"}
+    "name": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^\\S(?:.*\\S)?$"},
+    "optional_entity_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z0-9_]+$"}
+      ]
+    }
   }
 }

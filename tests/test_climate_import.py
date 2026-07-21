@@ -34,10 +34,15 @@ def registry_payload() -> dict[str, object]:
     """Return an exact configured registry with private synthetic bindings."""
 
     return {
-        "version": 1,
+        "version": 2,
+        "home": {
+            "outdoor_temperature_entity_id": None,
+            "presence_entity_id": None,
+            "central_heating_entity_id": None,
+        },
         "rooms": [
-            {"id": "living", "name": "Living room"},
-            {"id": "kids", "name": "Kids"},
+            {"id": "living", "name": "Living room", "window_entity_id": None},
+            {"id": "kids", "name": "Kids", "window_entity_id": None},
         ],
         "devices": [
             {
