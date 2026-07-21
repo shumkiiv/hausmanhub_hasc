@@ -1,11 +1,13 @@
 {
   "domain": "hausman_hub",
   "name": "HausmanHub",
-  "codeowners": ["@shumkiiv"],
+  "codeowners": [
+    "@shumkiiv"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/shumkiiv/hausmanhub_hacs",
   "issue_tracker": "https://github.com/shumkiiv/hausmanhub_hacs/issues",
   "integration_type": "hub",
   "single_config_entry": true,
-  "version": "1.9.7"
+  "version": "1.9.8"
 }
