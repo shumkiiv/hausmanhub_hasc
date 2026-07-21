@@ -23,6 +23,8 @@ FAKE_MODULE_NAMES = (
     "homeassistant.auth.const",
     "homeassistant.components",
     "homeassistant.components.http",
+    "homeassistant.components.frontend",
+    "homeassistant.components.panel_custom",
     "homeassistant.const",
     "homeassistant.core",
     "homeassistant.helpers",
@@ -76,9 +78,13 @@ class FakeHttp:
 
     def __init__(self) -> None:
         self.views: list[object] = []
+        self.static_paths: list[object] = []
 
     def register_view(self, view: object) -> None:
         self.views.append(view)
+
+    async def async_register_static_paths(self, configs: list[object]) -> None:
+        self.static_paths.extend(configs)
 
 
 class FakeConfigEntries:
@@ -323,6 +329,19 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     components = ModuleType("homeassistant.components")
     http = ModuleType("homeassistant.components.http")
     http.HomeAssistantView = FakeHomeAssistantView  # type: ignore[attr-defined]
+
+    class FakeStaticPathConfig:
+        def __init__(self, url_path: str, path: str, cache_headers: bool) -> None:
+            self.url_path = url_path
+            self.path = path
+            self.cache_headers = cache_headers
+
+    http.StaticPathConfig = FakeStaticPathConfig  # type: ignore[attr-defined]
+    frontend = ModuleType("homeassistant.components.frontend")
+    frontend.async_remove_panel = lambda hass, url_path, *, warn_if_unknown=True: None  # type: ignore[attr-defined]
+    frontend.async_panel_exists = lambda hass, url_path: False  # type: ignore[attr-defined]
+    panel_custom = ModuleType("homeassistant.components.panel_custom")
+    panel_custom.async_register_panel = lambda hass, **kwargs: None  # type: ignore[attr-defined]
     const = ModuleType("homeassistant.const")
     const.STATE_UNAVAILABLE = "unavailable"  # type: ignore[attr-defined]
     const.STATE_UNKNOWN = "unknown"  # type: ignore[attr-defined]
@@ -409,6 +428,8 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     homeassistant.helpers = helpers  # type: ignore[attr-defined]
     auth.const = auth_const  # type: ignore[attr-defined]
     components.http = http  # type: ignore[attr-defined]
+    components.frontend = frontend  # type: ignore[attr-defined]
+    components.panel_custom = panel_custom  # type: ignore[attr-defined]
     helpers.area_registry = area_registry  # type: ignore[attr-defined]
     helpers.device_registry = device_registry  # type: ignore[attr-defined]
     helpers.entity_registry = entity_registry  # type: ignore[attr-defined]
@@ -424,6 +445,8 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.auth.const": auth_const,
         "homeassistant.components": components,
         "homeassistant.components.http": http,
+        "homeassistant.components.frontend": frontend,
+        "homeassistant.components.panel_custom": panel_custom,
         "homeassistant.const": const,
         "homeassistant.core": core,
         "homeassistant.helpers": helpers,
@@ -436,6 +459,45 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.util": util,
         "homeassistant.util.dt": dt,
     }
+
+
+class _ManagedRecipeStore:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    async def async_load(self):
+        return self._value
+
+    async def async_save(self, value):
+        return None
+
+
+class _ManagedRecipeBridge:
+    def __init__(self, source: dict) -> None:
+        self._source = source
+        self.executed = []
+
+    async def async_fetch_state(self):
+        from custom_components.hausman_hub.application.climate_import import (
+            import_climate_state,
+        )
+
+        return import_climate_state(self._source)
+
+    async def async_execute(self, plan):
+        self.executed.append(plan)
+        room = self._source["rooms"][0]
+        if plan.action == "set_room_target_strategy":
+            room["targets"]["targetStrategy"] = plan.backend_payload[
+                "targetStrategy"
+            ]
+        elif plan.action == "set_room_target":
+            room["targets"]["temperature"] = plan.backend_payload[
+                "targetTemperature"
+            ]
+        elif plan.action == "set_room_mode":
+            room["mode"] = plan.backend_payload["mode"]
+        return {"ok": True}
 
 
 class LocalSummaryAccessTest(unittest.TestCase):
@@ -1695,8 +1757,8 @@ class LocalSummaryAccessTest(unittest.TestCase):
         self.assertEqual([], bridge.executed)
         self.assertEqual([], executor.batches)
 
-    def test_managed_contour_routes_apply_once_and_confirm_engine_state(self) -> None:
-        """The tablet may apply only saved settings through the managed contour."""
+    def _managed_climate_views(self):
+        """Build the managed runtime recipe and return the registered views."""
 
         from custom_components.hausman_hub.application.climate_import import (
             import_climate_state,
@@ -1744,48 +1806,12 @@ class LocalSummaryAccessTest(unittest.TestCase):
         registry, state_view = native_application_inputs(registry)
         executor = ReflectingStrictExecutor(state_view)
 
-        class Store:
-            async def async_load(self):
-                return registry
-
-            async def async_save(self, value):
-                return None
-
-        class ContourStore:
-            async def async_load(self):
-                return contours
-
-            async def async_save(self, value):
-                return None
-
-        class Bridge:
-            def __init__(self) -> None:
-                self.executed = []
-
-            async def async_fetch_state(self):
-                return import_climate_state(source)
-
-            async def async_execute(self, plan):
-                self.executed.append(plan)
-                room = source["rooms"][0]
-                if plan.action == "set_room_target_strategy":
-                    room["targets"]["targetStrategy"] = plan.backend_payload[
-                        "targetStrategy"
-                    ]
-                elif plan.action == "set_room_target":
-                    room["targets"]["temperature"] = plan.backend_payload[
-                        "targetTemperature"
-                    ]
-                elif plan.action == "set_room_mode":
-                    room["mode"] = plan.backend_payload["mode"]
-                return {"ok": True}
-
-        bridge = Bridge()
+        bridge = _ManagedRecipeBridge(source)
         runtime = ClimateRuntime(
             entry_id=self.entry.entry_id,
             configuration=configuration(ClimateBridgeMode.MANAGED),
-            registry_store=Store(),
-            contour_store=ContourStore(),
+            registry_store=_ManagedRecipeStore(registry),
+            contour_store=_ManagedRecipeStore(contours),
             bridge_client=bridge,
             strict_ha_call_executor=executor,
             ha_state_view=state_view,
@@ -1794,7 +1820,153 @@ class LocalSummaryAccessTest(unittest.TestCase):
         )
         asyncio.run(runtime.async_start())
         self.hass.data["hausman_hub"]["climate_runtime"] = runtime
-        views = {view.url: view for view in self.hass.http.views}
+        return (
+            {view.url: view for view in self.hass.http.views},
+            bridge,
+            executor,
+            registry,
+            contours,
+        )
+
+    def test_admin_panel_routes_serve_and_apply_for_a_local_admin(self) -> None:
+        """The sidebar panel endpoints answer only to a local administrator."""
+
+        views, bridge, executor, registry, contours = self._managed_climate_views()
+        admin = reader_user("system-admin", admin=True)
+        tablet = reader_user("system-users")
+
+        panel_path = "/api/hausman_hub/v1/admin/panel"
+        panel = asyncio.run(
+            views[panel_path].get(FakeRequest("192.168.1.20", admin, path=panel_path))
+        )
+        self.assertEqual(200, panel.status)
+        self.assertEqual(
+            {"name": "hausman-hub-admin-panel", "version": 1},
+            panel.payload["contract"],
+        )
+        self.assertEqual(
+            "hausman-hub-home", panel.payload["snapshot"]["contract"]["name"]
+        )
+        self.assertEqual(
+            "hausman-hub-climate-readiness",
+            panel.payload["readiness"]["contract"]["name"],
+        )
+        # The synthetic recipe binds a humidity sensor without a state, so
+        # native readiness honestly reports the unavailable device.
+        self.assertEqual("not_ready", panel.payload["readiness"]["status"])
+        self.assertEqual(["device_unavailable"], panel.payload["readiness"]["reasons"])
+        self.assertEqual(403, asyncio.run(
+            views[panel_path].get(
+                FakeRequest("192.168.1.20", tablet, path=panel_path)
+            )
+        ).status)
+        self.assertEqual(403, asyncio.run(
+            views[panel_path].get(
+                FakeRequest("192.168.1.20", reader_user("system-read-only"), path=panel_path)
+            )
+        ).status)
+
+        apply_path = "/api/hausman_hub/v1/admin/panel/apply"
+        apply_request = {
+            "request_id": "admin-panel-apply-1",
+            "contour_id": "climate",
+            "confirm": True,
+        }
+        applied = asyncio.run(
+            views[apply_path].post(
+                FakeJsonRequest("192.168.1.20", admin, apply_path, apply_request)
+            )
+        )
+        self.assertEqual(200, applied.status)
+        self.assertEqual(
+            "hausman-hub-climate-control-receipt",
+            applied.payload["contract"]["name"],
+        )
+        self.assertEqual("confirmed", applied.payload["status"])
+        self.assertEqual(403, asyncio.run(
+            views[apply_path].post(
+                FakeJsonRequest("192.168.1.20", tablet, apply_path, apply_request)
+            )
+        ).status)
+
+        from custom_components.hausman_hub.application.climate_runtime import (
+            ClimateRuntime,
+        )
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from tests.test_climate_runtime import (
+            ReflectingStrictExecutor,
+            configuration,
+            native_application_inputs,
+        )
+
+        registry, temporary_state_view = native_application_inputs(registry)
+        temporary_runtime = ClimateRuntime(
+            entry_id=self.entry.entry_id,
+            configuration=configuration(ClimateBridgeMode.MANAGED),
+            registry_store=_ManagedRecipeStore(registry),
+            contour_store=_ManagedRecipeStore(contours),
+            bridge_client=bridge,
+            strict_ha_call_executor=ReflectingStrictExecutor(temporary_state_view),
+            ha_state_view=temporary_state_view,
+            operation_id_factory=iter(("6" * 32,)).__next__,
+            now_ms=lambda: 1784280005000,
+        )
+        asyncio.run(temporary_runtime.async_start())
+        self.hass.data["hausman_hub"]["climate_runtime"] = temporary_runtime
+
+        temporary_path = "/api/hausman_hub/v1/admin/panel/temporary-temperature"
+        temporary_request = {
+            "request_id": "admin-panel-temp-1",
+            "contour_id": "climate",
+            "room_id": "living",
+            "action": "set",
+            "target_temperature": 23.5,
+            "confirm": True,
+        }
+        temporary = asyncio.run(
+            views[temporary_path].post(
+                FakeJsonRequest("192.168.1.20", admin, temporary_path, temporary_request)
+            )
+        )
+        self.assertEqual(200, temporary.status)
+        self.assertEqual("confirmed", temporary.payload["status"])
+        invalid = dict(temporary_request, request_id="admin-panel-temp-2", target_temperature=None)
+        self.assertEqual(400, asyncio.run(
+            views[temporary_path].post(
+                FakeJsonRequest("192.168.1.20", admin, temporary_path, invalid)
+            )
+        ).status)
+        malformed = FakeJsonRequest("192.168.1.20", admin, temporary_path, {})
+        malformed.content_type = "text/plain"
+        self.assertEqual(400, asyncio.run(
+            views[temporary_path].post(malformed)
+        ).status)
+        malformed_apply = FakeJsonRequest("192.168.1.20", admin, apply_path, apply_request)
+        malformed_apply.content_length = 0
+        self.assertEqual(400, asyncio.run(
+            views[apply_path].post(malformed_apply)
+        ).status)
+        self.assertEqual(403, asyncio.run(
+            views[temporary_path].post(
+                FakeJsonRequest("192.168.1.20", tablet, temporary_path, temporary_request)
+            )
+        ).status)
+        self.assertEqual([], bridge.executed)
+
+    def test_managed_contour_routes_apply_once_and_confirm_engine_state(self) -> None:
+        """The tablet may apply only saved settings through the managed contour."""
+
+        views, bridge, executor, registry, contours = self._managed_climate_views()
+        from custom_components.hausman_hub.application.climate_runtime import (
+            ClimateRuntime,
+        )
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from tests.test_climate_runtime import (
+            ReflectingStrictExecutor,
+            configuration,
+            native_application_inputs,
+        )
+
         tablet = reader_user("system-users")
 
         preview_path = "/api/hausman_hub/v1/contours/apply-preview"
@@ -1847,8 +2019,8 @@ class LocalSummaryAccessTest(unittest.TestCase):
         temporary_runtime = ClimateRuntime(
             entry_id=self.entry.entry_id,
             configuration=configuration(ClimateBridgeMode.MANAGED),
-            registry_store=Store(),
-            contour_store=ContourStore(),
+            registry_store=_ManagedRecipeStore(registry),
+            contour_store=_ManagedRecipeStore(contours),
             bridge_client=bridge,
             strict_ha_call_executor=temporary_executor,
             ha_state_view=temporary_state_view,
@@ -2084,7 +2256,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 self.assertFalse(hasattr(self.view, method))
 
         self.assertTrue(asyncio.run(self.integration.async_setup_entry(self.hass, self.entry)))
-        self.assertEqual(21, len(self.hass.http.views))
+        self.assertEqual(24, len(self.hass.http.views))
         self.assertEqual(
             1,
             sum(
@@ -2373,7 +2545,7 @@ class LocalSummaryAccessTest(unittest.TestCase):
             [(closed_entry, ("sensor", "switch"))],
             closed_hass.config_entries.forwarded,
         )
-        self.assertEqual(20, len(closed_hass.http.views))
+        self.assertEqual(23, len(closed_hass.http.views))
         self.assertEqual(
             {
                 "/api/hausman_hub/v1/capabilities",
@@ -2393,6 +2565,9 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 "/api/hausman_hub/v1/admin/climate-registry",
                 "/api/hausman_hub/v1/admin/climate-registry-preview",
                 "/api/hausman_hub/v1/admin/climate-readiness",
+                "/api/hausman_hub/v1/admin/panel",
+                "/api/hausman_hub/v1/admin/panel/apply",
+                "/api/hausman_hub/v1/admin/panel/temporary-temperature",
                 "/api/hausman_hub/v1/admin/climate-shadow-evidence",
                 "/api/hausman_hub/v1/admin/climate-canary-preflight",
                 "/api/hausman_hub/v1/operations",

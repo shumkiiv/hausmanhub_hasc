@@ -48,6 +48,9 @@ ADMIN_REGISTRY_PREVIEW_PATH = "/api/hausman_hub/v1/admin/climate-registry-previe
 ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
 ADMIN_SHADOW_EVIDENCE_PATH = "/api/hausman_hub/v1/admin/climate-shadow-evidence"
 ADMIN_CANARY_PREFLIGHT_PATH = "/api/hausman_hub/v1/admin/climate-canary-preflight"
+ADMIN_PANEL_PATH = "/api/hausman_hub/v1/admin/panel"
+ADMIN_PANEL_APPLY_PATH = "/api/hausman_hub/v1/admin/panel/apply"
+ADMIN_PANEL_TEMPORARY_PATH = "/api/hausman_hub/v1/admin/panel/temporary-temperature"
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 MAX_ACTION_BODY_BYTES = 16 * 1024
 MAX_CLIMATE_SETUP_BODY_BYTES = 256 * 1024
@@ -84,6 +87,9 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ClimateAdminRegistryView(hass),
             ClimateAdminRegistryPreviewView(hass),
             ClimateAdminReadinessView(hass),
+            ClimateAdminPanelView(hass),
+            ClimateAdminPanelApplyView(hass),
+            ClimateAdminPanelTemporaryView(hass),
             ClimateAdminShadowEvidenceView(hass),
             ClimateAdminCanaryPreflightView(hass),
             ClimateOperationView(hass),
@@ -717,6 +723,117 @@ class ClimateAdminReadinessView(_ClimateView):
         except Exception:
             return self._unavailable()
         return self.json(result, headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminPanelView(_ClimateView):
+    """Serve the combined admin panel read payload to a local admin."""
+
+    url = ADMIN_PANEL_PATH
+    name = "api:hausman_hub:climate_admin_panel"
+
+    async def get(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_PANEL_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            snapshot = await runtime.async_public_snapshot()
+            readiness = await runtime.async_readiness()
+        except Exception:
+            return self._unavailable()
+        return self.json(
+            {
+                "contract": {
+                    "name": "hausman-hub-admin-panel",
+                    "version": 1,
+                },
+                "snapshot": snapshot,
+                "readiness": readiness,
+            },
+            headers=NO_STORE_HEADERS,
+        )
+
+
+class ClimateAdminPanelApplyView(_ClimateView):
+    """Apply saved contour settings after explicit admin confirmation."""
+
+    url = ADMIN_PANEL_APPLY_PATH
+    name = "api:hausman_hub:climate_admin_panel_apply"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_PANEL_APPLY_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+        except ValueError:
+            return self.json_message(
+                "The climate contour application body is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        try:
+            receipt = await runtime.async_apply_contour(payload)
+        except ContourApplyViolation:
+            return self.json_message(
+                "The climate contour application is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        return self.json(receipt.as_payload(), headers=NO_STORE_HEADERS)
+
+
+class ClimateAdminPanelTemporaryView(_ClimateView):
+    """Set or clear one room temperature for an admin until the boundary."""
+
+    url = ADMIN_PANEL_TEMPORARY_PATH
+    name = "api:hausman_hub:climate_admin_panel_temporary"
+
+    async def post(self, request: Any) -> Any:
+        if not _is_exact_request(request, ADMIN_PANEL_TEMPORARY_PATH):
+            return _not_found(self)
+        if not _is_local_admin_request(request):
+            return _forbidden(self)
+        runtime = self._runtime()
+        if runtime is None:
+            return self._unavailable()
+        try:
+            payload = await _request_json(request)
+        except ValueError:
+            return self.json_message(
+                "The temporary climate temperature body is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        try:
+            receipt = await runtime.async_temporary_temperature(
+                payload,
+                dt_util.now(),
+            )
+        except TemporaryTemperatureViolation:
+            return self.json_message(
+                "The temporary climate temperature request is invalid.",
+                HTTPStatus.BAD_REQUEST,
+                headers=NO_STORE_HEADERS,
+            )
+        except ContourApplyViolation:
+            return self.json_message(
+                "The temporary climate temperature is not ready.",
+                HTTPStatus.CONFLICT,
+                headers=NO_STORE_HEADERS,
+            )
+        except ClimateRuntimeUnavailable:
+            return self._unavailable()
+        return self.json(receipt.as_payload(), headers=NO_STORE_HEADERS)
 
 
 class ClimateAdminShadowEvidenceView(_ClimateView):
