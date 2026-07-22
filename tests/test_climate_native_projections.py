@@ -15,14 +15,10 @@ from __future__ import annotations
 
 import unittest
 
-from custom_components.hausman_hub.application.android_climate import (
-    admin_climate_import_snapshot,
-    android_climate_snapshot,
-)
 from custom_components.hausman_hub.application.climate_ha_observations import (
     build_native_ha_climate_observation,
 )
-from custom_components.hausman_hub.application.climate_import import (
+from tests.climate_bridge_fixture import (
     import_climate_state,
 )
 from custom_components.hausman_hub.application.climate_native_projections import (
@@ -39,12 +35,8 @@ from custom_components.hausman_hub.application.contour_apply import (
 )
 from custom_components.hausman_hub.application.contours import (
     build_climate_contour_setup,
-    contour_snapshot,
 )
-from custom_components.hausman_hub.application.climate_runtime import (
-    _legacy_contour_apply_preview,
-)
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from custom_components.hausman_hub.domain.climate_observation import (
     ClimateDataStatus,
 )
@@ -157,45 +149,48 @@ def _with_data_status(observation, status: ClimateDataStatus):
 
 
 class NativeAndroidParityTest(unittest.TestCase):
-    """The tablet contract must match the legacy payload for the same facts."""
+    """Golden contract: the native tablet payload keeps its v12 shape."""
 
     def test_native_android_snapshot_matches_legacy_payload(self) -> None:
         registry, contours, legacy = _setup()
         bound, observation = _native_observation(registry, contours)
 
-        expected = android_climate_snapshot(
-            bound,
-            legacy,
-            contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
-        )
         result = native_android_climate_snapshot(
             bound,
             observation,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
+        self.assertEqual(
+            {"name": "hausman-hub-home", "version": 12}, result["contract"]
+        )
         self.assertEqual(GENERATED_AT, result["generated_at"])
         self.assertIsInstance(result["state_revision"], int)
-        # Locked semantic difference: legacy reconciliation reports the
-        # bridge-only humidifier as an unregistered source (matches False);
-        # native reconciliation covers only configured devices (matches True,
-        # zero unregistered). Everything else must be byte-identical.
-        legacy_reconciliation = expected.pop("reconciliation")
-        native_reconciliation = result.pop("reconciliation")
+        living = result["rooms"][0]
+        self.assertEqual("living", living["id"])
+        self.assertEqual("Living room", living["name"])
+        self.assertEqual(25.8, living["temperature"])
+        self.assertEqual(44.0, living["humidity"])
+        self.assertEqual(25.0, living["target_temperature"])
+        self.assertEqual("automatic", living["mode"])
         self.assertEqual(
             {
-                "matches": False,
-                "matched_device_ids": ["living_air_conditioner",
-                                       "living_humidity_observation",
-                                       "living_temperature_observation"],
-                "missing_device_ids": [],
-                "room_mismatch_device_ids": [],
-                "unregistered_device_count": 1,
+                "data_status": "current",
+                "temperature": 25.8,
+                "humidity": 44.0,
+                "mode": "automatic",
             },
-            legacy_reconciliation,
+            living["actual"],
         )
+        self.assertTrue(living["authority_eligible"])
+        self.assertEqual(3, len(living["devices"]))
+        ac = living["devices"][0]
+        self.assertEqual("living_air_conditioner", ac["id"])
+        self.assertEqual("working", ac["state"])
+        self.assertTrue(ac["available"])
+        self.assertEqual(1, len(result["contours"]))
+        self.assertEqual("climate", result["contours"][0]["id"])
         self.assertEqual(
             {
                 "matches": True,
@@ -206,29 +201,17 @@ class NativeAndroidParityTest(unittest.TestCase):
                 "room_mismatch_device_ids": [],
                 "unregistered_device_count": 0,
             },
-            native_reconciliation,
-        )
-        expected.pop("state_revision")
-        result.pop("state_revision")
-        self.assertEqual(
-            _normalize(expected),
-            _normalize(result),
+            result["reconciliation"],
         )
 
 
 class NativeContourParityTest(unittest.TestCase):
-    """The public contour projection must match the legacy payload."""
+    """Golden contract: the native contour projection keeps its v7 shape."""
 
     def test_native_contour_snapshot_matches_legacy_payload(self) -> None:
         registry, contours, legacy = _setup()
         bound, observation = _native_observation(registry, contours)
 
-        expected = contour_snapshot(
-            contours,
-            bound,
-            legacy,
-            settings_apply_enabled=True,
-        )
         result = native_contour_snapshot(
             contours,
             bound,
@@ -236,38 +219,34 @@ class NativeContourParityTest(unittest.TestCase):
             settings_apply_enabled=True,
         )
 
-        self.assertEqual(_normalize(expected), _normalize(result))
+        self.assertEqual(
+            {"name": "hausman-hub-contours", "version": 7}, result["contract"]
+        )
+        contour = result["contours"][0]
+        self.assertEqual("climate", contour["id"])
+        self.assertEqual("ready", contour["status"])
+        room = contour["rooms"][0]
+        self.assertEqual("living", room["id"])
+        self.assertEqual("ready", room["status"])
+        self.assertEqual({"temperature": 25.8, "humidity": 44.0}, room["current"])
+        self.assertTrue(room["targets_in_sync"])
+        self.assertTrue(contour["execution"]["automatic_active"])
 
 
 class NativeAdminParityTest(unittest.TestCase):
-    """The administrator payload must match registry-driven legacy content."""
+    """Golden contract: the native admin payload keeps its shape."""
 
     def test_native_admin_snapshot_matches_legacy_payload(self) -> None:
         registry, contours, legacy = _setup()
         bound, observation = _native_observation(registry, contours)
 
-        expected = admin_climate_import_snapshot(bound, legacy)
         result = native_admin_climate_import_snapshot(bound, observation)
 
-        self.assertEqual(expected["generated_at"], result["generated_at"])
-        self.assertEqual(expected["fresh"], result["fresh"])
-        # The native payload is scoped to configured rooms: the bridge-only
-        # "kids" room honestly disappears instead of being echoed.
+        self.assertEqual(GENERATED_AT, result["generated_at"])
+        self.assertTrue(result["fresh"])
         self.assertEqual(
             [{"id": "living", "name": "Living room", "authority_eligible": True}],
-            _normalize(result["rooms"]),
-        )
-        self.assertEqual(
-            {
-                "matches": False,
-                "matched_device_ids": ["living_air_conditioner",
-                                       "living_humidity_observation",
-                                       "living_temperature_observation"],
-                "missing_device_ids": [],
-                "room_mismatch_device_ids": [],
-                "unregistered_source_ids": ["synthetic-humidifier-source-kids"],
-            },
-            expected["reconciliation"],
+            result["rooms"],
         )
         self.assertEqual(
             {
@@ -281,37 +260,30 @@ class NativeAdminParityTest(unittest.TestCase):
             },
             result["reconciliation"],
         )
-        legacy_candidates = {
-            item["source_id"]: item for item in expected["candidates"]
-        }
-        native_candidates = {
+        candidates = {
             item["source_id"]: item for item in result["candidates"]
         }
-        # Native candidates are the configured devices only; the legacy
-        # payload additionally lists the unregistered bridge humidifier.
         self.assertEqual(
-            set(native_candidates) | {"synthetic-humidifier-source-kids"},
-            set(legacy_candidates),
+            {
+                "synthetic-ac-source-living",
+                "synthetic-living_temperature_observation",
+                "synthetic-living_humidity_observation",
+            },
+            set(candidates),
         )
-        for source_id, legacy_candidate in legacy_candidates.items():
-            if source_id == "synthetic-humidifier-source-kids":
-                continue
-            native_candidate = native_candidates[source_id]
-            self.assertEqual(legacy_candidate["name"], native_candidate["name"])
-            self.assertEqual(
-                legacy_candidate["room_id"], native_candidate["room_id"]
-            )
-            self.assertEqual(
-                legacy_candidate["available"], native_candidate["available"]
-            )
-            self.assertEqual(
-                set(legacy_candidate["command_types"]),
-                set(native_candidate["command_types"]),
-            )
-            self.assertEqual(
-                legacy_candidate["suggested_kinds"],
-                native_candidate["suggested_kinds"],
-            )
+        ac = candidates["synthetic-ac-source-living"]
+        self.assertEqual("living", ac["room_id"])
+        self.assertTrue(ac["available"])
+        self.assertEqual(["air_conditioner"], ac["suggested_kinds"])
+        self.assertEqual(
+            {
+                "climate.turn_off",
+                "climate.set_temperature",
+                "climate.set_hvac_mode",
+                "climate.set_fan_mode",
+            },
+            set(ac["command_types"]),
+        )
 
 
 class NativeReadinessTest(unittest.TestCase):
@@ -324,7 +296,7 @@ class NativeReadinessTest(unittest.TestCase):
         result = native_climate_readiness(
             bound,
             observation,
-            bridge_mode=ClimateBridgeMode.MANAGED,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         self.assertEqual("hausman-hub-climate-readiness", result["contract"]["name"])
@@ -354,7 +326,7 @@ class NativeReadinessTest(unittest.TestCase):
         result = native_climate_readiness(
             bound,
             None,
-            bridge_mode=ClimateBridgeMode.DISABLED,
+            bridge_mode=ClimateControlMode.DISABLED,
         )
 
         self.assertEqual("disabled", result["status"])
@@ -369,7 +341,7 @@ class NativeReadinessTest(unittest.TestCase):
         result = native_climate_readiness(
             bound,
             None,
-            bridge_mode=ClimateBridgeMode.MANAGED,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         self.assertEqual("unavailable", result["status"])
@@ -383,7 +355,7 @@ class NativeReadinessTest(unittest.TestCase):
         result = native_climate_readiness(
             bound,
             stale,
-            bridge_mode=ClimateBridgeMode.MANAGED,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         self.assertEqual("not_ready", result["status"])
@@ -399,11 +371,30 @@ class NativeApplyPreviewTest(unittest.TestCase):
         bound, observation = _native_observation(registry, contours)
         contour = contours.contour("climate")
 
-        legacy_result = _legacy_contour_apply_preview(contour, legacy)
+        legacy_result = {
+            "contract": {
+                "name": "hausman-hub-contour-apply-preview",
+                "version": 1,
+            },
+            "contour_id": "climate",
+            "status": "in_sync",
+            "ready": True,
+            "room_count": 1,
+            "command_count": 0,
+            "changes": {"temperature": 0, "strategy": 0, "automatic_mode": 0},
+            "requires_confirmation": True,
+            "parameters": {
+                "temperature": True,
+                "strategy": True,
+                "automatic_mode": True,
+                "humidity": False,
+            },
+            "limitations": ["room_humidity_command_not_supported"],
+        }
         result = native_contour_apply_preview(
             contour,
             bound,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             fingerprint=contour_fingerprint(contour),
         )
@@ -447,7 +438,7 @@ class NativeApplyPreviewTest(unittest.TestCase):
             native_contour_apply_preview(
                 contour,
                 bound,
-                ClimateBridgeMode.MANAGED,
+                ClimateControlMode.MANAGED,
                 partial,
                 fingerprint=contour_fingerprint(contour),
             )
@@ -482,7 +473,7 @@ class NativeFailClosedTest(unittest.TestCase):
             bound,
             stale,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
         contour_result = native_contour_snapshot(
             contours,
@@ -524,7 +515,7 @@ class NativeFailClosedTest(unittest.TestCase):
             bound,
             partial,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         living = android["rooms"][0]
@@ -561,7 +552,7 @@ class NativeReadinessHardeningTest(unittest.TestCase):
         result = native_climate_readiness(
             bound,
             partial,
-            bridge_mode=ClimateBridgeMode.MANAGED,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         self.assertEqual("not_ready", result["status"])
@@ -590,7 +581,7 @@ class NativeReadinessHardeningTest(unittest.TestCase):
         result = native_climate_readiness(
             bound,
             partial,
-            bridge_mode=ClimateBridgeMode.MANAGED,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         self.assertEqual("not_ready", result["status"])
@@ -598,35 +589,37 @@ class NativeReadinessHardeningTest(unittest.TestCase):
 
 
 class NativeControlGateTest(unittest.TestCase):
-    """The room control gate opens only with complete native evidence."""
+    """Direct room actions stay honestly blocked after the route retirement."""
 
     def _android(self, observation, **overrides):
         registry, contours, _ = _setup()
         bound, _ = _native_observation(registry, contours)
         arguments = {
             "contours": contours,
-            "bridge_mode": ClimateBridgeMode.CANARY,
-            "canary_room_id": "living",
-            "candidate_ready": True,
+            "bridge_mode": ClimateControlMode.MANAGED,
         }
         arguments.update(overrides)
         return native_android_climate_snapshot(bound, observation, **arguments)
 
-    def test_canary_room_control_opens_with_full_native_evidence(self) -> None:
+    def test_room_control_reports_no_actions_with_bounded_reasons(self) -> None:
         registry, contours, _ = _setup()
         _, observation = _native_observation(registry, contours)
 
         result = self._android(observation)
         control = result["rooms"][0]["control"]
 
-        self.assertTrue(result["climate"]["commands_enabled"])
-        self.assertTrue(control["enabled"])
-        self.assertEqual(
-            ["set_room_target", "turn_room_off"], control["allowed_actions"]
-        )
-        self.assertEqual([], control["blocked_reasons"])
+        self.assertFalse(result["climate"]["commands_enabled"])
+        self.assertFalse(control["enabled"])
+        self.assertEqual([], control["actions"])
+        self.assertEqual([], control["allowed_actions"])
+        self.assertEqual({}, control["action_availability"])
+        self.assertEqual({}, control["action_inputs"])
+        self.assertEqual({}, control["action_presentations"])
+        self.assertEqual(["actions_unsupported"], control["blocked_reasons"])
 
-    def test_canary_room_control_closes_on_each_single_mutation(self) -> None:
+    def test_room_control_reasons_cover_stale_pending_and_missing_data(
+        self,
+    ) -> None:
         registry, contours, _ = _setup()
         _, observation = _native_observation(registry, contours)
 
@@ -635,14 +628,6 @@ class NativeControlGateTest(unittest.TestCase):
         )["rooms"][0]["control"]
         self.assertFalse(stale["enabled"])
         self.assertIn("state_stale", stale["blocked_reasons"])
-
-        without_evidence = self._android(observation, candidate_ready=False)[
-            "rooms"
-        ][0]["control"]
-        self.assertFalse(without_evidence["enabled"])
-        self.assertIn(
-            "evidence_not_ready", without_evidence["blocked_reasons"]
-        )
 
         pending = self._android(observation, pending_room_ids=("living",))[
             "rooms"
@@ -679,13 +664,13 @@ class NativeGoldenContractTest(unittest.TestCase):
             bound,
             observation,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
         second = native_android_climate_snapshot(
             bound,
             observation,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
         )
 
         self.assertEqual(first["state_revision"], second["state_revision"])
@@ -715,3 +700,62 @@ class NativeGoldenContractTest(unittest.TestCase):
                 "command_types"
             ],
         )
+
+
+class NativeRetirementMigrationTest(unittest.TestCase):
+    """36g: retired bridge devices surface needs_reimport honestly."""
+
+    def test_control_endpoint_less_active_device_needs_reimport(self) -> None:
+        from custom_components.hausman_hub.application.climate_native_projections import (
+            native_readiness_reasons,
+        )
+        from custom_components.hausman_hub.domain.climate import ClimateRegistry
+
+        from dataclasses import replace as dc_replace
+
+        registry, contours, _ = _setup()
+        bound, observation = _native_observation(registry, contours)
+
+        bridge_bound = dc_replace(
+            bound.device("living_air_conditioner"),
+            endpoints=(),
+        )
+        quarantined_registry = ClimateRegistry(
+            rooms=bound.rooms,
+            devices=tuple(
+                bridge_bound
+                if device.device_id == "living_air_conditioner"
+                else device
+                for device in bound.devices
+            ),
+            home=bound.home,
+            version=bound.version,
+        )
+
+        reasons = native_readiness_reasons(
+            quarantined_registry,
+            observation,
+            fresh=True,
+            matches=True,
+        )
+
+        # The quarantined device honestly reports both its missing endpoint
+        # and the explicit re-import hint.
+        self.assertIn("needs_reimport", reasons)
+
+    def test_fully_bound_registry_has_no_reimport_reason(self) -> None:
+        from custom_components.hausman_hub.application.climate_native_projections import (
+            native_readiness_reasons,
+        )
+
+        registry, contours, _ = _setup()
+        bound, observation = _native_observation(registry, contours)
+
+        reasons = native_readiness_reasons(
+            bound,
+            observation,
+            fresh=True,
+            matches=True,
+        )
+
+        self.assertNotIn("needs_reimport", reasons)

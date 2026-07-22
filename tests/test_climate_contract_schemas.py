@@ -14,14 +14,26 @@ from jsonschema import Draft202012Validator
 from custom_components.hausman_hub.application.api_capabilities import (
     api_capabilities_snapshot,
 )
-from custom_components.hausman_hub.application.android_climate import (
-    admin_climate_import_snapshot,
-    android_climate_snapshot,
+from custom_components.hausman_hub.application.climate_native_projections import (
+    native_admin_climate_import_snapshot as admin_climate_import_snapshot,
+    native_android_climate_snapshot as android_climate_snapshot,
 )
-from custom_components.hausman_hub.application.climate_canary_preflight import (
-    climate_canary_preflight,
+from custom_components.hausman_hub.domain.climate_observation import (
+    ClimateControlObservation,
+    ClimateDataStatus,
+    ClimateDeviceActivity,
+    ClimateDeviceAvailability,
+    ClimateDeviceObservation,
+    ClimateHomeObservation,
+    ClimateObservationSnapshot,
+    ClimateRoomMode,
+    ClimateRoomObservation,
 )
-from custom_components.hausman_hub.application.climate_import import import_climate_state
+from custom_components.hausman_hub.domain.climate_observation import (
+    ClimateObservationDeviceKind,
+)
+
+from tests.climate_bridge_fixture import import_climate_state
 from custom_components.hausman_hub.application.climate_registry import registry_from_payload
 from custom_components.hausman_hub.application.climate_setup import (
     build_climate_contour_draft_setup,
@@ -34,12 +46,13 @@ from custom_components.hausman_hub.application.climate_setup import (
     current_climate_contour_setup,
     validate_climate_contour_draft,
 )
+from custom_components.hausman_hub.application.climate_native_projections import (
+    native_contour_snapshot,
+)
 from custom_components.hausman_hub.application.contours import (
     build_climate_contour_setup,
-    contour_snapshot,
 )
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
-from tests.test_climate_canary_preflight import NOW, ready_inputs
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,10 +84,6 @@ class ClimateContractSchemasTest(unittest.TestCase):
             "hausmanhub_climate_v1/registry.json": "v1/climate-registry.schema.json",
             "hausmanhub_climate_v1/readiness.json": "v1/climate-readiness.schema.json",
             "hausmanhub_climate_v1/registry-preview.json": "v1/climate-registry-preview.schema.json",
-            "hausmanhub_climate_v1/shadow-candidate-query.json": "v1/climate-shadow-candidate-query.schema.json",
-            "hausmanhub_climate_v1/shadow-evidence.json": "v1/climate-shadow-evidence.schema.json",
-            "hausmanhub_climate_v1/canary-preflight-query.json": "v1/climate-canary-preflight-query.schema.json",
-            "hausmanhub_climate_v1/canary-preflight.json": "v1/climate-canary-preflight.schema.json",
             "hausmanhub_climate_rooms_v1/rooms.json": "v1/climate-rooms.schema.json",
             "hausmanhub_climate_device_candidates_v1/candidates.json": "v1/climate-device-candidates.schema.json",
             "hausmanhub_climate_room_suggestions_v1/suggestions.json": "v1/climate-room-suggestions.schema.json",
@@ -155,14 +164,21 @@ class ClimateContractSchemasTest(unittest.TestCase):
             target_humidity=45,
             strategy="normal",
         )
+        from tests.test_climate_native_projections import (
+            _native_observation,
+        )
+
+        bound_registry, observation = _native_observation(
+            contour_climate_registry, contours
+        )
         home = android_climate_snapshot(
-            contour_climate_registry,
-            snapshot,
+            bound_registry,
+            observation,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
             local_now=LOCAL_NOW,
         )
-        admin = admin_climate_import_snapshot(registry, snapshot)
+        admin = admin_climate_import_snapshot(bound_registry, observation)
         rooms = climate_available_rooms(registry, snapshot)
         candidates = climate_device_candidates(registry, snapshot)
         suggestions = climate_room_suggestions(registry, snapshot)
@@ -222,13 +238,20 @@ class ClimateContractSchemasTest(unittest.TestCase):
         self.assertNotIn("source_id", serialized_home)
         self.assertNotIn("entity_id", serialized_home)
 
-        stale_source = load_json(SOURCE_FIXTURE)
-        stale_source["runtimeHealth"]["status"] = "stale"  # type: ignore[index]
+        stale_observation = type(observation)(
+            observed_at=observation.observed_at,
+            source_generated_at=observation.source_generated_at,
+            data_status=ClimateDataStatus.STALE,
+            home=observation.home,
+            control=observation.control,
+            rooms=observation.rooms,
+            devices=observation.devices,
+        )
         stale_home = android_climate_snapshot(
-            contour_climate_registry,
-            import_climate_state(stale_source),
+            bound_registry,
+            stale_observation,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
             local_now=LOCAL_NOW,
         )
         validator("v12/climate-home.schema.json").validate(stale_home)
@@ -237,16 +260,20 @@ class ClimateContractSchemasTest(unittest.TestCase):
             stale_home["rooms"][0]["actual"]["data_status"],  # type: ignore[index]
         )
 
-        missing_source = load_json(SOURCE_FIXTURE)
-        missing_source["rooms"] = []  # type: ignore[index]
-        missing_source["devices"] = []  # type: ignore[index]
-        missing_source["capabilities"] = []  # type: ignore[index]
-        missing_source["authorityReadiness"]["rooms"] = []  # type: ignore[index]
+        missing_observation = type(observation)(
+            observed_at=observation.observed_at,
+            source_generated_at=None,
+            data_status=ClimateDataStatus.UNAVAILABLE,
+            home=observation.home,
+            control=observation.control,
+            rooms=(),
+            devices=(),
+        )
         missing_home = android_climate_snapshot(
-            contour_climate_registry,
-            import_climate_state(missing_source),
+            bound_registry,
+            missing_observation,
             contours=contours,
-            bridge_mode=ClimateBridgeMode.SHADOW,
+            bridge_mode=ClimateControlMode.MANAGED,
             local_now=LOCAL_NOW,
         )
         validator("v12/climate-home.schema.json").validate(missing_home)
@@ -260,41 +287,11 @@ class ClimateContractSchemasTest(unittest.TestCase):
             missing_home["rooms"][0]["actual"],  # type: ignore[index]
         )
 
-        preflight_registry, preflight_snapshot, evidence = ready_inputs()
-        preflight = climate_canary_preflight(
-            preflight_registry,
-            preflight_snapshot,
-            evidence,
-            bridge_mode=ClimateBridgeMode.SHADOW,
-            room_id="living",
-            pending_operation=False,
-            checked_at=NOW,
-        )
-        validator("v1/climate-canary-preflight.schema.json").validate(preflight)
-
-        disabled_evidence = copy.deepcopy(evidence)
-        disabled_evidence["candidate"]["status"] = "blocked"  # type: ignore[index]
-        disabled_evidence["candidate"]["ready"] = False  # type: ignore[index]
-        disabled_evidence["candidate"]["reasons"] = [  # type: ignore[index]
-            "bridge_disabled"
-        ]
-        disabled_preflight = climate_canary_preflight(
-            preflight_registry,
-            None,
-            disabled_evidence,
-            bridge_mode=ClimateBridgeMode.DISABLED,
-            room_id="living",
-            pending_operation=False,
-            checked_at=NOW,
-        )
-        validator("v1/climate-canary-preflight.schema.json").validate(
-            disabled_preflight
-        )
-
-        generated_contours = contour_snapshot(
+        generated_contours = native_contour_snapshot(
             contours,
-            contour_climate_registry,
-            snapshot,
+            bound_registry,
+            observation,
+            settings_apply_enabled=True,
             local_now=LOCAL_NOW,
         )
         validator("v7/contours.schema.json").validate(generated_contours)

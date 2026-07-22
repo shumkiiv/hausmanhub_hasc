@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from custom_components.hausman_hub.application.climate_import import import_climate_state
+from tests.climate_bridge_fixture import import_climate_state
 from custom_components.hausman_hub.application.climate_observations import (
     build_climate_observation_snapshot,
 )

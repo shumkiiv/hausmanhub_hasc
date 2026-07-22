@@ -21,7 +21,7 @@ from custom_components.hausman_hub.application.climate_setup import (
 from custom_components.hausman_hub.application.contours import (
     contour_registry_to_payload,
 )
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from tests.test_climate_runtime import (
     MemoryBridge,
     MemoryContourStore,
@@ -184,10 +184,9 @@ class ClimateProfileUpdateTest(unittest.IsolatedAsyncioTestCase):
         bridge = MemoryBridge()
         runtime = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.SHADOW),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=registry_store,
             contour_store=contour_store,
-            bridge_client=bridge,
             now_ms=lambda: 1784512800000,
         )
         await runtime.async_start()
@@ -199,7 +198,8 @@ class ClimateProfileUpdateTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("saved", receipt["status"])
         self.assertTrue(receipt["schedule_enabled"])
-        self.assertFalse(receipt["automatic_application_pending"])
+        # Managed mode applies saved profiles natively on the next boundary.
+        self.assertTrue(receipt["automatic_application_pending"])
         self.assertEqual(fetches_before, bridge.fetch_count)
         self.assertEqual([], bridge.executed)
         self.assertEqual(1, len(contour_store.saved))
@@ -217,21 +217,23 @@ class ClimateProfileUpdateTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual([], bridge.executed)
 
-    async def test_runtime_blocks_profile_edits_while_live_canary_is_enabled(self) -> None:
+    async def test_managed_runtime_saves_profile_edits_without_a_bridge(self) -> None:
         registry, contours, _ = configured_setup()
+        contour_store = MemoryContourStore(contours)  # type: ignore[arg-type]
         runtime = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.CANARY),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(registry),  # type: ignore[arg-type]
-            contour_store=MemoryContourStore(contours),  # type: ignore[arg-type]
-            bridge_client=MemoryBridge(),
+            contour_store=contour_store,
         )
         await runtime.async_start()
 
-        with self.assertRaises(ClimateRuntimeUnavailable):
-            await runtime.async_update_climate_profiles(
-                request_for(registry, contours)
-            )
+        receipt = await runtime.async_update_climate_profiles(
+            request_for(registry, contours)
+        )
+
+        self.assertEqual("saved", receipt["status"])
+        self.assertEqual(1, len(contour_store.saved))
 
     async def test_managed_runtime_reports_pending_schedule_without_commanding_now(
         self,
@@ -241,10 +243,9 @@ class ClimateProfileUpdateTest(unittest.IsolatedAsyncioTestCase):
         bridge = MemoryBridge()
         runtime = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(registry),  # type: ignore[arg-type]
             contour_store=contour_store,
-            bridge_client=bridge,
             now_ms=lambda: 1784512800000,
         )
         await runtime.async_start()

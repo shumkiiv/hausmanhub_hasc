@@ -44,10 +44,7 @@ from custom_components.hausman_hub.domain.climate import (
 from custom_components.hausman_hub.domain.climate_isolation import ClimateRoomIsolationStatus
 from custom_components.hausman_hub.domain.climate_trial import ClimateTrialStatus
 from custom_components.hausman_hub.domain.climate_ha_calls import ClimateHaService
-from custom_components.hausman_hub.domain.climate_bridge import (
-    ClimateBridgeMode,
-    climate_bridge_target,
-)
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from custom_components.hausman_hub.domain.native_climate import (
     NativeClimateMode,
     NativeClimatePolicy,
@@ -65,22 +62,6 @@ from custom_components.hausman_hub.domain.contours import (
 )
 
 NOW = 1_800_000_000_000
-
-
-class PoisonBridge:
-    """A bridge that fails loudly on any use and counts every attempt."""
-
-    def __init__(self) -> None:
-        self.fetch_count = 0
-        self.execute_count = 0
-
-    async def async_fetch_state(self):
-        self.fetch_count += 1
-        raise RuntimeError("external climate module is gone")
-
-    async def async_execute(self, plan):
-        self.execute_count += 1
-        raise RuntimeError("external climate module is gone")
 
 
 class MemoryStore:
@@ -444,21 +425,17 @@ def two_actuator_states() -> dict[str, ClimateHaEntityState]:
     return states
 
 
-def configuration(mode: ClimateBridgeMode) -> SafeConfiguration:
+def configuration(mode: ClimateControlMode) -> SafeConfiguration:
     return SafeConfiguration(
         mode="shadow",
         climate_bridge_mode=mode,
-        climate_bridge_target=climate_bridge_target("http://127.0.0.1:1880"),
-        climate_canary_room_id=(
-            "living" if mode is ClimateBridgeMode.CANARY else None
-        ),
+        climate_canary_room_id=None,
     )
 
 
 def runtime(
-    mode: ClimateBridgeMode,
+    mode: ClimateControlMode,
     view: CountingStateView,
-    bridge: PoisonBridge,
     *,
     scope: ClimateControlScope = ClimateControlScope.CANARY,
     executor: RecordingTrialExecutor | None = None,
@@ -468,7 +445,6 @@ def runtime(
         configuration=configuration(mode),
         registry_store=MemoryStore(native_registry(scope)),
         contour_store=MemoryStore(native_contours()),
-        bridge_client=bridge,
         strict_ha_call_executor=executor,
         ha_state_view=view,
         now_ms=lambda: NOW,
@@ -476,11 +452,10 @@ def runtime(
 
 
 def native_application_runtime(
-    mode: ClimateBridgeMode,
+    mode: ClimateControlMode,
     view: MutableStateView,
     executor: ReflectingStrictExecutor,
     *,
-    bridge_client: PoisonBridge | None,
     scope: ClimateControlScope = ClimateControlScope.MANAGED,
     contours: ContourRegistry | None = None,
     registry: ClimateRegistry | None = None,
@@ -490,7 +465,6 @@ def native_application_runtime(
         configuration=configuration(mode),
         registry_store=MemoryStore(registry or native_registry(scope)),
         contour_store=MemoryStore(contours or native_contours()),
-        bridge_client=bridge_client,
         strict_ha_call_executor=executor,
         ha_state_view=view,
         now_ms=lambda: NOW,
@@ -502,11 +476,9 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
     """The internal pipeline runs from native states without the bridge."""
 
     async def test_native_pipeline_never_touches_the_bridge(self) -> None:
-        bridge = PoisonBridge()
         view = CountingStateView(healthy_states(ac_state="cool"))
-        instance = runtime(ClimateBridgeMode.MANAGED, view, bridge)
+        instance = runtime(ClimateControlMode.MANAGED, view)
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         isolation = await instance.async_native_climate_isolation()
 
@@ -514,12 +486,10 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         room = isolation.room("living")  # type: ignore[union-attr]
         self.assertIsNotNone(room)
         self.assertIs(room.status, ClimateRoomIsolationStatus.READY)
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
 
     async def test_trial_tick_executes_native_divergence_without_bridge(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         humidifier_registry = ClimateRegistry(
             rooms=(
                 ClimateRoom(
@@ -621,28 +591,24 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         executor = RecordingTrialExecutor()
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.CANARY),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(humidifier_registry),
             contour_store=MemoryStore(humidifier_contours),
-            bridge_client=bridge,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         receipt = await instance.async_run_climate_trial()
 
         self.assertIsNotNone(receipt)
         self.assertIs(receipt.status, ClimateTrialStatus.APPLIED)  # type: ignore[union-attr]
         self.assertEqual(1, len(executor.calls))
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
 
     async def test_disabled_mode_ignores_the_native_view(self) -> None:
-        bridge = PoisonBridge()
         view = CountingStateView(healthy_states(ac_state="cool"))
-        instance = runtime(ClimateBridgeMode.DISABLED, view, bridge)
+        instance = runtime(ClimateControlMode.DISABLED, view)
         await instance.async_start()
 
         isolation = await instance.async_native_climate_isolation()
@@ -651,7 +617,6 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         room = isolation.room("living")  # type: ignore[union-attr]
         self.assertIsNotNone(room)
         self.assertIsNot(room.status, ClimateRoomIsolationStatus.READY)
-        self.assertEqual(0, bridge.fetch_count)
         self.assertEqual(0, view.reads)
 
     async def test_broken_view_fails_closed_without_bridge_fallback(self) -> None:
@@ -662,20 +627,16 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
             def entity_state(self, entity_id: str) -> ClimateHaEntityState | None:
                 self.reads += 1
                 raise RuntimeError("state machine is broken")
-
-        bridge = PoisonBridge()
         broken = BrokenView()
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(native_registry(ClimateControlScope.MANAGED)),
             contour_store=MemoryStore(native_contours()),
-            bridge_client=bridge,
             ha_state_view=broken,
             now_ms=lambda: NOW,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         isolation = await instance.async_native_climate_isolation()
 
@@ -684,24 +645,20 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(room)
         self.assertIsNot(room.status, ClimateRoomIsolationStatus.READY)
         self.assertGreater(broken.reads, 0)
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
 
     async def test_preview_without_state_view_never_touches_the_bridge(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=MemoryStore(native_contours()),
-            bridge_client=bridge,
             now_ms=lambda: NOW,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         preview = await instance.async_native_climate_preview(
             NativeClimatePolicy(
@@ -713,33 +670,28 @@ class NativeObservationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual("unavailable", preview["status"])
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
 
     async def test_managed_rooms_without_state_view_deny_without_bridge(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         executor = RecordingTrialExecutor()
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=MemoryStore(native_contours()),
-            bridge_client=bridge,
             strict_ha_call_executor=executor,
             now_ms=lambda: NOW,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         receipts = await instance.async_run_climate_managed()
 
         self.assertEqual(1, len(receipts))
         self.assertIs(receipts[0].status, ClimateTrialStatus.DENIED)
         self.assertEqual([], executor.calls)
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
 
 
 class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
@@ -749,12 +701,11 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(native_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -786,29 +737,17 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
             ("set", 23.0, scheduled),
             ("clear", None, overridden),
         ):
-            for bridge_name, bridge_client in (
-                ("none", None),
-                ("poison", PoisonBridge()),
-            ):
-                with self.subTest(action=action, bridge=bridge_name):
+            for bridge_name, bridge_client in (("native", None),):
+                with self.subTest(action=action):
                     view = MutableStateView(safe_stop_states())
                     executor = ReflectingStrictExecutor(view)
                     instance = native_application_runtime(
-                        ClimateBridgeMode.MANAGED,
+                        ClimateControlMode.MANAGED,
                         view,
                         executor,
-                        bridge_client=bridge_client,
                         contours=contours,
                     )
                     await instance.async_start()
-                    bridge_baseline = (
-                        None
-                        if bridge_client is None
-                        else (
-                            bridge_client.fetch_count,
-                            bridge_client.execute_count,
-                        )
-                    )
 
                     receipt = await instance.async_temporary_temperature(
                         {
@@ -828,24 +767,16 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(1, receipt.command_count)
                     self.assertEqual(1, receipt.accepted_count)
                     self.assertEqual(1, len(executor.calls))
-                    if bridge_client is not None:
-                        self.assertEqual(
-                            bridge_baseline,
-                            (bridge_client.fetch_count, bridge_client.execute_count),
-                        )
 
     async def test_apply_never_uses_the_poison_bridge(self) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=bridge,
         )
         await instance.async_start()
-        bridge_baseline = (bridge.fetch_count, bridge.execute_count)
 
         applied = await instance.async_apply_contour(
             {
@@ -854,10 +785,6 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 "confirm": True,
             }
         )
-        self.assertEqual(
-            bridge_baseline,
-            (bridge.fetch_count, bridge.execute_count),
-        )
 
         self.assertIs(applied.status, ContourApplyStatus.CONFIRMED)
         self.assertEqual(1, len(executor.calls))
@@ -865,23 +792,20 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
     async def test_schedule_uses_native_application_without_the_poison_bridge(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view)
         contour_store = MemoryStore(temporary_native_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(native_registry(ClimateControlScope.MANAGED)),
             contour_store=contour_store,
-            bridge_client=bridge,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
             local_now=lambda: datetime(2026, 7, 19, 23, 0),
         )
         await instance.async_start()
-        bridge_baseline = (bridge.fetch_count, bridge.execute_count)
 
         receipt = await instance.async_run_climate_schedule(
             datetime(2026, 7, 19, 23, 0)
@@ -890,10 +814,6 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         if receipt is None:
             self.fail("schedule did not produce a receipt")
         self.assertIs(receipt.status, ContourApplyStatus.CONFIRMED)
-        self.assertEqual(
-            bridge_baseline,
-            (bridge.fetch_count, bridge.execute_count),
-        )
         self.assertEqual(1, len(contour_store.saved))
         self.assertEqual(1, len(executor.calls))
 
@@ -901,12 +821,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         for mode in (
-            ClimateBridgeMode.DISABLED,
-            ClimateBridgeMode.SHADOW,
-            ClimateBridgeMode.CANARY,
+            ClimateControlMode.DISABLED,
         ):
             with self.subTest(mode=mode):
-                bridge = PoisonBridge()
                 view = MutableStateView(safe_stop_states())
                 executor = ReflectingStrictExecutor(view)
                 contour_store = MemoryStore(temporary_native_contours())
@@ -917,7 +834,6 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                         native_registry(ClimateControlScope.MANAGED)
                     ),
                     contour_store=contour_store,
-                    bridge_client=bridge,
                     strict_ha_call_executor=executor,
                     ha_state_view=view,
                     now_ms=lambda: NOW,
@@ -925,7 +841,6 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 )
                 await instance.async_start()
                 reads_after_start = view.reads
-                fetches_after_start = bridge.fetch_count
 
                 receipt = await instance.async_run_climate_schedule(
                     datetime(2026, 7, 19, 23, 0)
@@ -934,8 +849,6 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(receipt)
                 self.assertEqual([], contour_store.saved)
                 self.assertEqual(reads_after_start, view.reads)
-                self.assertEqual(fetches_after_start, bridge.fetch_count)
-                self.assertEqual(0, bridge.execute_count)
                 self.assertEqual([], executor.calls)
 
     async def test_denied_schedule_persists_period_and_never_retries_a_partial_contour(
@@ -1018,10 +931,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(contours)
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(registry),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -1054,10 +966,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=None,
             contours=temporary_native_contours(),
         )
         await instance.async_start()
@@ -1085,10 +996,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=None,
             contours=temporary_native_contours(),
         )
         await instance.async_start()
@@ -1114,24 +1024,19 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_non_managed_modes_deny_before_native_reads_or_bridge_calls(self) -> None:
         for mode in (
-            ClimateBridgeMode.DISABLED,
-            ClimateBridgeMode.SHADOW,
-            ClimateBridgeMode.CANARY,
+            ClimateControlMode.DISABLED,
         ):
             with self.subTest(mode=mode):
-                bridge = PoisonBridge()
                 view = MutableStateView(safe_stop_states())
                 executor = ReflectingStrictExecutor(view)
                 instance = native_application_runtime(
                     mode,
                     view,
                     executor,
-                    bridge_client=bridge,
                     contours=temporary_native_contours(),
                 )
                 await instance.async_start()
                 reads_after_start = view.reads
-                fetches_after_start = bridge.fetch_count
 
                 with self.assertRaises(ClimateRuntimeUnavailable):
                     await instance.async_apply_contour(
@@ -1167,22 +1072,17 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                     )
 
                 self.assertEqual(reads_after_start, view.reads)
-                self.assertEqual(fetches_after_start, bridge.fetch_count)
-                self.assertEqual(0, bridge.execute_count)
                 self.assertEqual([], executor.calls)
 
     async def test_broken_native_view_denies_apply_without_executor_or_bridge(self) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=bridge,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
         view.broken = True
 
         receipt = await instance.async_apply_contour(
@@ -1197,22 +1097,17 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(("engine_rejected",), receipt.reasons)
         self.assertEqual(0, receipt.command_count)
         self.assertEqual([], executor.calls)
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
 
     async def test_broken_native_view_denies_schedule_without_calls(self) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=bridge,
             contours=temporary_native_contours(),
         )
         await instance.async_start()
-        bridge_baseline = (bridge.fetch_count, bridge.execute_count)
         view.broken = True
 
         receipt = await instance.async_run_climate_schedule(
@@ -1225,19 +1120,14 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(("engine_rejected",), receipt.reasons)
         self.assertEqual(0, receipt.command_count)
         self.assertEqual([], executor.calls)
-        self.assertEqual(
-            bridge_baseline,
-            (bridge.fetch_count, bridge.execute_count),
-        )
 
     async def test_preflight_denial_never_executes_a_partial_contour_batch(self) -> None:
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=None,
             scope=ClimateControlScope.CANARY,
         )
         await instance.async_start()
@@ -1270,10 +1160,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
                     completed_count=completed_count,
                 )
                 instance = native_application_runtime(
-                    ClimateBridgeMode.MANAGED,
+                    ClimateControlMode.MANAGED,
                     view,
                     executor,
-                    bridge_client=None,
                     registry=(two_actuator_registry() if completed_count else None),
                     contours=(two_actuator_contours() if completed_count else None),
                 )
@@ -1298,10 +1187,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=None,
         )
         await instance.async_start()
 
@@ -1328,10 +1216,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=None,
         )
         await instance.async_start()
 
@@ -1358,10 +1245,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
             break_view_after_execute=True,
         )
         broken = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             broken_view,
             broken_executor,
-            bridge_client=None,
         )
         await broken.async_start()
 
@@ -1384,10 +1270,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         view = MutableStateView(safe_stop_states())
         executor = ReflectingStrictExecutor(view, reflect_on_execute=False)
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             executor,
-            bridge_client=None,
         )
         await instance.async_start()
         request = {
@@ -1428,12 +1313,11 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(temporary_native_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -1489,12 +1373,11 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(temporary_native_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -1547,12 +1430,11 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(temporary_native_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -1607,10 +1489,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(temporary_two_actuator_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(two_actuator_registry()),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -1665,10 +1546,9 @@ class NativeApplicationRuntimeTest(unittest.IsolatedAsyncioTestCase):
         contour_store = MemoryStore(unrelated_broken_room_contours())
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(unrelated_broken_room_registry()),
             contour_store=contour_store,
-            bridge_client=None,
             strict_ha_call_executor=executor,
             ha_state_view=view,
             now_ms=lambda: NOW,
@@ -1787,16 +1667,13 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
     """36e2 poison acceptance: managed projections never touch the bridge."""
 
     async def test_managed_projections_run_without_the_bridge(self) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             ReflectingStrictExecutor(view),
-            bridge_client=bridge,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         public = await instance.async_public_snapshot()
         contours = await instance.async_contours_snapshot()
@@ -1820,16 +1697,12 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
             "synthetic-ac-source-living",
             admin["candidates"][0]["source_id"],  # type: ignore[index]
         )
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
 
     async def test_disabled_projections_never_touch_the_bridge(self) -> None:
-        bridge = PoisonBridge()
         view = CountingStateView(healthy_states(ac_state="cool"))
         instance = runtime(
-            ClimateBridgeMode.DISABLED,
+            ClimateControlMode.DISABLED,
             view,
-            bridge,
             scope=ClimateControlScope.MANAGED,
         )
         await instance.async_start()
@@ -1847,45 +1720,24 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("unavailable", contours["contours"][0]["status"])  # type: ignore[index]
         self.assertEqual("disabled", readiness["status"])
         self.assertEqual(["bridge_disabled"], readiness["reasons"])
-        self.assertEqual(0, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
 
-    async def test_shadow_projections_still_read_the_bridge(self) -> None:
-        bridge = PoisonBridge()
-        view = CountingStateView(healthy_states(ac_state="cool"))
-        instance = runtime(
-            ClimateBridgeMode.SHADOW,
-            view,
-            bridge,
-            scope=ClimateControlScope.CANARY,
-        )
-        await instance.async_start()
-        fetches_after_start = bridge.fetch_count
-
-        contours = await instance.async_contours_snapshot()
-
-        self.assertEqual("unavailable", contours["contours"][0]["status"])  # type: ignore[index]
-        self.assertGreater(bridge.fetch_count, fetches_after_start)
 
     async def test_managed_projections_fail_closed_without_a_state_view(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=MemoryStore(native_contours()),
-            bridge_client=bridge,
             strict_ha_call_executor=None,
             ha_state_view=None,
             now_ms=lambda: NOW,
             local_now=lambda: datetime(2026, 7, 19, 12, 0),
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         for call in (
             instance.async_public_snapshot,
@@ -1899,49 +1751,37 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("unavailable", contours["contours"][0]["status"])  # type: ignore[index]
         self.assertEqual("unavailable", readiness["status"])
         self.assertEqual(["climate_state_unavailable"], readiness["reasons"])
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
 
     async def test_wizards_never_touch_the_bridge_in_any_mode(self) -> None:
         for mode in (
-            ClimateBridgeMode.MANAGED,
-            ClimateBridgeMode.SHADOW,
-            ClimateBridgeMode.CANARY,
+            ClimateControlMode.MANAGED,
+            ClimateControlMode.DISABLED,
         ):
             with self.subTest(mode=mode):
-                bridge = PoisonBridge()
                 view = MutableStateView(safe_stop_states())
                 instance = native_application_runtime(
                     mode,
                     view,
                     ReflectingStrictExecutor(view),
-                    bridge_client=bridge,
                 )
                 await instance.async_start()
-                fetches_after_start = bridge.fetch_count
 
                 await instance.async_registry_import_snapshot()
                 await instance.async_climate_setup_options()
                 await instance.async_current_contour_setup()
 
-                self.assertEqual(fetches_after_start, bridge.fetch_count)
-                self.assertEqual(0, bridge.execute_count)
-
     async def test_wizards_fail_closed_without_a_state_view(self) -> None:
-        bridge = PoisonBridge()
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(
                 native_registry(ClimateControlScope.MANAGED)
             ),
             contour_store=MemoryStore(native_contours()),
-            bridge_client=bridge,
             ha_state_view=None,
             now_ms=lambda: NOW,
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         calls = (
             (instance.async_registry_import_snapshot, ()),
@@ -1961,13 +1801,9 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
                         f"{call.__name__} raised {type(error).__name__}"
                     ) from error
 
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
-
     async def test_managed_draft_save_binds_native_candidate_without_bridge(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         contour_store = MemoryStore(ContourRegistry())
         registry_store = MemoryStore(
@@ -1984,17 +1820,15 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
         )
         instance = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=registry_store,
             contour_store=contour_store,
-            bridge_client=bridge,
             strict_ha_call_executor=ReflectingStrictExecutor(view),
             ha_state_view=view,
             now_ms=lambda: NOW,
             local_now=lambda: datetime(2026, 7, 19, 12, 0),
         )
         await instance.async_start()
-        fetches_after_start = bridge.fetch_count
 
         options = await instance.async_climate_setup_options()
         draft = await instance.async_create_contour_draft(
@@ -2030,8 +1864,6 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual("living", device.room_id)
         self.assertEqual("living_air_conditioner", device.device_id)
-        self.assertEqual(fetches_after_start, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
 
 
 class NativeStartupLifecycleTest(unittest.IsolatedAsyncioTestCase):
@@ -2042,10 +1874,9 @@ class NativeStartupLifecycleTest(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         view = MutableStateView(safe_stop_states())
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             ReflectingStrictExecutor(view),
-            bridge_client=None,
         )
         await instance.async_start()
 
@@ -2060,45 +1891,26 @@ class NativeStartupLifecycleTest(unittest.IsolatedAsyncioTestCase):
     async def test_managed_with_a_poison_bridge_target_never_builds_a_call(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             ReflectingStrictExecutor(view),
-            bridge_client=bridge,
         )
         await instance.async_start()
 
         await instance.async_public_snapshot()
         await instance.async_readiness()
 
-        self.assertEqual(0, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
-
-    async def test_shadow_still_requires_the_bridge_at_startup(self) -> None:
-        bridge = PoisonBridge()
-        view = CountingStateView(healthy_states(ac_state="cool"))
-        instance = runtime(
-            ClimateBridgeMode.SHADOW,
-            view,
-            bridge,
-            scope=ClimateControlScope.CANARY,
-        )
-        await instance.async_start()
-
-        self.assertGreater(bridge.fetch_count, 0)
 
     async def test_disabled_wizard_observes_natively_without_the_bridge(
         self,
     ) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         instance = native_application_runtime(
-            ClimateBridgeMode.DISABLED,
+            ClimateControlMode.DISABLED,
             view,
             ReflectingStrictExecutor(view),
-            bridge_client=bridge,
         )
         await instance.async_start()
 
@@ -2108,53 +1920,27 @@ class NativeStartupLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(options["data_status"] in {"current", "stale"})
         self.assertEqual(1, len(snapshot.rooms))
         self.assertEqual("living", snapshot.rooms[0].room_id)
-        self.assertEqual(0, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
 
     async def test_legacy_bridge_routes_are_rejected_in_managed(self) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             ReflectingStrictExecutor(view),
-            bridge_client=bridge,
         )
         await instance.async_start()
 
-        calls = (
-            (instance.async_shadow_evidence, ({"room_id": "living"},)),
-            (instance.async_canary_preflight, ({"room_id": "living"},)),
-        )
-        for call, args in calls:
-            with self.subTest(call=call.__name__):
-                try:
-                    await call(*args)
-                except ClimateRuntimeUnavailable:
-                    pass
-
-        self.assertEqual(0, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
+        for method in ("async_shadow_evidence", "async_canary_preflight"):
+            with self.subTest(method=method):
+                self.assertFalse(hasattr(instance, method))
 
     async def test_legacy_canary_action_is_rejected_in_managed(self) -> None:
-        bridge = PoisonBridge()
         view = MutableStateView(safe_stop_states())
         instance = native_application_runtime(
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             view,
             ReflectingStrictExecutor(view),
-            bridge_client=bridge,
         )
         await instance.async_start()
 
-        with self.assertRaises(ClimateRuntimeUnavailable):
-            await instance.async_action(
-                {
-                    "action": "set_room_target",
-                    "room_id": "living",
-                    "target_temperature": 23.0,
-                }
-            )
-
-        self.assertEqual(0, bridge.fetch_count)
-        self.assertEqual(0, bridge.execute_count)
+        self.assertFalse(hasattr(instance, "async_action"))

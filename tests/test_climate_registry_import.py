@@ -6,10 +6,23 @@ import copy
 import json
 import unittest
 
-from custom_components.hausman_hub.application.android_climate import (
-    android_climate_snapshot,
+from custom_components.hausman_hub.application.climate_native_projections import (
+    native_android_climate_snapshot,
 )
-from custom_components.hausman_hub.application.climate_import import (
+from custom_components.hausman_hub.application.climate_native_setup import (
+    ClimateHaCatalogEntry,
+    ClimateHaEntityCatalog,
+    build_native_climate_setup_snapshot,
+)
+from custom_components.hausman_hub.domain.climate_observation import (
+    ClimateControlObservation,
+    ClimateDataStatus,
+    ClimateHomeObservation,
+    ClimateObservationSnapshot,
+    ClimateRoomObservation,
+    ClimateRoomMode,
+)
+from tests.climate_bridge_fixture import (
     import_climate_state,
 )
 from custom_components.hausman_hub.application.climate_registry_import import (
@@ -20,7 +33,7 @@ from custom_components.hausman_hub.application.climate_registry_import import (
     import_managed_climate_selection,
 )
 from custom_components.hausman_hub.domain.climate import ClimateRegistry
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from tests.test_climate_import import source_payload
 
 
@@ -74,11 +87,34 @@ class ClimateRegistryImportTest(unittest.TestCase):
         )
         self.assertEqual("climate", candidate_control_domain("air_conditioner"))
 
+        observation = ClimateObservationSnapshot(
+            observed_at=snapshot.generated_at,
+            source_generated_at=snapshot.generated_at,
+            data_status=ClimateDataStatus.FRESH,
+            home=ClimateHomeObservation(),
+            control=ClimateControlObservation(),
+            rooms=tuple(
+                ClimateRoomObservation(
+                    room_id=room.room_id,
+                    name=room.name,
+                    data_status=ClimateDataStatus.FRESH,
+                    mode=ClimateRoomMode.AUTO,
+                )
+                for room in registry.rooms
+            ),
+            devices=(),
+        )
+        catalog = ClimateHaEntityCatalog(entries=())
+        native_snapshot = build_native_climate_setup_snapshot(
+            registry,
+            observation,
+            catalog,
+        )
         public = json.dumps(
-            android_climate_snapshot(
+            native_android_climate_snapshot(
                 registry,
-                snapshot,
-                bridge_mode=ClimateBridgeMode.SHADOW,
+                observation,
+                bridge_mode=ClimateControlMode.MANAGED,
             ),
             sort_keys=True,
         )

@@ -6,7 +6,7 @@ from dataclasses import asdict, replace
 import math
 import unittest
 
-from custom_components.hausman_hub.application.climate_import import (
+from tests.climate_bridge_fixture import (
     import_climate_state,
 )
 from custom_components.hausman_hub.application.climate_observations import (

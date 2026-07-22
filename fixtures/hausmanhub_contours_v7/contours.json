@@ -136,7 +136,8 @@
       "device_unavailable": "Устройство недоступно",
       "actions_unsupported": "Устройство не поддерживает нужные действия",
       "evidence_not_ready": "Проверка безопасности ещё не завершена",
-      "operation_pending": "Предыдущее действие ещё проверяется"
+      "operation_pending": "Предыдущее действие ещё проверяется",
+      "needs_reimport": "Устройство нужно подключить заново"
     },
     "contour_reasons": {
       "room_state_unavailable": "Нет данных о комнате",
@@ -149,7 +150,6 @@
       "target_strategy_unavailable": "Характер работы не поддерживается",
       "target_strategy_differs": "Характер работы ещё не применён"
     },
-
     "contour_kinds": {
       "climate": "Климат"
     },

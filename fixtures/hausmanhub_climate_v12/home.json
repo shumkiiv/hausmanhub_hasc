@@ -4,7 +4,7 @@
     "version": 12
   },
   "generated_at": 1784280000000,
-  "state_revision": 8429442230358501,
+  "state_revision": 3177416349680421,
   "climate": {
     "fresh": true,
     "commands_enabled": false
@@ -264,7 +264,8 @@
       "device_unavailable": "Устройство недоступно",
       "actions_unsupported": "Устройство не поддерживает нужные действия",
       "evidence_not_ready": "Проверка безопасности ещё не завершена",
-      "operation_pending": "Предыдущее действие ещё проверяется"
+      "operation_pending": "Предыдущее действие ещё проверяется",
+      "needs_reimport": "Устройство нужно подключить заново"
     },
     "contour_reasons": {
       "room_state_unavailable": "Нет данных о комнате",
@@ -277,7 +278,6 @@
       "target_strategy_unavailable": "Характер работы не поддерживается",
       "target_strategy_differs": "Характер работы ещё не применён"
     },
-
     "contour_kinds": {
       "climate": "Климат"
     },

@@ -784,66 +784,10 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(disarmed["data"]["canary_control_enabled"])
         self.assertNotIn("canary_control_target", disarmed["data"])
 
-    async def test_options_configure_shadow_and_one_room_canary(self) -> None:
-        """The form persists only a private literal origin and stable room id."""
-
-        options_flow = self.config_flow.HausmanHubOptionsFlow()
-        options_flow.config_entry = FakeConfigEntry(
-            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
-            {},
-        )
-        connection = await options_flow.async_step_climate_connection()
-        self.assert_climate_connection_fields(connection["schema"], "disabled")
-        endpoint = await options_flow.async_step_climate_connection(
-            {"climate_bridge_mode": "shadow"}
-        )
-        self.assert_climate_endpoint_fields(
-            endpoint["schema"], target_default=None, expect_room=False
-        )
-        shadow = await options_flow.async_step_climate_endpoint(
-            {"climate_bridge_target": "http://127.0.0.1:1880"}
-        )
-        self.assertEqual("create_entry", shadow["type"])
-        self.assertEqual("shadow", shadow["data"]["climate_bridge_mode"])
-        self.assertNotIn("climate_canary_room_id", shadow["data"])
-
-        options_flow.config_entry.options = dict(shadow["data"])
-        form = await options_flow.async_step_climate_connection()
-        self.assert_climate_connection_fields(
-            form["schema"],
-            "shadow",
-        )
-
-        canary_endpoint = await options_flow.async_step_climate_connection(
-            {"climate_bridge_mode": "canary"}
-        )
-        self.assert_climate_endpoint_fields(
-            canary_endpoint["schema"],
-            target_default="http://127.0.0.1:1880",
-            expect_room=True,
-        )
-        canary = await options_flow.async_step_climate_endpoint(
-            {
-                "climate_bridge_target": "http://127.0.0.1:1880",
-                "climate_canary_room_id": "living",
-            }
-        )
-        self.assertEqual("create_entry", canary["type"])
-        self.assertEqual("living", canary["data"]["climate_canary_room_id"])
-
-        options_flow.config_entry.options = dict(canary["data"])
-        disabled = await options_flow.async_step_climate_connection(
-            {"climate_bridge_mode": "disabled"}
-        )
-        self.assertEqual("create_entry", disabled["type"])
-        self.assertEqual("disabled", disabled["data"]["climate_bridge_mode"])
-        self.assertNotIn("climate_bridge_target", disabled["data"])
-        self.assertNotIn("climate_canary_room_id", disabled["data"])
-
     async def test_options_preview_one_room_native_climate_without_commands(self) -> None:
         """The built-in HausmanHub controller stores targets only after preview."""
 
-        from custom_components.hausman_hub.application.climate_import import (
+        from tests.climate_bridge_fixture import (
             import_climate_state,
         )
         from custom_components.hausman_hub.application.climate_ha_observations import (
@@ -853,7 +797,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             registry_from_payload,
         )
         from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
-        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
         from custom_components.hausman_hub.domain.configuration import SafeConfiguration
         from tests.test_climate_import import registry_payload, source_payload
 
@@ -902,10 +846,9 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             entry_id="entry",
             configuration=SafeConfiguration(
                 mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.SHADOW,
+                climate_bridge_mode=ClimateControlMode.MANAGED,
             ),
             registry_store=Store(),
-            bridge_client=bridge,
             ha_state_view=state_view,
             now_ms=lambda: 1784280005000,
         )
@@ -989,7 +932,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
     async def test_simple_contour_wizard_selects_existing_engine_devices(self) -> None:
         """The normal path creates one contour without technical registry fields."""
 
-        from custom_components.hausman_hub.application.climate_import import (
+        from tests.climate_bridge_fixture import (
             import_climate_state,
         )
         from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
@@ -998,7 +941,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             ClimateRoom,
         )
         from custom_components.hausman_hub.domain.climate_bridge import (
-            ClimateBridgeMode,
+            ClimateControlMode,
             climate_bridge_target,
         )
         from custom_components.hausman_hub.domain.configuration import SafeConfiguration
@@ -1076,14 +1019,13 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             entry_id="entry",
             configuration=SafeConfiguration(
                 mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.MANAGED,
+                climate_bridge_mode=ClimateControlMode.MANAGED,
                 climate_bridge_target=climate_bridge_target(
                     "http://127.0.0.1:1880"
                 ),
             ),
             registry_store=climate_store,
             contour_store=contour_store,
-            bridge_client=bridge,
             ha_state_view=SnapshotStateView(
                 climate_store.registry, BridgeView(bridge)
             ),
@@ -1486,7 +1428,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
     async def test_contour_wizard_collects_each_room_parameters_separately(
         self,
     ) -> None:
-        from custom_components.hausman_hub.application.climate_import import (
+        from tests.climate_bridge_fixture import (
             import_climate_state,
         )
         from tests.test_climate_import import source_payload
@@ -1643,12 +1585,12 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
     async def test_options_registry_setup_previews_then_requires_atomic_confirmation(self) -> None:
         """The local admin flow must not save a registry from the edit step."""
 
-        from custom_components.hausman_hub.application.climate_import import (
+        from tests.climate_bridge_fixture import (
             import_climate_state,
         )
         from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
         from custom_components.hausman_hub.domain.climate import ClimateRegistry
-        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
         from custom_components.hausman_hub.domain.configuration import SafeConfiguration
         from tests.test_climate_import import registry_payload, source_payload
 
@@ -1671,15 +1613,27 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             async def async_execute(self, plan):
                 raise AssertionError("registry setup must not execute a command")
 
+        from custom_components.hausman_hub.application.climate_registry import (
+            registry_from_payload,
+        )
+        from tests.test_climate_runtime import SnapshotStateView
+
         store = Store()
+
+        class BridgeView:
+            snapshot = import_climate_state(source_payload())
+
         runtime = ClimateRuntime(
             entry_id="entry",
             configuration=SafeConfiguration(
                 mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.SHADOW,
+                climate_bridge_mode=ClimateControlMode.MANAGED,
             ),
             registry_store=store,
-            bridge_client=Bridge(),
+            ha_state_view=SnapshotStateView(
+                registry_from_payload(registry_payload()),
+                BridgeView(),
+            ),
         )
         await runtime.async_start()
         options_flow = self.config_flow.HausmanHubOptionsFlow()
@@ -1749,12 +1703,12 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
     async def test_options_import_candidates_without_private_id_copying(self) -> None:
         """Opaque selector choices populate private bindings only after confirmation."""
 
-        from custom_components.hausman_hub.application.climate_import import (
+        from tests.climate_bridge_fixture import (
             import_climate_state,
         )
         from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
         from custom_components.hausman_hub.domain.climate import ClimateRegistry
-        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
         from custom_components.hausman_hub.domain.configuration import SafeConfiguration
         from tests.test_climate_import import source_payload
 
@@ -1809,10 +1763,9 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             entry_id="entry",
             configuration=SafeConfiguration(
                 mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.SHADOW,
+                climate_bridge_mode=ClimateControlMode.MANAGED,
             ),
             registry_store=store,
-            bridge_client=bridge,
             ha_state_view=state_view,
         )
         await runtime.async_start()
@@ -1936,193 +1889,3 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual([], bridge.executed)
 
-    async def test_options_show_redacted_shadow_evidence_without_saving(self) -> None:
-        """The guided setup exposes candidate readiness as a read-only screen."""
-
-        from custom_components.hausman_hub.application.climate_import import (
-            import_climate_state,
-        )
-        from custom_components.hausman_hub.application.climate_registry import (
-            registry_from_payload,
-        )
-        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
-        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
-        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
-        from tests.test_climate_import import registry_payload, source_payload
-
-        class Store:
-            def __init__(self) -> None:
-                self.saved = []
-
-            async def async_load(self):
-                return registry_from_payload(registry_payload())
-
-            async def async_save(self, registry):
-                self.saved.append(registry)
-
-        class Bridge:
-            def __init__(self) -> None:
-                self.executed = []
-
-            async def async_fetch_state(self):
-                return import_climate_state(source_payload())
-
-            async def async_execute(self, plan):
-                self.executed.append(plan)
-
-        store = Store()
-        bridge = Bridge()
-        runtime = ClimateRuntime(
-            entry_id="entry",
-            configuration=SafeConfiguration(
-                mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.SHADOW,
-            ),
-            registry_store=store,
-            bridge_client=bridge,
-            now_ms=lambda: 1784280005000,
-        )
-        await runtime.async_start()
-        options_flow = self.config_flow.HausmanHubOptionsFlow()
-        options_flow.config_entry = FakeConfigEntry(
-            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
-            {"mode": "shadow"},
-        )
-        options_flow.hass = SimpleNamespace(  # type: ignore[attr-defined]
-            data={"hausman_hub": {"climate_runtime": runtime}}
-        )
-
-        await options_flow.async_step_init({"settings_section": "advanced_settings"})
-        await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "climate_registry"}
-        )
-        candidate_form = await options_flow.async_step_climate_registry(
-            {"climate_registry_action": "review_shadow_evidence"}
-        )
-        evidence_form = await options_flow.async_step_climate_shadow_candidate(
-            {"climate_shadow_candidate_room": "living"}
-        )
-
-        self.assertEqual("climate_shadow_candidate", candidate_form["step_id"])
-        self.assertEqual("climate_shadow_evidence", evidence_form["step_id"])
-        self.assertEqual(
-            "Living room",
-            evidence_form["description_placeholders"]["room_id"],
-        )
-        self.assertEqual(
-            "нужно больше наблюдений",
-            evidence_form["description_placeholders"]["status"],
-        )
-        self.assertEqual([], store.saved)
-        self.assertEqual([], bridge.executed)
-        returned = await options_flow.async_step_climate_shadow_evidence(
-            {"close_shadow_evidence": True}
-        )
-        self.assertEqual("climate_registry", returned["step_id"])
-
-    async def test_options_show_complete_canary_preflight_without_activation(
-        self,
-    ) -> None:
-        """One screen combines only redacted rollout checks and cannot save."""
-
-        from custom_components.hausman_hub.application.climate_import import (
-            import_climate_state,
-        )
-        from custom_components.hausman_hub.application.climate_registry import (
-            registry_from_payload,
-        )
-        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
-        from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
-        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
-        from tests.test_climate_import import complete_registry_payload, source_payload
-        from tests.test_climate_runtime import ready_evidence_store
-
-        registry = complete_registry_payload()
-
-        class Store:
-            def __init__(self) -> None:
-                self.saved = []
-
-            async def async_load(self):
-                return registry_from_payload(registry)
-
-            async def async_save(self, value):
-                self.saved.append(value)
-
-        class Bridge:
-            def __init__(self) -> None:
-                self.executed = []
-
-            async def async_fetch_state(self):
-                return import_climate_state(source_payload())
-
-            async def async_execute(self, plan):
-                self.executed.append(plan)
-
-        store = Store()
-        bridge = Bridge()
-        runtime = ClimateRuntime(
-            entry_id="entry",
-            configuration=SafeConfiguration(
-                mode="shadow",
-                climate_bridge_mode=ClimateBridgeMode.SHADOW,
-            ),
-            registry_store=store,
-            bridge_client=bridge,
-            evidence_store=ready_evidence_store(registry),
-            now_ms=lambda: 1784280005000,
-        )
-        await runtime.async_start()
-        options_flow = self.config_flow.HausmanHubOptionsFlow()
-        options_flow.config_entry = FakeConfigEntry(
-            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
-            {"mode": "shadow"},
-        )
-        options_flow.hass = SimpleNamespace(  # type: ignore[attr-defined]
-            data={"hausman_hub": {"climate_runtime": runtime}}
-        )
-
-        await options_flow.async_step_init({"settings_section": "advanced_settings"})
-        await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "climate_registry"}
-        )
-        options_flow._registry_draft = {  # type: ignore[attr-defined]
-            **registry,
-            "rooms": [
-                *registry["rooms"],  # type: ignore[union-attr]
-                {"id": "draft_only", "name": "Unsaved room"},
-            ],
-        }
-        candidate = await options_flow.async_step_climate_registry(
-            {"climate_registry_action": "review_canary_preflight"}
-        )
-        candidate_selector = next(iter(candidate["schema"].fields.values()))
-        self.assertNotIn("draft_only", str(candidate_selector.config.options))
-        result = await options_flow.async_step_climate_preflight_candidate(
-            {"climate_preflight_room": "living"}
-        )
-
-        self.assertEqual("climate_preflight_candidate", candidate["step_id"])
-        self.assertEqual("climate_canary_preflight", result["step_id"])
-        placeholders = result["description_placeholders"]
-        self.assertEqual("Living room", placeholders["room_id"])
-        self.assertEqual("готово", placeholders["status"])
-        self.assertEqual("да", placeholders["registry_matches"])
-        self.assertEqual("нет", placeholders["operation"])
-        self.assertEqual("готово", placeholders["rollback"])
-        self.assertIn("установка температуры", placeholders["scope"])
-        serialized = str(placeholders)
-        self.assertNotIn("set_room_target", serialized)
-        self.assertNotIn("turn_room_off", serialized)
-        self.assertNotIn("synthetic-ac-source", serialized)
-        self.assertNotIn("climate.synthetic", serialized)
-        self.assertEqual([], store.saved)
-        self.assertEqual([], bridge.executed)
-        returned = await options_flow.async_step_climate_canary_preflight(
-            {"close_canary_preflight": True}
-        )
-        self.assertEqual("climate_registry", returned["step_id"])
-
-
-if __name__ == "__main__":
-    unittest.main()

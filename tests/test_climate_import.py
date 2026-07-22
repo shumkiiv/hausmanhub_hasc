@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import unittest
 
-from custom_components.hausman_hub.application.climate_import import (
+from tests.climate_bridge_fixture import (
     ClimateImportViolation,
     import_climate_state,
 )

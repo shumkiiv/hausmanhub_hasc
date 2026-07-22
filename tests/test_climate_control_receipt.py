@@ -26,7 +26,7 @@ from custom_components.hausman_hub.application.contours import (
     with_climate_temporary_temperature,
 )
 from custom_components.hausman_hub.domain.climate import ClimateRegistry
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from custom_components.hausman_hub.domain.contours import ClimateProfile, ClimateStrategy, ContourRegistry
 from tests import test_climate_native_runtime as native
 
@@ -71,10 +71,9 @@ def status_runtime(
         break_view_after_execute=execution[2],
     )
     runtime = native.native_application_runtime(
-        ClimateBridgeMode.MANAGED,
+        ClimateControlMode.MANAGED,
         view,
         executor,
-        bridge_client=None,
         registry=setup[0],
         contours=setup[1],
     )

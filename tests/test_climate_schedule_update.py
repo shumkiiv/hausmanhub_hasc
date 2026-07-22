@@ -20,7 +20,7 @@ from custom_components.hausman_hub.application.contours import (
     with_climate_contour_mode,
     with_climate_schedule,
 )
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from tests.test_climate_runtime import (
     MemoryBridge,
     MemoryContourStore,
@@ -241,10 +241,9 @@ class ClimateScheduleUpdateTest(unittest.IsolatedAsyncioTestCase):
         bridge = MemoryBridge()
         runtime = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.MANAGED),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=registry_store,
             contour_store=contour_store,
-            bridge_client=bridge,
             now_ms=lambda: 1784512800000,
         )
         await runtime.async_start()
@@ -271,16 +270,15 @@ class ClimateScheduleUpdateTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual([], bridge.executed)
 
-    async def test_shadow_runtime_can_disable_but_cannot_enable_schedule(self) -> None:
+    async def test_disabled_runtime_can_disable_but_cannot_enable_schedule(self) -> None:
         registry, contours, _ = configured_setup()
         contour_store = MemoryContourStore(contours)  # type: ignore[arg-type]
         bridge = MemoryBridge()
         runtime = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.SHADOW),
+            configuration=configuration(ClimateControlMode.DISABLED),
             registry_store=MemoryStore(registry),  # type: ignore[arg-type]
             contour_store=contour_store,
-            bridge_client=bridge,
             now_ms=lambda: 1784512800000,
         )
         await runtime.async_start()
@@ -301,36 +299,25 @@ class ClimateScheduleUpdateTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fetches_before, bridge.fetch_count)
         self.assertEqual([], bridge.executed)
 
-    async def test_canary_runtime_can_only_disarm_schedule(self) -> None:
+    async def test_managed_runtime_arms_schedule_without_the_bridge(self) -> None:
         registry, contours, _ = configured_setup()
         contour_store = MemoryContourStore(contours)  # type: ignore[arg-type]
         bridge = MemoryBridge()
         runtime = ClimateRuntime(
             entry_id="entry",
-            configuration=configuration(ClimateBridgeMode.CANARY),
+            configuration=configuration(ClimateControlMode.MANAGED),
             registry_store=MemoryStore(registry),  # type: ignore[arg-type]
             contour_store=contour_store,
-            bridge_client=bridge,
             now_ms=lambda: 1784512800000,
         )
         await runtime.async_start()
-        fetches_before = bridge.fetch_count
 
-        disabled = await runtime.async_update_climate_schedule(
-            request_for(registry, contours, enabled=False)
+        enabled = await runtime.async_update_climate_schedule(
+            request_for(registry, contours, enabled=True)
         )
-        self.assertFalse(disabled["schedule"]["enabled"])
+        self.assertTrue(enabled["schedule"]["enabled"])
         self.assertEqual(1, len(contour_store.saved))
-
-        with self.assertRaises(ClimateSetupViolation) as raised:
-            await runtime.async_update_climate_schedule(
-                request_for(registry, contour_store.registry, enabled=True)
-            )
-        self.assertEqual("managed_control_required", raised.exception.code)
-        self.assertEqual(1, len(contour_store.saved))
-        self.assertEqual(fetches_before, bridge.fetch_count)
         self.assertEqual([], bridge.executed)
-
 
 if __name__ == "__main__":
     unittest.main()

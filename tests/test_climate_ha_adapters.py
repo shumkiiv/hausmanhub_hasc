@@ -9,7 +9,7 @@ import unittest
 from custom_components.hausman_hub.application.climate_ha_adapters import (
     build_climate_ha_call_plan,
 )
-from custom_components.hausman_hub.application.climate_import import (
+from tests.climate_bridge_fixture import (
     import_climate_state,
 )
 from custom_components.hausman_hub.application.climate_isolation import (

@@ -116,7 +116,6 @@ CONTOURS_PATH = "/api/hausman_hub/v1/contours"
 CONTOUR_APPLY_PREVIEW_PATH = "/api/hausman_hub/v1/contours/apply-preview"
 CONTOUR_APPLY_PATH = "/api/hausman_hub/v1/contours/apply"
 TEMPORARY_TEMPERATURE_PATH = "/api/hausman_hub/v1/contours/temporary-temperature"
-CLIMATE_ACTION_PATH = "/api/hausman_hub/v1/actions"
 CLIMATE_ADMIN_IMPORT_PATH = "/api/hausman_hub/v1/admin/climate-import"
 CLIMATE_ADMIN_DRAFT_PATH = "/api/hausman_hub/v1/admin/climate-drafts"
 CLIMATE_ADMIN_DRAFT_CURRENT_PATH = "/api/hausman_hub/v1/admin/climate-drafts/current"
@@ -130,9 +129,6 @@ CLIMATE_ADMIN_READINESS_PATH = "/api/hausman_hub/v1/admin/climate-readiness"
 CLIMATE_ADMIN_PANEL_PATH = "/api/hausman_hub/v1/admin/panel"
 CLIMATE_ADMIN_PANEL_APPLY_PATH = "/api/hausman_hub/v1/admin/panel/apply"
 CLIMATE_ADMIN_PANEL_TEMPORARY_PATH = "/api/hausman_hub/v1/admin/panel/temporary-temperature"
-CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH = "/api/hausman_hub/v1/admin/climate-shadow-evidence"
-CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH = "/api/hausman_hub/v1/admin/climate-canary-preflight"
-CLIMATE_OPERATION_PATH = "/api/hausman_hub/v1/operations"
 CLIMATE_API_PATHS = (
     CAPABILITIES_PATH,
     CLIMATE_HOME_PATH,
@@ -140,7 +136,6 @@ CLIMATE_API_PATHS = (
     CONTOUR_APPLY_PREVIEW_PATH,
     CONTOUR_APPLY_PATH,
     TEMPORARY_TEMPERATURE_PATH,
-    CLIMATE_ACTION_PATH,
     CLIMATE_ADMIN_IMPORT_PATH,
     CLIMATE_ADMIN_DRAFT_PATH,
     CLIMATE_ADMIN_DRAFT_CURRENT_PATH,
@@ -154,9 +149,6 @@ CLIMATE_API_PATHS = (
     CLIMATE_ADMIN_PANEL_PATH,
     CLIMATE_ADMIN_PANEL_APPLY_PATH,
     CLIMATE_ADMIN_PANEL_TEMPORARY_PATH,
-    CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
-    CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH,
-    CLIMATE_OPERATION_PATH,
 )
 ALTERNATE_LOCAL_SUMMARY_TARGET_STATUSES = {
     f"{LOCAL_SUMMARY_PATH}/": HTTPStatus.NOT_FOUND,
@@ -1114,7 +1106,7 @@ def assert_climate_connection_form(options_form: dict[str, Any]) -> None:
         raise RuntimeError("climate bridge mode must use a native select selector")
     assert_result(
         climate_select.get("options"),
-        ["disabled", "shadow", "canary", "managed"],
+        ["disabled", "managed"],
         "climate bridge selector must expose only translated fixed stages",
     )
 
@@ -2309,7 +2301,6 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
         CONTOUR_APPLY_PREVIEW_PATH: {"GET", "OPTIONS"},
         CONTOUR_APPLY_PATH: {"POST", "OPTIONS"},
         TEMPORARY_TEMPERATURE_PATH: {"POST", "OPTIONS"},
-        CLIMATE_ACTION_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_IMPORT_PATH: {"GET", "OPTIONS"},
         CLIMATE_ADMIN_DRAFT_PATH: {"GET", "POST", "OPTIONS"},
         CLIMATE_ADMIN_DRAFT_CURRENT_PATH: {"GET", "OPTIONS"},
@@ -2323,9 +2314,6 @@ def assert_disabled_climate_facade(hass: HomeAssistant, domain: str, entry_id: s
         CLIMATE_ADMIN_PANEL_PATH: {"GET", "OPTIONS"},
         CLIMATE_ADMIN_PANEL_APPLY_PATH: {"POST", "OPTIONS"},
         CLIMATE_ADMIN_PANEL_TEMPORARY_PATH: {"POST", "OPTIONS"},
-        CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH: {"POST", "OPTIONS"},
-        CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH: {"POST", "OPTIONS"},
-        CLIMATE_OPERATION_PATH: {"POST", "OPTIONS"},
     }
     for path, routes in find_climate_routes(hass).items():
         if len(routes) != 1:
@@ -3031,20 +3019,6 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             "disabled temporary temperature must fail closed without a command POST",
         )
 
-        disabled_action = await client.post(
-            CLIMATE_ACTION_PATH,
-            headers=tablet_headers,
-            json={"action": "turn_room_off", "room_id": "room-one"},
-        )
-        assert_result(
-            disabled_action.status,
-            HTTPStatus.SERVICE_UNAVAILABLE,
-            "disabled climate actions must fail closed without posting a command",
-        )
-        assert_local_summary_response_is_not_stored(
-            disabled_action,
-            "disabled climate action response",
-        )
 
         rejected_tablet_admin = await client.get(
             CLIMATE_ADMIN_REGISTRY_PATH,
@@ -3201,76 +3175,7 @@ async def async_assert_disabled_climate_http_access(hass: HomeAssistant) -> None
             "disabled readiness must use one normalized reason",
         )
 
-        disabled_evidence = await client.post(
-            CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
-            headers=owner_headers,
-            json={"room_id": "room-one"},
-        )
-        assert_result(
-            disabled_evidence.status,
-            HTTPStatus.OK,
-            "disabled shadow evidence must remain a read-only admin result",
-        )
-        disabled_candidate = (await disabled_evidence.json()).get("candidate", {})
-        assert_result(
-            disabled_candidate.get("ready"),
-            False,
-            "disabled shadow evidence must never claim candidate readiness",
-        )
 
-        disabled_preflight = await client.post(
-            CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH,
-            headers=owner_headers,
-            json={"room_id": "room-one"},
-        )
-        assert_result(
-            disabled_preflight.status,
-            HTTPStatus.BAD_REQUEST,
-            "preflight must reject a room absent from the saved registry without bridge I/O",
-        )
-        tablet_preflight = await client.post(
-            CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH,
-            headers=tablet_headers,
-            json={"room_id": "room-one"},
-        )
-        assert_result(
-            tablet_preflight.status,
-            HTTPStatus.FORBIDDEN,
-            "preflight must remain unavailable to the ordinary tablet role",
-        )
-
-        preview = await client.post(
-            CLIMATE_ADMIN_REGISTRY_PREVIEW_PATH,
-            headers=owner_headers,
-            json={"version": 2, "home": {"outdoor_temperature_entity_id": None, "presence_entity_id": None, "central_heating_entity_id": None}, "rooms": [], "devices": []},
-        )
-        assert_result(
-            preview.status,
-            HTTPStatus.OK,
-            "disabled registry preview must validate without bridge I/O",
-        )
-        assert_result(
-            (await preview.json()).get("status"),
-            "validated_offline",
-            "disabled registry preview must clearly report offline validation",
-        )
-
-        unknown_operation = await client.post(
-            CLIMATE_OPERATION_PATH,
-            headers=tablet_headers,
-            json={"operation_id": "f" * 32},
-        )
-        assert_result(
-            unknown_operation.status,
-            HTTPStatus.OK,
-            "a well-formed unknown operation must return a typed redacted receipt",
-        )
-        unknown_payload = await unknown_operation.json()
-        assert_result(
-            (unknown_payload.get("known"), unknown_payload.get("status")),
-            (False, "unknown"),
-            "an unknown operation must disclose no prior action data",
-        )
     finally:
         await client.close()
 
@@ -3324,19 +3229,14 @@ async def async_assert_shadow_climate_end_to_end(
     try:
         form = await async_open_options_section(hass, entry, "climate_connection")
         assert_climate_connection_form(form)
-        endpoint = await hass.config_entries.options.async_configure(
-            form["flow_id"],
-            {CLIMATE_BRIDGE_MODE_FIELD: "shadow"},
-        )
-        assert_climate_endpoint_form(endpoint, expect_room=False)
         configured = await hass.config_entries.options.async_configure(
             form["flow_id"],
-            {CLIMATE_BRIDGE_TARGET_FIELD: bridge_origin},
+            {CLIMATE_BRIDGE_MODE_FIELD: "managed"},
         )
         assert_result(
             configured["type"],
             "create_entry",
-            "temporary shadow bridge settings must save through the real options flow",
+            "temporary managed settings must save through the real options flow",
         )
         await hass.async_block_till_done()
         await home_client.start_server()
@@ -3745,13 +3645,16 @@ async def async_assert_shadow_climate_end_to_end(
             if isinstance(living_room, dict)
             else []
         )
+        # Native facts: temperature comes from the AC state itself, humidity is
+        # honestly unknown without a bound sensor, and the unsaved contour
+        # keeps mode and targets unknown instead of borrowing bridge values.
         assert_result(
             living_room.get("actual") if isinstance(living_room, dict) else None,
             {
                 "data_status": "current",
                 "temperature": 25.8,
-                "humidity": 44.0,
-                "mode": "automatic",
+                "humidity": None,
+                "mode": "unknown",
             },
             "tablet room must expose one explicit factual current-state block",
         )
@@ -3766,9 +3669,9 @@ async def async_assert_shadow_climate_end_to_end(
             ),
             (
                 {
-                    "temperature": 25.0,
-                    "humidity": 45.0,
-                    "strategy": "normal",
+                    "temperature": None,
+                    "humidity": None,
+                    "strategy": "unknown",
                 },
                 {
                     "active": None,
@@ -3800,234 +3703,26 @@ async def async_assert_shadow_climate_end_to_end(
             ),
             (
                 False,
-                ["set_room_target", "turn_room_off"],
                 [],
-                {
-                    "set_room_target": {
-                        "allowed": False,
-                        "blocked_reasons": ["shadow_only"],
-                    },
-                    "turn_room_off": {
-                        "allowed": False,
-                        "blocked_reasons": ["shadow_only"],
-                    },
-                },
-                {
-                    "set_room_target": {
-                        "target_temperature": {
-                            "type": "number",
-                            "required": True,
-                            "minimum": 18.0,
-                            "maximum": 28.0,
-                            "step": 0.5,
-                            "unit": "°C",
-                        }
-                    }
-                },
-                {
-                    "set_room_target": {
-                        "title": "Установить температуру",
-                        "description": "Изменить желаемую температуру в комнате.",
-                        "confirmation_required": False,
-                        "fields": {
-                            "target_temperature": {
-                                "title": "Желаемая температура",
-                                "description": (
-                                    "Значение, которое должен поддерживать "
-                                    "климатический контур."
-                                ),
-                            }
-                        },
-                    },
-                    "turn_room_off": {
-                        "title": "Выключить климат",
-                        "description": "Остановить поддержание климата в комнате.",
-                        "confirmation_required": True,
-                        "fields": {},
-                    },
-                },
-                ["shadow_only"],
+                [],
+                {},
+                {},
+                {},
+                ["authority_not_ready", "actions_unsupported"],
                 False,
             ),
-            "shadow home must describe room controls without enabling them",
+            "native home must report no executable room action with bounded reasons",
         )
 
-        action_payload = {
-            "request_id": "core-shadow-0001",
-            "action": "set_room_target",
-            "room_id": "living",
-            "target_temperature": 24.5,
-        }
-        first_action = await home_client.post(
-            CLIMATE_ACTION_PATH,
-            headers=tablet_headers,
-            json=action_payload,
-        )
-        assert_result(first_action.status, HTTPStatus.OK, "shadow action must return a receipt")
-        first_receipt = await first_action.json()
         assert_result(
-            (first_receipt.get("status"), first_receipt.get("execution")),
-            ("accepted", "shadow"),
-            "shadow action must be accepted without physical submission",
+            state_gets,
+            [],
+            "managed acceptance must never read the external climate module",
         )
-
-        duplicate_action = await home_client.post(
-            CLIMATE_ACTION_PATH,
-            headers=tablet_headers,
-            json=action_payload,
-        )
-        duplicate_receipt = await duplicate_action.json()
-        assert_result(
-            duplicate_receipt,
-            first_receipt,
-            "same Android request id and intent must return the same receipt",
-        )
-        operation = await home_client.post(
-            CLIMATE_OPERATION_PATH,
-            headers=tablet_headers,
-            json={"operation_id": first_receipt["operation_id"]},
-        )
-        assert_result(operation.status, HTTPStatus.OK, "known shadow operation must be queryable")
-        assert_result(
-            (await operation.json()).get("status"),
-            "accepted",
-            "shadow receipt must remain accepted rather than claim physical confirmation",
-        )
-        evidence = await home_client.post(
-            CLIMATE_ADMIN_SHADOW_EVIDENCE_PATH,
-            headers=owner_headers,
-            json={"room_id": "living"},
-        )
-        assert_result(
-            evidence.status,
-            HTTPStatus.OK,
-            "local administrator must be able to inspect redacted shadow evidence",
-        )
-        evidence_payload = await evidence.json()
-        evidence_serialized = json.dumps(
-            evidence_payload,
-            ensure_ascii=True,
-            sort_keys=True,
-        )
-        if "source_id" in evidence_serialized or "entity_id" in evidence_serialized:
-            raise RuntimeError("shadow evidence must not expose private climate bindings")
-        evidence_candidate = evidence_payload.get("candidate", {})
-        assert_result(
-            evidence_candidate.get("status"),
-            "collecting",
-            "one disposable sample and intent must remain below the canary gate",
-        )
-        assert_result(
-            evidence_payload.get("counts", {}).get("translated"),
-            1,
-            "shadow evidence must count one translated intent without a POST",
-        )
-
-        api_preflight = await home_client.post(
-            CLIMATE_ADMIN_CANARY_PREFLIGHT_PATH,
-            headers=owner_headers,
-            json={"room_id": "living"},
-        )
-        assert_result(
-            api_preflight.status,
-            HTTPStatus.OK,
-            "local administrator must read the canonical one-room preflight",
-        )
-        api_preflight_payload = await api_preflight.json()
-        api_freshness = api_preflight_payload.get("freshness", {})
-        assert_result(
-            (
-                api_preflight_payload.get("status"),
-                api_preflight_payload.get("ready_for_authorization"),
-                api_preflight_payload.get("activation", {}).get("allowed"),
-                api_freshness.get("state_fresh"),
-            ),
-            ("collecting", False, False, True),
-            "API preflight must be fresh but non-activating below the evidence gate",
-        )
-        checked_at = api_freshness.get("checked_at")
-        valid_until = api_freshness.get("state_valid_until")
-        if (
-            type(checked_at) is not int
-            or type(valid_until) is not int
-            or valid_until < checked_at
-        ):
-            raise RuntimeError("API preflight must expose a bounded freshness deadline")
-        api_preflight_serialized = json.dumps(
-            api_preflight_payload,
-            ensure_ascii=True,
-            sort_keys=True,
-        )
-        if "source_id" in api_preflight_serialized or "entity_id" in api_preflight_serialized:
-            raise RuntimeError("API preflight must not expose private climate bindings")
-
-        preflight_flow = await async_open_options_section(
-            hass,
-            entry,
-            "climate_registry",
-        )
-        preflight_menu = preflight_flow
-        preflight_candidate = await hass.config_entries.options.async_configure(
-            preflight_flow["flow_id"],
-            {"climate_registry_action": "review_canary_preflight"},
-        )
-        preflight_result = await hass.config_entries.options.async_configure(
-            preflight_flow["flow_id"],
-            {"climate_preflight_room": "living"},
-        )
-        assert_result(
-            (
-                preflight_menu["step_id"],
-                preflight_candidate["step_id"],
-                preflight_result["step_id"],
-            ),
-            (
-                "climate_registry",
-                "climate_preflight_candidate",
-                "climate_canary_preflight",
-            ),
-            "real options flow must open the one-room non-activating preflight",
-        )
-        preflight_placeholders = preflight_result.get(
-            "description_placeholders",
-            {},
-        )
-        assert_result(
-            (
-                preflight_placeholders.get("status"),
-                preflight_placeholders.get("registry_matches"),
-                preflight_placeholders.get("operation"),
-                preflight_placeholders.get("rollback"),
-            ),
-            ("нужно больше наблюдений", "да", "нет", "готово"),
-            "preflight must combine reconciliation, evidence, operation, and rollback",
-        )
-        preflight_serialized = json.dumps(
-            preflight_placeholders,
-            ensure_ascii=True,
-            sort_keys=True,
-        )
-        if (
-            "source_id" in preflight_serialized
-            or "entity_id" in preflight_serialized
-        ):
-            raise RuntimeError("canary preflight must not expose private climate bindings")
-        closed_preflight = await hass.config_entries.options.async_configure(
-            preflight_flow["flow_id"],
-            {"close_canary_preflight": True},
-        )
-        assert_result(
-            closed_preflight["step_id"],
-            "climate_registry",
-            "closing preflight must only return to the registry menu",
-        )
-        hass.config_entries.options.async_abort(preflight_flow["flow_id"])
-        if not state_gets:
-            raise RuntimeError("shadow acceptance must perform measured read-only state GETs")
         assert_result(
             command_posts,
             [],
-            "end-to-end shadow acceptance must issue zero Climate API command POSTs",
+            "end-to-end managed acceptance must issue zero Climate API command POSTs",
         )
         reset_registry = await home_client.post(
             CLIMATE_ADMIN_REGISTRY_PATH,

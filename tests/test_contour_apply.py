@@ -38,7 +38,7 @@ from custom_components.hausman_hub.domain.climate import (
     ClimateEndpointRole,
     ClimateRegistry,
 )
-from custom_components.hausman_hub.domain.climate_bridge import ClimateBridgeMode
+from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
 from custom_components.hausman_hub.domain.climate_observation import (
     ClimateDataStatus,
     ClimateDeviceActivity,
@@ -109,7 +109,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             fingerprint="a" * 64,
             target_room_ids=("living", "kids"),
@@ -140,7 +140,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             broken_registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             fingerprint="b" * 64,
             target_room_ids=("living", "kids"),
@@ -168,7 +168,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             broken_registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             fingerprint="c" * 64,
             target_room_ids=("living",),
@@ -210,7 +210,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             limited_registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             aligned_observation,
             fingerprint="e" * 64,
             target_room_ids=("living",),
@@ -229,7 +229,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             registry,
-            ClimateBridgeMode.SHADOW,
+            ClimateControlMode.DISABLED,
             observation,
             fingerprint="f" * 64,
             target_room_ids=("living",),
@@ -257,7 +257,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             stale,
             fingerprint="0" * 64,
             target_room_ids=("living",),
@@ -300,7 +300,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             unavailable,
             fingerprint="1" * 64,
             target_room_ids=("living",),
@@ -338,7 +338,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             observed_registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             fingerprint="2" * 64,
             target_room_ids=("living",),
@@ -357,7 +357,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_climate_application_plan(
             contour,
             registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             fingerprint="d" * 64,
             target_room_ids=("living",),
@@ -398,7 +398,7 @@ class NativeClimateApplicationPlannerTest(unittest.TestCase):
         plan = build_contour_apply_plan(
             updated,
             registry,
-            ClimateBridgeMode.MANAGED,
+            ClimateControlMode.MANAGED,
             observation,
             room_ids=("living",),
             desired_state_changes=changes,

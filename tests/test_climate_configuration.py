@@ -10,7 +10,7 @@ from custom_components.hausman_hub.application.configuration import (
     effective_configuration,
 )
 from custom_components.hausman_hub.domain.climate_bridge import (
-    ClimateBridgeMode,
+    ClimateControlMode,
     UnsafeClimateBridgeTarget,
     climate_bridge_target,
 )
@@ -64,9 +64,13 @@ class ClimateConfigurationTest(unittest.TestCase):
         )
 
         configuration = effective_configuration(ENTRY, result)
-        self.assertIs(configuration.climate_bridge_mode, ClimateBridgeMode.SHADOW)
+        # The retired shadow mode migrates to disabled; bridge fields never
+        # survive in saved options.
+        self.assertIs(configuration.climate_bridge_mode, ClimateControlMode.DISABLED)
         self.assertIsNone(configuration.climate_canary_room_id)
+        self.assertIsNone(configuration.climate_bridge_target)
         self.assertNotIn("climate_canary_room_id", result)
+        self.assertNotIn("climate_bridge_target", result)
 
     def test_canary_requires_private_target_and_stable_room(self) -> None:
         result = create_options(
@@ -77,24 +81,9 @@ class ClimateConfigurationTest(unittest.TestCase):
         )
         configuration = effective_configuration(ENTRY, result)
 
-        self.assertIs(configuration.climate_bridge_mode, ClimateBridgeMode.CANARY)
-        self.assertEqual("living", configuration.climate_canary_room_id)
-
-        for target, room in (
-            ("http://example.com:1880", "living"),
-            ("http://10.0.0.2:1880", "Living room"),
-            (None, "living"),
-            ("http://10.0.0.2:1880", None),
-        ):
-            with self.subTest(target=target, room=room), self.assertRaises(
-                ConfigurationViolation
-            ):
-                create_options(
-                    "shadow",
-                    climate_bridge_mode_value="canary",
-                    climate_bridge_target_value=target,
-                    climate_canary_room_id_value=room,
-                )
+        # The retired canary mode migrates to disabled as well.
+        self.assertIs(configuration.climate_bridge_mode, ClimateControlMode.DISABLED)
+        self.assertIsNone(configuration.climate_canary_room_id)
 
     def test_managed_contour_requires_target_and_never_retains_canary_room(
         self,
@@ -107,19 +96,21 @@ class ClimateConfigurationTest(unittest.TestCase):
         )
 
         configuration = effective_configuration(ENTRY, result)
-        self.assertIs(configuration.climate_bridge_mode, ClimateBridgeMode.MANAGED)
+        self.assertIs(configuration.climate_bridge_mode, ClimateControlMode.MANAGED)
         self.assertIsNone(configuration.climate_canary_room_id)
         self.assertNotIn("climate_canary_room_id", result)
+        self.assertNotIn("climate_bridge_target", result)
 
     def test_persisted_hidden_bridge_fields_fail_closed(self) -> None:
-        with self.assertRaisesRegex(ConfigurationViolation, "disabled"):
-            effective_configuration(
-                ENTRY,
-                {
-                    "climate_bridge_mode": "disabled",
-                    "climate_bridge_target": "http://127.0.0.1:1880",
-                },
-            )
+        migrated = effective_configuration(
+            ENTRY,
+            {
+                "climate_bridge_mode": "disabled",
+                "climate_bridge_target": "http://127.0.0.1:1880",
+            },
+        )
+        self.assertIs(migrated.climate_bridge_mode, ClimateControlMode.DISABLED)
+        self.assertIsNone(migrated.climate_bridge_target)
         with self.assertRaisesRegex(ConfigurationViolation, "unsupported fields"):
             effective_configuration(ENTRY, {"climate_bridge_token": "secret"})
 

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from custom_components.hausman_hub.application import climate_isolation
-from custom_components.hausman_hub.application.climate_import import (
+from tests.climate_bridge_fixture import (
     import_climate_state,
 )
 from custom_components.hausman_hub.application.climate_isolation import (
