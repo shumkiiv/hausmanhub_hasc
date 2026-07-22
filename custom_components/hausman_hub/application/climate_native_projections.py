@@ -23,9 +23,10 @@ from ..domain.climate import (
     ClimateControlScope,
     ClimateDevice,
     ClimateDeviceKind,
+    ClimateEndpointRole,
     ClimateRegistry,
 )
-from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.climate_bridge import ClimateControlMode
 from ..domain.climate_observation import (
     ClimateDataStatus,
     ClimateDeviceActivity,
@@ -57,7 +58,7 @@ from .android_climate_values import (
 )
 from .climate_application import build_climate_application_plan
 from .climate_application_models import ClimateDesiredStateChanges
-from .climate_import import SUPPORTED_BACKEND_COMMAND_TYPES
+from .climate_discovery import SUPPORTED_BACKEND_COMMAND_TYPES
 from .climate_registry import ClimateRegistryReconciliation
 from .contour_apply import (
     CONTOUR_APPLY_CONTRACT_VERSION,
@@ -506,7 +507,7 @@ def _native_room_settings_apply_available(
 def native_contour_apply_preview(
     contour: ContourDefinition,
     registry: ClimateRegistry,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     observation: ClimateObservationSnapshot,
     *,
     fingerprint: str,
@@ -567,11 +568,11 @@ def native_climate_readiness(
     registry: ClimateRegistry,
     observation: ClimateObservationSnapshot | None,
     *,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
 ) -> dict[str, object]:
     """Return redacted registry and observation readiness to a local admin."""
 
-    if bridge_mode is ClimateBridgeMode.DISABLED:
+    if bridge_mode is ClimateControlMode.DISABLED:
         return _native_readiness_payload(
             registry,
             bridge_mode=bridge_mode,
@@ -591,7 +592,7 @@ def native_climate_readiness(
         )
     reconciliation = native_climate_reconciliation(registry, observation)
     fresh = native_runtime_fresh(observation)
-    reasons = _native_readiness_reasons(
+    reasons = native_readiness_reasons(
         registry,
         observation,
         fresh=fresh,
@@ -607,7 +608,7 @@ def native_climate_readiness(
     )
 
 
-def _native_readiness_reasons(
+def native_readiness_reasons(
     registry: ClimateRegistry,
     observation: ClimateObservationSnapshot,
     *,
@@ -630,13 +631,19 @@ def _native_readiness_reasons(
         for device in registry.devices
     ):
         reasons.append("device_unavailable")
+    if any(
+        device.kind not in _PASSIVE_KINDS
+        and device.endpoint(ClimateEndpointRole.CONTROL) is None
+        for device in registry.devices
+    ):
+        reasons.append("needs_reimport")
     return tuple(reasons)
 
 
 def _native_readiness_payload(
     registry: ClimateRegistry,
     *,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     status: str,
     fresh: bool,
     reconciliation: ClimateRegistryReconciliation | None,
@@ -724,15 +731,13 @@ def native_android_climate_snapshot(
     observation: ClimateObservationSnapshot,
     *,
     contours: ContourRegistry | None = None,
-    bridge_mode: ClimateBridgeMode,
-    canary_room_id: str | None = None,
-    candidate_ready: bool = False,
+    bridge_mode: ClimateControlMode,
     pending_room_ids: Collection[str] = (),
     local_now: datetime | None = None,
 ) -> dict[str, object]:
     """Build the fixed tablet contract from the native observation only."""
 
-    if not isinstance(bridge_mode, ClimateBridgeMode):
+    if not isinstance(bridge_mode, ClimateControlMode):
         raise ValueError("climate bridge mode must be approved")
     pending = frozenset(pending_room_ids)
     if any(registry.room(room_id) is None for room_id in pending):
@@ -764,7 +769,7 @@ def native_android_climate_snapshot(
         contours or ContourRegistry(),
         registry,
         observation,
-        settings_apply_enabled=(bridge_mode is ClimateBridgeMode.MANAGED),
+        settings_apply_enabled=(bridge_mode is ClimateControlMode.MANAGED),
         local_now=local_now,
     )["contours"]
     room_saved_profiles = saved_profiles_by_room(public_contours)
@@ -778,8 +783,6 @@ def native_android_climate_snapshot(
             registry,
             observation,
             bridge_mode=bridge_mode,
-            canary_room_id=canary_room_id,
-            candidate_ready=candidate_ready,
             pending=room.room_id in pending,
             room_id=room.room_id,
         )
@@ -878,21 +881,20 @@ def _native_room_control_projection(
     registry: ClimateRegistry,
     observation: ClimateObservationSnapshot,
     *,
-    bridge_mode: ClimateBridgeMode,
-    canary_room_id: str | None,
-    candidate_ready: bool,
+    bridge_mode: ClimateControlMode,
     pending: bool,
     room_id: str,
 ) -> dict[str, object]:
-    """Project only coarse gates used to enable the first room controls."""
+    """Report per-room direct actions, which the retired canary route owned.
+
+    The legacy typed-action endpoint no longer exists, so the contract keeps
+    its shape but never advertises an executable action; blocked reasons stay
+    bounded and honest so the tablet can show why direct control is absent.
+    """
 
     reasons: list[str] = []
-    if bridge_mode is ClimateBridgeMode.DISABLED:
+    if bridge_mode is ClimateControlMode.DISABLED:
         reasons.append("bridge_disabled")
-    elif bridge_mode is ClimateBridgeMode.SHADOW:
-        reasons.append("shadow_only")
-    elif room_id != canary_room_id:
-        reasons.append("room_not_selected")
 
     if not native_runtime_fresh(observation):
         reasons.append("state_stale")
@@ -910,47 +912,24 @@ def _native_room_control_projection(
         and device.control_owner is ClimateControlOwner.CLIMATE_CORE
         and device.control_scope is not ClimateControlScope.OBSERVED
     ]
-    actions: list[str] = []
-    if len(controlled) != 1:
-        reasons.append("actions_unsupported")
-    else:
+    if len(controlled) == 1:
         observed_device = observation.device(controlled[0].device_id)
         if observed_device is None or observed_device.room_id != room_id:
             reasons.append("registry_mismatch")
-        else:
-            command_types = native_device_command_types(controlled[0])
-            actions = [
-                action
-                for action in ANDROID_ROOM_CONTROL_ACTIONS
-                if ROOM_ACTION_COMMAND_TYPES[action] in command_types
-            ]
-            if observed_device.availability is not ClimateDeviceAvailability.AVAILABLE:
-                reasons.append("device_unavailable")
-            if tuple(actions) != ANDROID_ROOM_CONTROL_ACTIONS:
-                reasons.append("actions_unsupported")
-
-    if (
-        bridge_mode is ClimateBridgeMode.CANARY
-        and room_id == canary_room_id
-        and not candidate_ready
-    ):
-        reasons.append("evidence_not_ready")
+        elif observed_device.availability is not ClimateDeviceAvailability.AVAILABLE:
+            reasons.append("device_unavailable")
+    reasons.append("actions_unsupported")
     if pending:
         reasons.append("operation_pending")
 
     blocked_reasons = list(dict.fromkeys(reasons))
-    allowed_actions = list(actions) if not blocked_reasons else []
     return {
-        "enabled": bool(allowed_actions),
-        "actions": actions,
-        "allowed_actions": allowed_actions,
-        "action_availability": room_action_availability(
-            actions,
-            allowed_actions,
-            blocked_reasons,
-        ),
-        "action_inputs": room_action_inputs(actions),
-        "action_presentations": room_action_presentations(actions),
+        "enabled": False,
+        "actions": [],
+        "allowed_actions": [],
+        "action_availability": {},
+        "action_inputs": {},
+        "action_presentations": {},
         "blocked_reasons": blocked_reasons,
     }
 

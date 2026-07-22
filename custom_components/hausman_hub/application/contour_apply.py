@@ -9,7 +9,7 @@ import re
 import secrets
 import time
 from ..domain.climate import ClimateRegistry
-from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.climate_bridge import ClimateControlMode
 from ..domain.climate_observation import ClimateObservationSnapshot
 from ..domain.contours import (
     ClimateContourRoom,
@@ -415,7 +415,7 @@ def parse_contour_apply_request(payload: object) -> tuple[str, str]:
 def build_contour_apply_plan(
     contour: ContourDefinition,
     registry: ClimateRegistry,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     observation: ClimateObservationSnapshot,
     *,
     room_ids: tuple[str, ...] | None = None,

@@ -2,18 +2,9 @@
 
 from __future__ import annotations
 
-from .android_climate import (
+from .android_climate_values import (
     ANDROID_CLIMATE_CONTRACT_NAME,
     ANDROID_CLIMATE_CONTRACT_VERSION,
-)
-from .climate_commands import (
-    CLIMATE_ACTION_REQUEST_CONTRACT_NAME,
-    CLIMATE_ACTION_REQUEST_CONTRACT_VERSION,
-)
-from .climate_operations import (
-    OPERATION_CONTRACT_NAME,
-    OPERATION_CONTRACT_VERSION,
-    OPERATION_QUERY_CONTRACT_NAME,
 )
 from .contour_apply import (
     CLIMATE_CONTROL_RECEIPT_CONTRACT_NAME,
@@ -39,8 +30,6 @@ CONTOURS_PATH = f"{API_BASE_PATH}/contours"
 CONTOUR_APPLY_PREVIEW_PATH = f"{CONTOURS_PATH}/apply-preview"
 CONTOUR_APPLY_PATH = f"{CONTOURS_PATH}/apply"
 TEMPORARY_TEMPERATURE_PATH = f"{CONTOURS_PATH}/temporary-temperature"
-ACTION_PATH = f"{API_BASE_PATH}/actions"
-OPERATION_PATH = f"{API_BASE_PATH}/operations"
 
 
 def api_capabilities_snapshot() -> dict[str, object]:
@@ -101,32 +90,6 @@ def api_capabilities_snapshot() -> dict[str, object]:
                 "response_contract": {
                     "name": CLIMATE_CONTROL_RECEIPT_CONTRACT_NAME,
                     "version": CLIMATE_CONTROL_RECEIPT_CONTRACT_VERSION,
-                },
-            },
-            "climate_actions": {
-                "available": True,
-                "path": ACTION_PATH,
-                "method": "POST",
-                "request_contract": {
-                    "name": CLIMATE_ACTION_REQUEST_CONTRACT_NAME,
-                    "version": CLIMATE_ACTION_REQUEST_CONTRACT_VERSION,
-                },
-                "response_contract": {
-                    "name": OPERATION_CONTRACT_NAME,
-                    "version": OPERATION_CONTRACT_VERSION,
-                },
-            },
-            "operation_receipts": {
-                "available": True,
-                "path": OPERATION_PATH,
-                "method": "POST",
-                "query_contract": {
-                    "name": OPERATION_QUERY_CONTRACT_NAME,
-                    "version": OPERATION_CONTRACT_VERSION,
-                },
-                "response_contract": {
-                    "name": OPERATION_CONTRACT_NAME,
-                    "version": OPERATION_CONTRACT_VERSION,
                 },
             },
         },

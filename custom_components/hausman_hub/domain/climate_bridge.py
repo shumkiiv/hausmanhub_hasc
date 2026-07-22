@@ -20,13 +20,14 @@ class UnsafeClimateBridgeTarget(ValueError):
     """The configured target is not one exact private HTTP origin."""
 
 
-class ClimateBridgeMode(StrEnum):
-    """The only rollout modes supported by the typed climate bridge."""
+class ClimateControlMode(StrEnum):
+    """The only rollout modes supported by the native climate contour."""
 
     DISABLED = "disabled"
-    SHADOW = "shadow"
-    CANARY = "canary"
     MANAGED = "managed"
+
+
+LEGACY_BRIDGE_MODES = frozenset({"shadow", "canary"})
 
 
 @dataclass(frozen=True, slots=True)

@@ -21,7 +21,7 @@ from ..domain.climate import (
     LEGACY_REGISTRY_VERSION,
     REGISTRY_VERSION,
 )
-from .climate_import import ClimateImportSnapshot
+from .climate_discovery import ClimateImportSnapshot
 
 
 class ClimateRegistryViolation(ValueError):

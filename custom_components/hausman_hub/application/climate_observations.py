@@ -34,7 +34,7 @@ from ..domain.climate_observation import (
     ClimateWindowState,
 )
 from ..domain.climate_reference import load_climate_reference_suite
-from .climate_import import ClimateImportSnapshot, ImportedClimateDevice
+from .climate_discovery import ClimateImportSnapshot, ImportedClimateDevice
 
 
 REFERENCE_OBSERVED_AT = 1_800_000_000_000

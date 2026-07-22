@@ -10,21 +10,16 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.util import dt as dt_util
 
 from .application.api_capabilities import (
-    ACTION_PATH,
     CAPABILITIES_PATH,
     CONTOURS_PATH,
     CONTOUR_APPLY_PATH,
     CONTOUR_APPLY_PREVIEW_PATH,
     HOME_PATH,
-    OPERATION_PATH,
     TEMPORARY_TEMPERATURE_PATH,
     api_capabilities_snapshot,
 )
-from .application.climate_canary_preflight import ClimateCanaryPreflightViolation
-from .application.climate_commands import ClimateCommandViolation
 from .application.contour_apply import ContourApplyViolation
 from .application.contour_override import TemporaryTemperatureViolation
-from .application.climate_evidence import ClimateEvidenceViolation
 from .application.climate_registry import ClimateRegistryViolation
 from .application.climate_runtime import ClimateRuntime, ClimateRuntimeUnavailable
 from .application.climate_setup import ClimateSetupViolation
@@ -76,7 +71,6 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ContourApplyPreviewView(hass),
             ContourApplyView(hass),
             TemporaryTemperatureView(hass),
-            ClimateActionView(hass),
             ClimateAdminImportView(hass),
             ClimateAdminDraftView(hass),
             ClimateAdminDraftCurrentView(hass),
@@ -90,9 +84,6 @@ def register_climate_api(hass: HomeAssistant, runtime: ClimateRuntime) -> None:
             ClimateAdminPanelView(hass),
             ClimateAdminPanelApplyView(hass),
             ClimateAdminPanelTemporaryView(hass),
-            ClimateAdminShadowEvidenceView(hass),
-            ClimateAdminCanaryPreflightView(hass),
-            ClimateOperationView(hass),
         )
         for view in views:
             hass.http.register_view(view)
@@ -293,64 +284,6 @@ class TemporaryTemperatureView(_ClimateView):
         except Exception:
             return self._unavailable()
         return self.json(receipt.as_payload(), headers=NO_STORE_HEADERS)
-
-
-class ClimateActionView(_ClimateView):
-    """Accept only typed actions from one ordinary local tablet account."""
-
-    url = ACTION_PATH
-    name = "api:hausman_hub:climate_actions"
-
-    async def post(self, request: Any) -> Any:
-        if not _is_exact_request(request, ACTION_PATH):
-            return _not_found(self)
-        if not _is_local_tablet_request(request):
-            return _forbidden(self)
-        runtime = self._runtime()
-        if runtime is None:
-            return self._unavailable()
-        try:
-            payload = await _request_json(request)
-            result = await runtime.async_action(payload)
-        except (ClimateCommandViolation, ValueError):
-            return self.json_message(
-                "The climate action is invalid.",
-                HTTPStatus.BAD_REQUEST,
-                headers=NO_STORE_HEADERS,
-            )
-        except ClimateRuntimeUnavailable:
-            return self._unavailable()
-        except Exception:
-            return self._unavailable()
-        return self.json(result.as_payload(), headers=NO_STORE_HEADERS)
-
-
-class ClimateOperationView(_ClimateView):
-    """Return one typed operation receipt to the exact local tablet role."""
-
-    url = OPERATION_PATH
-    name = "api:hausman_hub:climate_operations"
-
-    async def post(self, request: Any) -> Any:
-        if not _is_exact_request(request, OPERATION_PATH):
-            return _not_found(self)
-        if not _is_local_tablet_request(request):
-            return _forbidden(self)
-        runtime = self._runtime()
-        if runtime is None:
-            return self._unavailable()
-        try:
-            payload = await _request_json(request)
-            result = await runtime.async_operation(payload)
-        except (ClimateCommandViolation, ValueError):
-            return self.json_message(
-                "The climate operation query is invalid.",
-                HTTPStatus.BAD_REQUEST,
-                headers=NO_STORE_HEADERS,
-            )
-        except Exception:
-            return self._unavailable()
-        return self.json(result.as_payload(), headers=NO_STORE_HEADERS)
 
 
 class ClimateAdminImportView(_ClimateView):
@@ -836,64 +769,6 @@ class ClimateAdminPanelTemporaryView(_ClimateView):
         return self.json(receipt.as_payload(), headers=NO_STORE_HEADERS)
 
 
-class ClimateAdminShadowEvidenceView(_ClimateView):
-    """Evaluate one public HausmanHub room against redacted shadow evidence."""
-
-    url = ADMIN_SHADOW_EVIDENCE_PATH
-    name = "api:hausman_hub:climate_admin_shadow_evidence"
-
-    async def post(self, request: Any) -> Any:
-        if not _is_exact_request(request, ADMIN_SHADOW_EVIDENCE_PATH):
-            return _not_found(self)
-        if not _is_local_admin_request(request):
-            return _forbidden(self)
-        runtime = self._runtime()
-        if runtime is None:
-            return self._unavailable()
-        try:
-            payload = await _request_json(request)
-            result = await runtime.async_shadow_evidence(payload)
-        except (ClimateEvidenceViolation, ValueError):
-            return self.json_message(
-                "The climate shadow candidate is invalid.",
-                HTTPStatus.BAD_REQUEST,
-                headers=NO_STORE_HEADERS,
-            )
-        except Exception:
-            return self._unavailable()
-        return self.json(result, headers=NO_STORE_HEADERS)
-
-
-class ClimateAdminCanaryPreflightView(_ClimateView):
-    """Expose the canonical non-activating saved-room preflight to an admin."""
-
-    url = ADMIN_CANARY_PREFLIGHT_PATH
-    name = "api:hausman_hub:climate_admin_canary_preflight"
-
-    async def post(self, request: Any) -> Any:
-        if not _is_exact_request(request, ADMIN_CANARY_PREFLIGHT_PATH):
-            return _not_found(self)
-        if not _is_local_admin_request(request):
-            return _forbidden(self)
-        runtime = self._runtime()
-        if runtime is None:
-            return self._unavailable()
-        try:
-            payload = await _request_json(request)
-            result = await runtime.async_canary_preflight(payload)
-        except (
-            ClimateCanaryPreflightViolation,
-            ClimateEvidenceViolation,
-            ValueError,
-        ):
-            return self.json_message(
-                "The climate canary preflight query is invalid.",
-                HTTPStatus.BAD_REQUEST,
-                headers=NO_STORE_HEADERS,
-            )
-        except Exception:
-            return self._unavailable()
-        return self.json(result, headers=NO_STORE_HEADERS)
 
 
 async def _request_json(

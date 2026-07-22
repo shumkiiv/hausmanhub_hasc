@@ -10,7 +10,7 @@ from ..domain.climate import (
     ClimateEndpointRole,
     ClimateRegistry,
 )
-from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.climate_bridge import ClimateControlMode
 from ..domain.climate_comparison import (
     ClimateComparisonReason,
     ClimateComparisonSnapshot,
@@ -47,7 +47,7 @@ class ClimateOwnershipDecision:
 def plan_room_promotion(
     room_id: str,
     *,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     contour: ContourDefinition,
     isolation: ClimateIsolationSnapshot,
     comparison: ClimateComparisonSnapshot,
@@ -82,7 +82,7 @@ def plan_room_promotion(
         device for device in registered if device.kind not in _PASSIVE_KINDS
     )
     device_count = len(actuators)
-    if bridge_mode not in {ClimateBridgeMode.CANARY, ClimateBridgeMode.MANAGED}:
+    if bridge_mode is not ClimateControlMode.MANAGED:
         return _deny(room_id, ClimateOwnershipReason.MODE_BLOCKED, device_count)
     if contour.mode is not ContourMode.AUTOMATIC:
         return _deny(

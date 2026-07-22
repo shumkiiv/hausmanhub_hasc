@@ -7,7 +7,7 @@ from ..domain.climate import (
     ClimateEndpointRole,
     ClimateRegistry,
 )
-from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.climate_bridge import ClimateControlMode
 from ..domain.climate_comparison import (
     ClimateComparisonSnapshot,
     ClimateComparisonStatus,
@@ -48,7 +48,7 @@ _TRANSLATION_BLOCKERS = frozenset(
 def build_climate_application_plan(
     contour: ContourDefinition,
     registry: ClimateRegistry,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     observation: ClimateObservationSnapshot,
     *,
     fingerprint: str,
@@ -59,7 +59,7 @@ def build_climate_application_plan(
         raise ClimateApplicationViolation("climate contour is unavailable")
     if not isinstance(registry, ClimateRegistry):
         raise ClimateApplicationViolation("climate registry is unavailable")
-    if not isinstance(bridge_mode, ClimateBridgeMode):
+    if not isinstance(bridge_mode, ClimateControlMode):
         raise ClimateApplicationViolation("climate runtime mode is invalid")
     if not isinstance(observation, ClimateObservationSnapshot):
         raise ClimateApplicationViolation("native climate observation is unavailable")
@@ -119,7 +119,7 @@ def _gate_room(
     room_id: str,
     contour: ContourDefinition,
     registry: ClimateRegistry,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     isolation: ClimateIsolationSnapshot,
     comparison: ClimateComparisonSnapshot,
     call_plan: ClimateHaCallPlanSnapshot,
@@ -127,7 +127,7 @@ def _gate_room(
     reasons: list[ClimateApplicationDenialReason] = []
     if contour.mode is not ContourMode.AUTOMATIC:
         reasons.append(ClimateApplicationDenialReason.CONTOUR_NOT_AUTOMATIC)
-    if bridge_mode is not ClimateBridgeMode.MANAGED:
+    if bridge_mode is not ClimateControlMode.MANAGED:
         reasons.append(ClimateApplicationDenialReason.RUNTIME_NOT_MANAGED)
     assignment = next((room for room in contour.rooms if room.room_id == room_id), None)
     if assignment is None:

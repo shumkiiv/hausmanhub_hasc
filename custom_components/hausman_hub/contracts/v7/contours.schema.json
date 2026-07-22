@@ -58,7 +58,8 @@
         "target_temperature_differs",
         "target_humidity_differs",
         "target_strategy_unavailable",
-        "target_strategy_differs"
+        "target_strategy_differs",
+        "needs_reimport"
       ]
     },
     "comfortValues": {
@@ -705,7 +706,8 @@
             "device_unavailable",
             "actions_unsupported",
             "evidence_not_ready",
-            "operation_pending"
+            "operation_pending",
+            "needs_reimport"
           ],
           "properties": {
             "bridge_disabled": {
@@ -737,6 +739,9 @@
             },
             "operation_pending": {
               "const": "Предыдущее действие ещё проверяется"
+            },
+            "needs_reimport": {
+              "const": "Устройство нужно подключить заново"
             }
           }
         },
@@ -784,7 +789,6 @@
             }
           }
         },
-
         "contour_kinds": {
           "type": "object",
           "additionalProperties": false,

@@ -17,7 +17,7 @@ from .contours import (
     with_climate_room_profiles,
     with_climate_schedule,
 )
-from .climate_import import ClimateImportSnapshot
+from .climate_discovery import ClimateImportSnapshot
 from .climate_native_setup import UNASSIGNED_CANDIDATE_ROOM
 from .climate_registry_import import (
     ClimateRegistryImportViolation,

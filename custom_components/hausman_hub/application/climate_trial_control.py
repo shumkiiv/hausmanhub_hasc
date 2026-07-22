@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..domain.climate import ClimateControlScope, ClimateRegistry
-from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.climate_bridge import ClimateControlMode
 from ..domain.climate_comparison import (
     ClimateComparisonReason,
     ClimateComparisonSnapshot,
@@ -24,15 +24,15 @@ from ..domain.contours import ContourMode
 def plan_climate_trial(
     trial_room_id: str,
     *,
-    bridge_mode: ClimateBridgeMode,
+    bridge_mode: ClimateControlMode,
     contour_mode: ContourMode,
     isolation: ClimateIsolationSnapshot,
     comparison: ClimateComparisonSnapshot,
     call_plan: ClimateHaCallPlanSnapshot,
     registry: ClimateRegistry,
     required_scope: ClimateControlScope = ClimateControlScope.CANARY,
-    allowed_bridge_modes: frozenset[ClimateBridgeMode] = frozenset(
-        {ClimateBridgeMode.CANARY}
+    allowed_bridge_modes: frozenset[ClimateControlMode] = frozenset(
+        {ClimateControlMode.MANAGED}
     ),
 ) -> ClimateTrialDecision:
     """Evaluate every gate for one internally controlled room."""

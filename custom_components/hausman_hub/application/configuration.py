@@ -21,9 +21,8 @@ from ..domain.configuration import (
 )
 from ..domain.climate import ClimateModelViolation, ClimateRoom
 from ..domain.climate_bridge import (
-    ClimateBridgeMode,
-    UnsafeClimateBridgeTarget,
-    climate_bridge_target,
+    LEGACY_BRIDGE_MODES,
+    ClimateControlMode,
 )
 from ..domain.control import UnsafeCanaryTargetError, canary_control_target
 from ..domain.native_climate import (
@@ -42,7 +41,7 @@ CANARY_CONTROL_ENABLED_FIELD = "canary_control_enabled"
 CANARY_CONTROL_ENABLED_DEFAULT = False
 CANARY_CONTROL_TARGET_FIELD = "canary_control_target"
 CLIMATE_BRIDGE_MODE_FIELD = "climate_bridge_mode"
-CLIMATE_BRIDGE_MODE_DEFAULT = ClimateBridgeMode.DISABLED.value
+CLIMATE_BRIDGE_MODE_DEFAULT = ClimateControlMode.DISABLED.value
 CLIMATE_BRIDGE_TARGET_FIELD = "climate_bridge_target"
 CLIMATE_CANARY_ROOM_ID_FIELD = "climate_canary_room_id"
 NATIVE_CLIMATE_MODE_FIELD = "native_climate_mode"
@@ -86,16 +85,10 @@ def create_options(
         # Turning the canary off is the rollback path. Never retain a previous
         # target merely because the frontend still submitted its visible value.
         canary_control_target_value = None
-    if climate_bridge_mode_value == ClimateBridgeMode.DISABLED.value:
-        # Disabled is the complete bridge rollback: private target and canary
-        # selection must not survive in saved options.
-        climate_bridge_target_value = None
-        climate_canary_room_id_value = None
-    elif climate_bridge_mode_value in {
-        ClimateBridgeMode.SHADOW.value,
-        ClimateBridgeMode.MANAGED.value,
-    }:
-        climate_canary_room_id_value = None
+    # The bridge is retired: its target and the canary room never survive in
+    # saved options regardless of the selected control mode.
+    climate_bridge_target_value = None
+    climate_canary_room_id_value = None
     if native_climate_mode_value == NativeClimateMode.DISABLED.value:
         # Preview rollback must also remove the selected room and its targets.
         native_climate_room_id_value = None
@@ -126,10 +119,6 @@ def create_options(
         options[CANARY_CONTROL_TARGET_FIELD] = (
             configuration.canary_control_target.entity_id
         )
-    if configuration.climate_bridge_target is not None:
-        options[CLIMATE_BRIDGE_TARGET_FIELD] = configuration.climate_bridge_target.origin
-    if configuration.climate_canary_room_id is not None:
-        options[CLIMATE_CANARY_ROOM_ID_FIELD] = configuration.climate_canary_room_id
     native_policy = configuration.native_climate_policy
     if native_policy.mode is NativeClimateMode.PREVIEW:
         if (
@@ -195,8 +184,8 @@ def effective_configuration(
         CLIMATE_BRIDGE_MODE_FIELD,
         CLIMATE_BRIDGE_MODE_DEFAULT,
     )
-    climate_bridge_target_value = options.get(CLIMATE_BRIDGE_TARGET_FIELD)
-    climate_canary_room_id_value = options.get(CLIMATE_CANARY_ROOM_ID_FIELD)
+    climate_bridge_target_value = None
+    climate_canary_room_id_value = None
     native_climate_mode_value = options.get(
         NATIVE_CLIMATE_MODE_FIELD,
         NATIVE_CLIMATE_MODE_DEFAULT,
@@ -260,47 +249,19 @@ def _configuration_for(
             "disabled canary control must not retain a target"
         )
 
-    try:
-        bridge_mode = ClimateBridgeMode(climate_bridge_mode_value)
-    except (TypeError, ValueError) as error:
-        raise ConfigurationViolation("climate bridge mode must be approved") from error
+    if climate_bridge_mode_value == ClimateControlMode.MANAGED.value:
+        bridge_mode = ClimateControlMode.MANAGED
+    elif climate_bridge_mode_value in LEGACY_BRIDGE_MODES:
+        # One-way retirement migration: shadow and canary no longer exist.
+        bridge_mode = ClimateControlMode.DISABLED
+    elif climate_bridge_mode_value == ClimateControlMode.DISABLED.value:
+        bridge_mode = ClimateControlMode.DISABLED
+    else:
+        # Unknown legacy or damaged values fail closed instead of erroring
+        # out of the whole integration.
+        bridge_mode = ClimateControlMode.DISABLED
     bridge_target = None
     canary_room_id = None
-    if bridge_mode is ClimateBridgeMode.DISABLED:
-        if climate_bridge_target_value is not None or climate_canary_room_id_value is not None:
-            raise ConfigurationViolation(
-                "disabled climate bridge must not retain a target or canary room"
-            )
-    else:
-        if (
-            climate_bridge_target_value is None
-            and bridge_mode in {ClimateBridgeMode.SHADOW, ClimateBridgeMode.CANARY}
-        ):
-            # Shadow evidence and canary comparison still read the external
-            # module; managed mode runs fully native and accepts a missing or
-            # legacy target without using it.
-            raise ConfigurationViolation(
-                "shadow and canary climate modes require a bridge target"
-            )
-        if climate_bridge_target_value is not None:
-            try:
-                bridge_target = climate_bridge_target(climate_bridge_target_value)
-            except UnsafeClimateBridgeTarget as error:
-                raise ConfigurationViolation(str(error)) from error
-        if bridge_mode is ClimateBridgeMode.CANARY:
-            try:
-                canary_room_id = ClimateRoom(
-                    climate_canary_room_id_value,  # type: ignore[arg-type]
-                    "Temporary",
-                ).room_id
-            except ClimateModelViolation as error:
-                raise ConfigurationViolation(
-                    "climate canary room must be a stable lowercase id"
-                ) from error
-        elif climate_canary_room_id_value is not None:
-            raise ConfigurationViolation(
-                "non-canary climate bridge must not retain a canary room"
-            )
 
     try:
         native_policy = native_climate_policy(

@@ -53,6 +53,7 @@ PUBLIC_CLIMATE_DISPLAY_NAMES: Mapping[str, Mapping[str, str]] = {
         "room_not_selected": "Комната не выбрана для управления",
         "state_stale": "Данные о климате устарели",
         "registry_mismatch": "Настройка устройств не совпадает",
+        "needs_reimport": "Устройство нужно подключить заново",
         "authority_not_ready": "Климатический модуль не готов к управлению",
         "device_unavailable": "Устройство недоступно",
         "actions_unsupported": "Устройство не поддерживает нужные действия",

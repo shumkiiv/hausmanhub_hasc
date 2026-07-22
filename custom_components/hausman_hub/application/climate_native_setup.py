@@ -22,7 +22,7 @@ from ..domain.climate_observation import (
     ClimateDataStatus,
     ClimateObservationSnapshot,
 )
-from .climate_import import (
+from .climate_discovery import (
     SUPPORTED_BACKEND_COMMAND_TYPES,
     ClimateImportSnapshot,
     ImportedClimateDevice,

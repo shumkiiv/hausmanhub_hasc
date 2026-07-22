@@ -33,7 +33,7 @@ from ..domain.contours import (
     climate_contour_room,
     climate_target_temperature,
 )
-from .climate_import import ClimateImportSnapshot
+from .climate_discovery import ClimateImportSnapshot
 from .climate_registry_import import (
     ClimateRegistryImportViolation,
     import_managed_climate_selection,

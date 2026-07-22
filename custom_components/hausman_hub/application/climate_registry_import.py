@@ -14,7 +14,7 @@ from ..domain.climate import (
     ClimateRegistry,
     ClimateRoom,
 )
-from .climate_import import ClimateImportSnapshot, ImportedClimateDevice
+from .climate_discovery import ClimateImportSnapshot, ImportedClimateDevice
 
 
 class ClimateRegistryImportViolation(ValueError):

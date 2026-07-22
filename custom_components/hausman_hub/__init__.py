@@ -44,7 +44,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     from .application.climate_runtime import ClimateRuntime
     from .climate_api import register_climate_api
-    from .climate_evidence_storage import HomeAssistantClimateEvidenceStore
     from .climate_ha_executor import HomeAssistantClimateCallExecutor
     from .climate_ha_state_view import HomeAssistantClimateStateView
     from .climate_protection_storage import HomeAssistantClimateProtectionStore
@@ -56,27 +55,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry,
         (Platform.SENSOR, Platform.SWITCH),
     )
+    contour_store = HomeAssistantContourStore(hass, entry.entry_id)
     if configuration.local_summary_enabled:
         register_local_summary_access(hass, entry)
-    climate_client = None
-    if configuration.climate_bridge_target is not None:
-        from .climate_bridge import ClimateApiClient
-        from .domain.climate_bridge import ClimateBridgeMode
-
-        if configuration.climate_bridge_mode in {
-            ClimateBridgeMode.SHADOW,
-            ClimateBridgeMode.CANARY,
-        }:
-            climate_client = ClimateApiClient(
-                hass, configuration.climate_bridge_target
-            )
     climate_runtime = ClimateRuntime(
         entry_id=entry.entry_id,
         configuration=configuration,
         registry_store=HomeAssistantClimateRegistryStore(hass, entry.entry_id),
-        bridge_client=climate_client,
-        evidence_store=HomeAssistantClimateEvidenceStore(hass, entry.entry_id),
-        contour_store=HomeAssistantContourStore(hass, entry.entry_id),
+        contour_store=contour_store,
         protection_store=HomeAssistantClimateProtectionStore(hass, entry.entry_id),
         strict_ha_call_executor=HomeAssistantClimateCallExecutor(hass),
         ha_state_view=HomeAssistantClimateStateView(hass),
@@ -215,3 +201,42 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         unregister_hausmanhub_panel(hass)
     return unloaded
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate legacy shadow/canary entries to the retired two-mode world once."""
+
+    if entry.version >= 2:
+        return True
+    from .application.contours import with_climate_contour_mode
+    from .domain.climate_bridge import LEGACY_BRIDGE_MODES
+    from .domain.contours import ContourMode
+
+    saved_mode = entry.options.get("climate_bridge_mode") or entry.data.get(
+        "climate_bridge_mode"
+    )
+    updates: dict[str, object] = dict(entry.options)
+    if saved_mode in LEGACY_BRIDGE_MODES:
+        updates["climate_bridge_mode"] = "disabled"
+    for stale_field in ("climate_bridge_target", "climate_canary_room_id"):
+        updates.pop(stale_field, None)
+    if updates != dict(entry.options):
+        hass.config_entries.async_update_entry(
+            entry,
+            data=entry.data,
+            options=updates,
+            version=2,
+        )
+    else:
+        hass.config_entries.async_update_entry(entry, version=2)
+    if saved_mode in LEGACY_BRIDGE_MODES:
+        contour_store = HomeAssistantContourStore(hass, entry.entry_id)
+        contours = await contour_store.async_load()
+        if (
+            contours.contour("climate") is not None
+            and contours.contour("climate").mode is ContourMode.AUTOMATIC
+        ):
+            await contour_store.async_save(
+                with_climate_contour_mode(contours, ContourMode.OBSERVE)
+            )
+    return True

@@ -32,26 +32,12 @@ from ..domain.climate_protection import (
 )
 from ..domain.climate_resolution import ClimateResolutionSnapshot
 from ..domain.climate_stability import ClimateStabilitySnapshot
-from ..domain.climate_bridge import ClimateBridgeMode
+from ..domain.climate_bridge import ClimateControlMode
 from ..domain.climate_trial import ClimateTrialReceipt, ClimateTrialReason
 from ..domain.configuration import SafeConfiguration
 from ..domain.contours import ContourDefinition, ContourMode, ContourRegistry
 from ..domain.native_climate import NativeClimatePolicy, preview_native_climate
 from ..domain.climate_targets import ClimateTargetSnapshot
-from .android_climate import admin_climate_import_snapshot, android_climate_snapshot
-from .climate_canary_preflight import climate_canary_preflight
-from .climate_commands import (
-    ClimateCommandPlan,
-    ClimateCommandRejected,
-    ClimateCommandViolation,
-    plan_climate_command,
-)
-from .climate_evidence import (
-    ClimateShadowEvidence,
-    SHADOW_EVIDENCE_REQUIRED_ACTIONS,
-    candidate_room_from_payload,
-    public_intent_context,
-)
 from .climate_application import ClimateDesiredStateChanges
 from .climate_equipment import build_climate_equipment_snapshot
 from .climate_ha_adapters import build_climate_ha_call_plan
@@ -60,19 +46,20 @@ from .climate_ha_observations import (
     ClimateHaStateView,
     build_native_ha_climate_observation,
 )
-from .climate_import import ClimateImportSnapshot
+from .climate_discovery import ClimateImportSnapshot
 from .climate_isolation import build_isolated_climate_policy_snapshot
 from .climate_native_projections import (
+    native_readiness_reasons,
     native_admin_climate_import_snapshot,
     native_android_climate_snapshot,
     native_climate_readiness,
+    native_climate_reconciliation,
     native_contour_apply_preview,
     native_contour_snapshot,
 )
 from .climate_native_setup import build_native_climate_setup_snapshot
 from .climate_comparison import build_climate_comparison_snapshot
 from .climate_demands import build_climate_demand_snapshot
-from .climate_operations import _ClimateOperationLedger, ClimateOperationReceipt
 from .climate_observations import (
     unavailable_climate_observation_snapshot,
 )
@@ -158,26 +145,6 @@ class ClimateRegistryStorage(Protocol):
         """Atomically save one complete validated registry."""
 
 
-class ClimateBridgeClient(Protocol):
-    """Minimal fixed-path Climate API boundary."""
-
-    async def async_fetch_state(self) -> ClimateImportSnapshot:
-        """Fetch and validate one state snapshot."""
-
-    async def async_execute(self, plan: ClimateCommandPlan) -> object:
-        """Post only a plan explicitly marked executable."""
-
-
-class ClimateEvidenceStorage(Protocol):
-    """Minimal bounded shadow-evidence persistence boundary."""
-
-    async def async_load(self) -> ClimateShadowEvidence | None:
-        """Load a validated evidence window when one exists."""
-
-    async def async_save(self, evidence: ClimateShadowEvidence) -> None:
-        """Atomically save one bounded evidence window."""
-
-
 class ContourStorage(Protocol):
     """Minimal versioned persistence boundary for HausmanHub contour definitions."""
 
@@ -222,8 +189,6 @@ class ClimateRuntime:
         entry_id: str,
         configuration: SafeConfiguration,
         registry_store: ClimateRegistryStorage,
-        bridge_client: ClimateBridgeClient | None,
-        evidence_store: ClimateEvidenceStorage | None = None,
         contour_store: ContourStorage | None = None,
         protection_store: ClimateProtectionStorage | None = None,
         strict_ha_call_executor: ClimateStrictHaCallExecutor | None = None,
@@ -235,8 +200,6 @@ class ClimateRuntime:
         self.entry_id = entry_id
         self.configuration = configuration
         self._registry_store = registry_store
-        self._bridge_client = bridge_client
-        self._evidence_store = evidence_store
         self._contour_store = contour_store
         self._protection_store = protection_store
         self._strict_ha_call_executor = strict_ha_call_executor
@@ -244,16 +207,10 @@ class ClimateRuntime:
         self._now_ms = now_ms or (lambda: int(time.time() * 1000))
         self._local_now = local_now or (lambda: datetime.now().astimezone())
         self._registry = ClimateRegistry()
-        self._snapshot: ClimateImportSnapshot | None = None
-        self._evidence: ClimateShadowEvidence | None = None
         self._contours = ContourRegistry()
         self._protection_memory = empty_climate_protection_memory(updated_at=0)
         self._protection_restart_after: int | None = None
         self._lock = asyncio.Lock()
-        self._operations = _ClimateOperationLedger(
-            operation_id_factory=operation_id_factory,
-            now_ms=self._now_ms,
-        )
         self._contour_applications = _ContourApplyLedger(
             operation_id_factory=operation_id_factory,
             now_ms=self._now_ms,
@@ -278,11 +235,11 @@ class ClimateRuntime:
 
         if self.last_error is not None:
             return "unavailable"
-        if self.configuration.climate_bridge_mode is ClimateBridgeMode.DISABLED:
+        if self.configuration.climate_bridge_mode is ClimateControlMode.DISABLED:
             return "disabled"
-        if self._snapshot is None:
+        if self._registry is None:
             return "not_refreshed"
-        return "fresh" if self._snapshot.runtime_fresh else "stale"
+        return "fresh"
 
     async def async_start(self) -> None:
         """Load local registry and best-effort initial read-only state."""
@@ -320,31 +277,7 @@ class ClimateRuntime:
                 )
                 if loaded_protection is None or protection_changed:
                     await self._async_save_protection(self._protection_memory)
-                loaded_evidence = (
-                    await self._evidence_store.async_load()
-                    if self._evidence_store is not None
-                    else None
-                )
-                self._evidence = loaded_evidence or ClimateShadowEvidence.for_registry(
-                    self._registry,
-                    now_ms=now,
-                )
-                changed = loaded_evidence is None or self._evidence.ensure_registry(
-                    self._registry,
-                    now_ms=now,
-                )
-                if changed:
-                    await self._async_save_evidence()
-                if self.configuration.climate_bridge_mode in {
-                    ClimateBridgeMode.SHADOW,
-                    ClimateBridgeMode.CANARY,
-                }:
-                    # Shadow evidence and canary comparison still need one
-                    # bridge read at startup; managed and disabled modes are
-                    # fully native and never contact the external module.
-                    await self._async_refresh_unlocked()
-                else:
-                    self.last_error = None
+                self.last_error = None
             except Exception as error:
                 # Base HausmanHub remains available; climate endpoints fail closed and
                 # an administrator can replace a damaged local registry.
@@ -354,7 +287,7 @@ class ClimateRuntime:
         """Refresh and return the private-id-free tablet contract."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.MANAGED:
+            if self.configuration.climate_bridge_mode is ClimateControlMode.MANAGED:
                 observation = await self._async_native_climate_observation_unlocked()
                 if observation.data_status is ClimateDataStatus.UNAVAILABLE:
                     raise ClimateRuntimeUnavailable("climate state is unavailable")
@@ -363,43 +296,16 @@ class ClimateRuntime:
                     observation,
                     contours=self._contours,
                     bridge_mode=self.configuration.climate_bridge_mode,
-                    canary_room_id=self.configuration.climate_canary_room_id,
-                    candidate_ready=False,
-                    pending_room_ids=tuple(
-                        room.room_id
-                        for room in self._registry.rooms
-                        if self._operations.room_has_pending(room.room_id)
-                    ),
+                    pending_room_ids=(),
                     local_now=self._local_now(),
                 )
-            snapshot = await self._async_refresh_unlocked()
-            candidate_ready = (
-                self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY
-                and self._candidate_is_ready(
-                    snapshot,
-                    self.configuration.climate_canary_room_id,
-                )
-            )
-            return android_climate_snapshot(
-                self._registry,
-                snapshot,
-                contours=self._contours,
-                bridge_mode=self.configuration.climate_bridge_mode,
-                canary_room_id=self.configuration.climate_canary_room_id,
-                candidate_ready=candidate_ready,
-                pending_room_ids=tuple(
-                    room.room_id
-                    for room in self._registry.rooms
-                    if self._operations.room_has_pending(room.room_id)
-                ),
-                local_now=self._local_now(),
-            )
+            raise ClimateRuntimeUnavailable("climate bridge is disabled")
 
     async def async_admin_import_snapshot(self) -> dict[str, object]:
         """Refresh and return private discovery data for a local admin."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.MANAGED:
+            if self.configuration.climate_bridge_mode is ClimateControlMode.MANAGED:
                 observation = await self._async_native_climate_observation_unlocked()
                 if observation.data_status is ClimateDataStatus.UNAVAILABLE:
                     raise ClimateRuntimeUnavailable("climate state is unavailable")
@@ -407,8 +313,7 @@ class ClimateRuntime:
                     self._registry,
                     observation,
                 )
-            snapshot = await self._async_refresh_unlocked()
-            return admin_climate_import_snapshot(self._registry, snapshot)
+            raise ClimateRuntimeUnavailable("climate bridge is disabled")
 
     async def async_create_contour_draft(
         self,
@@ -459,10 +364,6 @@ class ClimateRuntime:
         """Validate and atomically save one unchanged climate contour draft."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY:
-                raise ClimateRuntimeUnavailable(
-                    "contour setup changes require disabled or shadow mode"
-                )
             if self._contour_store is None:
                 raise ClimateRuntimeUnavailable("contour storage is unavailable")
             snapshot = await self._async_native_setup_snapshot_unlocked()
@@ -481,10 +382,6 @@ class ClimateRuntime:
         """Atomically save day/night profiles without sending commands."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY:
-                raise ClimateRuntimeUnavailable(
-                    "climate profile changes require non-canary mode"
-                )
             if self._contour_store is None:
                 raise ClimateRuntimeUnavailable("contour storage is unavailable")
             updated, receipt = update_climate_profiles(
@@ -494,7 +391,7 @@ class ClimateRuntime:
                 saved_at=self._safe_now(),
                 automatic_application_enabled=(
                     self.configuration.climate_bridge_mode
-                    is ClimateBridgeMode.MANAGED
+                    is ClimateControlMode.MANAGED
                 ),
             )
             await self._contour_store.async_save(updated)
@@ -521,7 +418,7 @@ class ClimateRuntime:
                 saved_at=self._safe_now(),
                 automatic_application_enabled=(
                     self.configuration.climate_bridge_mode
-                    is ClimateBridgeMode.MANAGED
+                    is ClimateControlMode.MANAGED
                 ),
             )
             await self._contour_store.async_save(updated)
@@ -551,7 +448,7 @@ class ClimateRuntime:
         """Return public contour status using the existing climate engine."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.MANAGED:
+            if self.configuration.climate_bridge_mode is ClimateControlMode.MANAGED:
                 try:
                     observation = (
                         await self._async_native_climate_observation_unlocked()
@@ -570,22 +467,11 @@ class ClimateRuntime:
                     settings_apply_enabled=True,
                     local_now=self._local_now(),
                 )
-            snapshot = self._snapshot
-            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
-                try:
-                    snapshot = await self._async_refresh_unlocked(
-                        persist_evidence=False
-                    )
-                except ClimateRuntimeUnavailable:
-                    snapshot = None
-            return contour_snapshot(
+            return native_contour_snapshot(
                 self._contours,
                 self._registry,
-                snapshot,
-                settings_apply_enabled=(
-                    self.configuration.climate_bridge_mode
-                    is ClimateBridgeMode.MANAGED
-                ),
+                None,
+                settings_apply_enabled=False,
                 local_now=self._local_now(),
             )
 
@@ -593,7 +479,7 @@ class ClimateRuntime:
         """Preview supported saved-contour changes without posting commands."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.MANAGED:
+            if self.configuration.climate_bridge_mode is not ClimateControlMode.MANAGED:
                 raise ClimateRuntimeUnavailable(
                     "contour settings require the normal existing-engine connection"
                 )
@@ -637,7 +523,7 @@ class ClimateRuntime:
                 or not contour.schedule.enabled
                 or contour.mode is not ContourMode.AUTOMATIC
                 or self.configuration.climate_bridge_mode
-                is not ClimateBridgeMode.MANAGED
+                is not ClimateControlMode.MANAGED
             ):
                 return None
             selected = contour.schedule.profile_at(hour=now.hour, minute=now.minute)
@@ -1161,7 +1047,7 @@ class ClimateRuntime:
 
         async with self._lock:
             contour = self._contours.contour(CLIMATE_CONTOUR_ID)
-            trial_room_id = self.configuration.climate_canary_room_id
+            trial_room_id = self._trial_room_id(contour)
             if contour is None or trial_room_id is None:
                 return None
             observation = await self._async_native_climate_observation_unlocked()
@@ -1207,10 +1093,7 @@ class ClimateRuntime:
                     registry=self._registry,
                     required_scope=ClimateControlScope.MANAGED,
                     allowed_bridge_modes=frozenset(
-                        {
-                            ClimateBridgeMode.CANARY,
-                            ClimateBridgeMode.MANAGED,
-                        }
+                        {ClimateControlMode.MANAGED}
                     ),
                 )
                 receipts.append(await self._async_apply_trial_decision(decision))
@@ -1263,8 +1146,27 @@ class ClimateRuntime:
                 observed_at=observed_at,
             )
 
+    def _trial_room_id(self, contour) -> str | None:
+        """Return the one trial room holding a canary-scoped active device."""
+
+        if contour is None:
+            return None
+        trial_rooms = {
+            room.room_id
+            for room in contour.rooms
+            if any(
+                device.control_scope is ClimateControlScope.CANARY
+                and device.kind not in _PASSIVE_KINDS
+                for device in self._registry.devices
+                if device.device_id in set(room.device_ids)
+            )
+        }
+        if len(trial_rooms) != 1:
+            return None
+        return next(iter(trial_rooms))
+
     def _managed_room_ids(self, contour) -> tuple[str, ...]:
-        trial_room_id = self.configuration.climate_canary_room_id
+        trial_room_id = self._trial_room_id(contour)
         result: list[str] = []
         for room in contour.rooms:
             if room.room_id == trial_room_id:
@@ -1364,7 +1266,7 @@ class ClimateRuntime:
 
         if (
             self._ha_state_view is None
-            or self.configuration.climate_bridge_mode is ClimateBridgeMode.DISABLED
+            or self.configuration.climate_bridge_mode is ClimateControlMode.DISABLED
         ):
             return None
         try:
@@ -1397,7 +1299,7 @@ class ClimateRuntime:
 
         async with self._lock:
             mode = self.configuration.climate_bridge_mode
-            if mode is ClimateBridgeMode.MANAGED:
+            if mode is ClimateControlMode.MANAGED:
                 try:
                     observation = (
                         await self._async_native_climate_observation_unlocked()
@@ -1414,88 +1316,10 @@ class ClimateRuntime:
                     observation,
                     bridge_mode=mode,
                 )
-            if mode is ClimateBridgeMode.DISABLED:
-                return self._readiness_payload(
-                    status="disabled",
-                    fresh=False,
-                    reconciliation=None,
-                    reasons=("bridge_disabled",),
-                )
-            try:
-                snapshot = await self._async_refresh_unlocked()
-            except ClimateRuntimeUnavailable:
-                return self._readiness_payload(
-                    status="unavailable",
-                    fresh=False,
-                    reconciliation=None,
-                    reasons=("climate_state_unavailable",),
-                )
-            reconciliation = reconcile_climate_registry(self._registry, snapshot)
-            reasons = _readiness_reasons(self._registry, snapshot, reconciliation.matches)
-            return self._readiness_payload(
-                status="ready" if not reasons else "not_ready",
-                fresh=snapshot.runtime_fresh,
-                reconciliation=reconciliation,
-                reasons=reasons,
-            )
-
-    async def async_shadow_evidence(self, payload: object) -> dict[str, object]:
-        """Return one redacted candidate-room evidence result to a local admin."""
-
-        candidate_room_id = candidate_room_from_payload(payload)
-        async with self._lock:
-            snapshot = self._snapshot
-            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
-                try:
-                    snapshot = await self._async_refresh_unlocked(
-                        persist_evidence=False
-                    )
-                except ClimateRuntimeUnavailable:
-                    snapshot = None
-            evidence = self._require_evidence()
-            result = evidence.as_payload(
-                registry=self._registry,
-                snapshot=snapshot,
-                bridge_mode=self.configuration.climate_bridge_mode,
-                candidate_room_id=candidate_room_id,
-                now_ms=self._safe_now(),
-            )
-            await self._async_save_evidence()
-            return result
-
-    async def async_canary_preflight(self, payload: object) -> dict[str, object]:
-        """Combine one room's rollout checks without enabling or posting anything."""
-
-        candidate_room_id = candidate_room_from_payload(payload)
-        async with self._lock:
-            snapshot = self._snapshot
-            if self.configuration.climate_bridge_mode is not ClimateBridgeMode.DISABLED:
-                try:
-                    snapshot = await self._async_refresh_unlocked(
-                        persist_evidence=False
-                    )
-                except ClimateRuntimeUnavailable:
-                    snapshot = None
-            checked_at = self._safe_now()
-            evidence = self._require_evidence()
-            evidence_payload = evidence.as_payload(
-                registry=self._registry,
-                snapshot=snapshot,
-                bridge_mode=self.configuration.climate_bridge_mode,
-                candidate_room_id=candidate_room_id,
-                now_ms=checked_at,
-            )
-            await self._async_save_evidence()
-            return climate_canary_preflight(
+            return native_climate_readiness(
                 self._registry,
-                snapshot,
-                evidence_payload,
-                bridge_mode=self.configuration.climate_bridge_mode,
-                room_id=candidate_room_id,
-                pending_operation=self._operations.room_has_pending(
-                    candidate_room_id
-                ),
-                checked_at=checked_at,
+                None,
+                bridge_mode=ClimateControlMode.DISABLED,
             )
 
     async def async_preview_registry(self, payload: object) -> dict[str, object]:
@@ -1504,7 +1328,7 @@ class ClimateRuntime:
         async with self._lock:
             registry = registry_from_payload(payload)
             mode = self.configuration.climate_bridge_mode
-            if mode is ClimateBridgeMode.DISABLED:
+            if mode is ClimateControlMode.DISABLED:
                 return _registry_preview_payload(
                     registry,
                     status="validated_offline",
@@ -1513,26 +1337,28 @@ class ClimateRuntime:
                     reconciliation=None,
                     reasons=("bridge_disabled",),
                 )
-            try:
-                snapshot = await self._async_refresh_unlocked()
-            except ClimateRuntimeUnavailable:
+            observation = self._native_observation_for_registry(registry)
+            if observation is None or observation.data_status is ClimateDataStatus.UNAVAILABLE:
                 return _registry_preview_payload(
                     registry,
                     status="unavailable",
-                    save_allowed=mode is ClimateBridgeMode.SHADOW,
+                    save_allowed=False,
                     fresh=False,
                     reconciliation=None,
                     reasons=("climate_state_unavailable",),
                 )
-            reconciliation = reconcile_climate_registry(registry, snapshot)
-            reasons = _readiness_reasons(registry, snapshot, reconciliation.matches)
-            if mode is ClimateBridgeMode.CANARY:
-                reasons = (*reasons, "canary_registry_locked")
+            reconciliation = native_climate_reconciliation(registry, observation)
+            reasons = native_readiness_reasons(
+                registry,
+                observation,
+                fresh=observation.data_status is ClimateDataStatus.FRESH,
+                matches=reconciliation.matches,
+            )
             return _registry_preview_payload(
                 registry,
                 status="ready" if not reasons else "not_ready",
-                save_allowed=mode is not ClimateBridgeMode.CANARY,
-                fresh=snapshot.runtime_fresh,
+                save_allowed=True,
+                fresh=observation.data_status is ClimateDataStatus.FRESH,
                 reconciliation=reconciliation,
                 reasons=tuple(dict.fromkeys(reasons)),
             )
@@ -1541,17 +1367,10 @@ class ClimateRuntime:
         """Validate and atomically replace the registry outside active canary."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY:
-                raise ClimateRuntimeUnavailable(
-                    "climate registry changes require disabled or shadow mode"
-                )
             registry = registry_from_payload(payload)
             validate_contour_bindings(self._contours, registry)
             await self._registry_store.async_save(registry)
             self._registry = registry
-            evidence = self._require_evidence()
-            evidence.ensure_registry(registry, now_ms=self._safe_now())
-            await self._async_save_evidence()
             self.last_error = None
             return registry_to_payload(registry)
 
@@ -1576,10 +1395,6 @@ class ClimateRuntime:
         """Save selected devices and contours as one rollback-protected setup."""
 
         async with self._lock:
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.CANARY:
-                raise ClimateRuntimeUnavailable(
-                    "contour setup changes require disabled or shadow mode"
-                )
             if self._contour_store is None:
                 raise ClimateRuntimeUnavailable("contour storage is unavailable")
             registry = registry_from_payload(registry_payload)
@@ -1602,11 +1417,6 @@ class ClimateRuntime:
         validate_contour_bindings(contours, registry)
         previous_registry = self._registry
         previous_contours = self._contours
-        previous_evidence = self._evidence
-        next_evidence = ClimateShadowEvidence.for_registry(
-            registry,
-            now_ms=self._safe_now(),
-        )
         registry_saved = False
         contours_saved = False
         try:
@@ -1614,8 +1424,6 @@ class ClimateRuntime:
             registry_saved = True
             await self._contour_store.async_save(contours)
             contours_saved = True
-            if self._evidence_store is not None:
-                await self._evidence_store.async_save(next_evidence)
         except Exception as error:
             rollback_error: Exception | None = None
             registry_restored = not registry_saved
@@ -1638,7 +1446,6 @@ class ClimateRuntime:
             if registry_restored and contours_restored:
                 self._registry = previous_registry
                 self._contours = previous_contours
-                self._evidence = previous_evidence
             else:
                 # If either backward write fails, keep the already-saved new
                 # pair together. A registry rollback can fail before contours
@@ -1650,7 +1457,6 @@ class ClimateRuntime:
                     except Exception as failure:
                         self._registry = registry
                         self._contours = previous_contours
-                        self._evidence = previous_evidence
                         self.last_error = type(failure).__name__
                         raise ClimateRuntimeUnavailable(
                             "contour setup storage is inconsistent"
@@ -1661,14 +1467,12 @@ class ClimateRuntime:
                     except Exception as failure:
                         self._registry = previous_registry
                         self._contours = contours
-                        self._evidence = previous_evidence
                         self.last_error = type(failure).__name__
                         raise ClimateRuntimeUnavailable(
                             "contour setup storage is inconsistent"
                         ) from failure
                 self._registry = registry
                 self._contours = contours
-                self._evidence = next_evidence
             self.last_error = type(error).__name__
             if rollback_error is not None:
                 raise ClimateRuntimeUnavailable(
@@ -1677,151 +1481,11 @@ class ClimateRuntime:
             raise
         self._registry = registry
         self._contours = contours
-        self._evidence = next_evidence
         self.last_error = None
         return {
             "registry": registry_to_payload(registry),
             "contours": contour_registry_to_payload(contours),
         }
-
-    async def async_action(self, payload: object) -> ClimateOperationReceipt:
-        """Idempotently validate and optionally post one typed climate action."""
-
-        async with self._lock:
-            # Preserve complete rollback semantics: a disabled bridge exposes
-            # no action-validation oracle and performs no state I/O.
-            self._require_client()
-            request_id, intent, canonical = self._operations.parse_action(payload)
-            duplicate = self._operations.duplicate(request_id, canonical)
-            if duplicate is not None:
-                return duplicate
-            snapshot = await self._async_refresh_unlocked()
-            try:
-                plan = plan_climate_command(
-                    intent,
-                    self._registry,
-                    snapshot,
-                    bridge_mode=self.configuration.climate_bridge_mode,
-                    canary_room_id=self.configuration.climate_canary_room_id,
-                )
-            except ClimateCommandViolation as violation:
-                if self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW:
-                    room_id, action = public_intent_context(intent, self._registry)
-                    try:
-                        await self._async_record_shadow_intent(
-                            category="rejected",
-                            room_id=room_id,
-                            action=action,
-                        )
-                    except Exception as error:
-                        # Keep the public validation result stable while making
-                        # the evidence persistence fault visible to diagnostics.
-                        self.last_error = type(error).__name__
-                        raise violation from error
-                raise
-            if self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW:
-                await self._async_record_shadow_intent(
-                    category="translated",
-                    room_id=plan.room_id,
-                    action=plan.action,
-                )
-            if plan.execute:
-                if not self._candidate_is_ready(snapshot, plan.room_id):
-                    raise ClimateCommandViolation("shadow evidence is not ready")
-                if plan.action not in SHADOW_EVIDENCE_REQUIRED_ACTIONS:
-                    raise ClimateCommandViolation(
-                        "action is outside the evidence-qualified canary scope"
-                    )
-                self._operations.ensure_submission_available(plan.room_id)
-                # Reserve the idempotency key before the POST. If transport
-                # becomes ambiguous, a retry returns this pending receipt and
-                # cannot submit a second physical command.
-                receipt = self._operations.record(
-                    request_id=request_id,
-                    canonical_intent=canonical,
-                    intent=intent,
-                    plan=plan,
-                )
-                client = self._require_client()
-                try:
-                    await client.async_execute(plan)
-                except ClimateCommandRejected:
-                    return self._operations.reject(receipt.operation_id)
-                return receipt
-            return self._operations.record(
-                request_id=request_id,
-                canonical_intent=canonical,
-                intent=intent,
-                plan=plan,
-            )
-
-    async def async_operation(self, payload: object) -> ClimateOperationReceipt:
-        """Return one bounded receipt and refresh only a pending canary result."""
-
-        async with self._lock:
-            snapshot = None
-            if self._operations.pending(payload):
-                try:
-                    snapshot = await self._async_refresh_unlocked()
-                except ClimateRuntimeUnavailable:
-                    # A transient read failure must not rewrite an accepted
-                    # command into a fabricated physical result.
-                    snapshot = None
-            return self._operations.lookup(payload, snapshot)
-
-    async def _async_refresh_unlocked(
-        self,
-        *,
-        persist_evidence: bool = True,
-        record_evidence: bool = True,
-    ) -> ClimateImportSnapshot:
-        client = self._require_client()
-        try:
-            snapshot = await client.async_fetch_state()
-        except Exception as error:
-            self.last_error = type(error).__name__
-            raise ClimateRuntimeUnavailable("climate state is unavailable") from error
-        self._snapshot = snapshot
-        if (
-            self.configuration.climate_bridge_mode is ClimateBridgeMode.SHADOW
-            and record_evidence
-        ):
-            try:
-                evidence = self._require_evidence()
-                changed = evidence.record_observation(
-                    self._registry,
-                    snapshot,
-                    now_ms=self._safe_now(),
-                )
-                if changed and persist_evidence:
-                    await self._async_save_evidence()
-            except Exception as error:
-                self.last_error = type(error).__name__
-                raise ClimateRuntimeUnavailable(
-                    "climate shadow evidence is unavailable"
-                ) from error
-        self.last_error = None
-        return snapshot
-
-    async def _async_record_shadow_intent(
-        self,
-        *,
-        category: str,
-        room_id: str | None,
-        action: str | None,
-    ) -> None:
-        evidence = self._require_evidence()
-        evidence.record_intent(
-            category=category,
-            room_id=room_id,
-            action=action,
-            now_ms=self._safe_now(),
-        )
-        await self._async_save_evidence()
-
-    async def _async_save_evidence(self) -> None:
-        if self._evidence_store is not None:
-            await self._evidence_store.async_save(self._require_evidence())
 
     async def _async_save_protection(
         self,
@@ -1830,33 +1494,28 @@ class ClimateRuntime:
         if self._protection_store is not None:
             await self._protection_store.async_save(memory)
 
-    def _candidate_is_ready(
+    def _native_observation_for_registry(
         self,
-        snapshot: ClimateImportSnapshot,
-        room_id: str | None,
-    ) -> bool:
-        if room_id is None:
-            return False
-        result = self._require_evidence().as_payload(
-            registry=self._registry,
-            snapshot=snapshot,
-            bridge_mode=self.configuration.climate_bridge_mode,
-            candidate_room_id=room_id,
-            now_ms=self._safe_now(),
-        )
-        candidate = result.get("candidate")
-        return isinstance(candidate, dict) and candidate.get("ready") is True
+        registry: ClimateRegistry,
+    ) -> ClimateObservationSnapshot | None:
+        """Build the native observation for one unsaved registry draft."""
 
-    def _require_evidence(self) -> ClimateShadowEvidence:
-        if self._evidence is None:
-            raise ClimateRuntimeUnavailable("climate shadow evidence is unavailable")
-        return self._evidence
-
-    def _safe_now(self) -> int:
-        value = self._now_ms()
-        if type(value) is not int or value < 0:
-            raise RuntimeError("climate runtime clock returned an unsafe timestamp")
-        return value
+        if self._ha_state_view is None:
+            return None
+        observed_at = self._safe_now()
+        try:
+            local = self._local_now()
+            return build_native_ha_climate_observation(
+                registry,
+                self._contours.contour(CLIMATE_CONTOUR_ID),
+                self._ha_state_view,
+                observed_at=observed_at,
+                protection=self._protection_memory,
+                local_time=(local.hour, local.minute),
+            )
+        except Exception as error:
+            self.last_error = type(error).__name__
+            return None
 
     async def _async_native_setup_snapshot_unlocked(self) -> ClimateImportSnapshot:
         """Build the wizard discovery snapshot without any bridge contact."""
@@ -1889,19 +1548,14 @@ class ClimateRuntime:
             catalog,
         )
 
-    def _require_client(self) -> ClimateBridgeClient:
-        if (
-            self.configuration.climate_bridge_mode
-            not in {ClimateBridgeMode.SHADOW, ClimateBridgeMode.CANARY}
-            or self._bridge_client is None
-        ):
-            raise ClimateRuntimeUnavailable(
-                "climate bridge requires shadow or canary mode"
-            )
-        return self._bridge_client
+    def _safe_now(self) -> int:
+        value = self._now_ms()
+        if type(value) is not int or value < 0:
+            raise RuntimeError("climate runtime clock returned an unsafe timestamp")
+        return value
 
     def _require_native_contour_apply_mode(self) -> None:
-        if self.configuration.climate_bridge_mode is not ClimateBridgeMode.MANAGED:
+        if self.configuration.climate_bridge_mode is not ClimateControlMode.MANAGED:
             raise ClimateRuntimeUnavailable(
                 "contour settings require managed native climate control"
             )
@@ -1921,151 +1575,10 @@ class ClimateRuntime:
             raise ContourApplyViolation("climate contour is not configured")
         return contour
 
-    def _readiness_payload(
-        self,
-        *,
-        status: str,
-        fresh: bool,
-        reconciliation: object | None,
-        reasons: tuple[str, ...],
-    ) -> dict[str, object]:
-        return {
-            "contract": {
-                "name": "hausman-hub-climate-readiness",
-                "version": 1,
-            },
-            "bridge_mode": self.configuration.climate_bridge_mode.value,
-            "status": status,
-            "ready": status == "ready",
-            "fresh": fresh,
-            "registry": {
-                "room_count": self.room_count,
-                "device_count": self.device_count,
-            },
-            "reconciliation": _reconciliation_counts(reconciliation),
-            "reasons": list(reasons),
-        }
-
-
 def _bounded_completed_count(value: object, maximum: int) -> int:
     if type(value) is int and 0 <= value <= maximum:
         return value
     return 0
-
-
-def _legacy_bridge_contour_commands(
-    contour: ContourDefinition,
-    snapshot: ClimateImportSnapshot,
-) -> tuple[ClimateCommandPlan, ...]:
-    commands: list[ClimateCommandPlan] = []
-    for room in contour.rooms:
-        observed = snapshot.room(room.room_id)
-        if observed is None:
-            raise ContourApplyViolation("climate room state is unavailable")
-        if observed.target_strategy != room.strategy.value:
-            commands.append(
-                ClimateCommandPlan(
-                    action="set_room_target_strategy",
-                    room_id=room.room_id,
-                    device_id=None,
-                    backend_command_type="climate.set_temperature",
-                    backend_payload={
-                        "command": "set_room_target_strategy",
-                        "roomId": room.room_id,
-                        "targetStrategy": room.strategy.value,
-                    },
-                    execute=True,
-                )
-            )
-        if observed.target_temperature != room.target_temperature:
-            commands.append(
-                ClimateCommandPlan(
-                    action="set_room_target",
-                    room_id=room.room_id,
-                    device_id=None,
-                    backend_command_type="climate.set_temperature",
-                    backend_payload={
-                        "command": "set_room_target",
-                        "roomId": room.room_id,
-                        "targetTemperature": room.target_temperature,
-                    },
-                    execute=True,
-                )
-            )
-        if observed.mode != "auto":
-            commands.append(
-                ClimateCommandPlan(
-                    action="set_room_mode",
-                    room_id=room.room_id,
-                    device_id=None,
-                    backend_command_type="climate.set_temperature",
-                    backend_payload={
-                        "command": "set_room_mode",
-                        "roomId": room.room_id,
-                        "mode": "auto",
-                    },
-                    execute=True,
-                )
-            )
-    return tuple(commands)
-
-
-def _legacy_contour_apply_preview(
-    contour: ContourDefinition,
-    snapshot: ClimateImportSnapshot,
-) -> dict[str, object]:
-    commands = _legacy_bridge_contour_commands(contour, snapshot)
-    temperature_changes = 0
-    strategy_changes = 0
-    automatic_mode_changes = 0
-    for room in contour.rooms:
-        observed = snapshot.room(room.room_id)
-        if observed is None:
-            raise ContourApplyViolation("climate room state is unavailable")
-        temperature_changes += observed.target_temperature != room.target_temperature
-        strategy_changes += observed.target_strategy != room.strategy.value
-        automatic_mode_changes += observed.mode != "auto"
-    return {
-        "contract": {
-            "name": CONTOUR_APPLY_PREVIEW_CONTRACT_NAME,
-            "version": CONTOUR_APPLY_CONTRACT_VERSION,
-        },
-        "contour_id": contour.contour_id,
-        "status": "in_sync" if not commands else "ready",
-        "ready": True,
-        "room_count": len(contour.rooms),
-        "command_count": len(commands),
-        "changes": {
-            "temperature": temperature_changes,
-            "strategy": strategy_changes,
-            "automatic_mode": automatic_mode_changes,
-        },
-        "requires_confirmation": True,
-        "parameters": {
-            "temperature": True,
-            "strategy": True,
-            "automatic_mode": True,
-            "humidity": False,
-        },
-        "limitations": ["room_humidity_command_not_supported"],
-    }
-
-
-def _readiness_reasons(
-    registry: ClimateRegistry,
-    snapshot: ClimateImportSnapshot,
-    matches: bool,
-) -> tuple[str, ...]:
-    reasons: list[str] = []
-    if not snapshot.runtime_fresh:
-        reasons.append("state_stale")
-    if not registry.rooms:
-        reasons.append("registry_has_no_rooms")
-    if not registry.devices:
-        reasons.append("registry_has_no_devices")
-    if not matches:
-        reasons.append("registry_mismatch")
-    return tuple(reasons)
 
 
 def _registry_preview_payload(

@@ -55,7 +55,7 @@ from .application.configuration import (
     create_options,
     effective_configuration,
 )
-from .application.climate_import import (
+from .application.climate_discovery import (
     ClimateImportSnapshot,
     ImportedClimateDevice,
 )
@@ -89,9 +89,7 @@ from .domain.control import (
     canary_control_target,
 )
 from .domain.climate_bridge import (
-    ClimateBridgeMode,
-    UnsafeClimateBridgeTarget,
-    climate_bridge_target,
+    ClimateControlMode,
 )
 from .domain.native_climate import (
     NATIVE_TARGET_HUMIDITY_DEFAULT,
@@ -154,11 +152,7 @@ CLIMATE_DEVICE_SCOPE_FIELD = "climate_device_control_scope"
 CLIMATE_DEVICE_OWNER_FIELD = "climate_device_control_owner"
 CLIMATE_DEVICE_CAPABILITIES_FIELD = "climate_device_capabilities"
 CLIMATE_DEVICE_CONTROL_ENTITY_FIELD = "climate_device_control_entity"
-CLIMATE_SHADOW_CANDIDATE_ROOM_FIELD = "climate_shadow_candidate_room"
-CLIMATE_SHADOW_EVIDENCE_CLOSE_FIELD = "close_shadow_evidence"
 CLIMATE_IMPORT_CANDIDATE_FIELD = "climate_import_candidate"
-CLIMATE_PREFLIGHT_ROOM_FIELD = "climate_preflight_room"
-CLIMATE_PREFLIGHT_CLOSE_FIELD = "close_canary_preflight"
 NATIVE_CLIMATE_CONFIRM_FIELD = "confirm_native_climate_preview"
 MAX_CLIMATE_REGISTRY_FORM_BYTES = 16 * 1024
 MISSING_CLIMATE_DEVICE_LABEL = "Нет доступных устройств"
@@ -376,7 +370,7 @@ CANARY_CONTROL_TARGET_SELECTOR = EntitySelector(
 )
 CLIMATE_BRIDGE_MODE_SELECTOR = SelectSelector(
     SelectSelectorConfig(
-        options=[mode.value for mode in ClimateBridgeMode],
+        options=[mode.value for mode in ClimateControlMode],
         translation_key="climate_bridge_mode",
     )
 )
@@ -460,8 +454,6 @@ CLIMATE_REGISTRY_ACTION_SELECTOR = SelectSelector(
             "import_candidate",
             "add_room",
             "add_device",
-            "review_canary_preflight",
-            "review_shadow_evidence",
             "review_registry",
             "advanced_json",
             "reset_registry",
@@ -563,15 +555,6 @@ def _contour_action_schema() -> vol.Schema:
             ): CONTOUR_ACTION_SELECTOR
         }
     )
-
-
-def _climate_contour_source_schema(default: str | None) -> vol.Schema:
-    field = (
-        vol.Required(CLIMATE_BRIDGE_TARGET_FIELD, default=default)
-        if default is not None
-        else vol.Required(CLIMATE_BRIDGE_TARGET_FIELD)
-    )
-    return vol.Schema({field: str})
 
 
 def _climate_contour_setup_schema(
@@ -831,34 +814,17 @@ def _climate_connection_schema(climate_bridge_mode_default: str) -> vol.Schema:
     )
 
 
-def _climate_endpoint_schema(
-    *,
-    bridge_mode: str,
-    climate_bridge_target_default: str | None,
-    climate_canary_room_id_default: str | None,
-) -> vol.Schema:
-    """Ask for the address and only the room needed by one-room control."""
-
-    bridge_target_field = (
-        vol.Required(
-            CLIMATE_BRIDGE_TARGET_FIELD,
-            default=climate_bridge_target_default,
-        )
-        if climate_bridge_target_default is not None
-        else vol.Required(CLIMATE_BRIDGE_TARGET_FIELD)
-    )
-    fields: dict[vol.Marker, object] = {bridge_target_field: str}
-    if bridge_mode == ClimateBridgeMode.CANARY.value:
-        canary_room_field = (
+def _climate_registry_json_schema(default: str) -> vol.Schema:
+    return vol.Schema(
+        {
             vol.Required(
-                CLIMATE_CANARY_ROOM_ID_FIELD,
-                default=climate_canary_room_id_default,
+                CLIMATE_REGISTRY_JSON_FIELD,
+                default=default,
+            ): TextSelector(
+                TextSelectorConfig(multiline=True, type=TextSelectorType.TEXT)
             )
-            if climate_canary_room_id_default is not None
-            else vol.Required(CLIMATE_CANARY_ROOM_ID_FIELD)
-        )
-        fields[canary_room_field] = str
-    return vol.Schema(fields)
+        }
+    )
 
 
 def _native_climate_mode_schema(mode_default: str) -> vol.Schema:
@@ -912,9 +878,6 @@ def _native_climate_confirm_schema() -> vol.Schema:
             ): StrictBooleanSelector()
         }
     )
-
-
-def _climate_registry_json_schema(default: str) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(
@@ -1056,50 +1019,6 @@ def _climate_registry_confirm_schema() -> vol.Schema:
     )
 
 
-def _climate_shadow_candidate_schema(rooms: list[dict[str, str]]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CLIMATE_SHADOW_CANDIDATE_ROOM_FIELD): SelectSelector(
-                SelectSelectorConfig(options=rooms)
-            )
-        }
-    )
-
-
-def _climate_shadow_evidence_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(
-                CLIMATE_SHADOW_EVIDENCE_CLOSE_FIELD,
-                default=False,
-            ): StrictBooleanSelector()
-        }
-    )
-
-
-def _climate_preflight_candidate_schema(
-    rooms: list[dict[str, str]],
-) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CLIMATE_PREFLIGHT_ROOM_FIELD): SelectSelector(
-                SelectSelectorConfig(options=rooms)
-            )
-        }
-    )
-
-
-def _climate_canary_preflight_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(
-                CLIMATE_PREFLIGHT_CLOSE_FIELD,
-                default=False,
-            ): StrictBooleanSelector()
-        }
-    )
-
-
 def _safe_mode_default(
     entry_data: Mapping[str, Any], options: Mapping[str, Any]
 ) -> str:
@@ -1165,10 +1084,9 @@ def _safe_climate_bridge_defaults(
         configuration = effective_configuration(entry_data, options)
     except ConfigurationViolation:
         return CLIMATE_BRIDGE_MODE_DEFAULT, None, None
-    target = configuration.climate_bridge_target
     return (
         configuration.climate_bridge_mode.value,
-        None if target is None else target.origin,
+        None,
         configuration.climate_canary_room_id,
     )
 
@@ -1232,11 +1150,7 @@ def _merged_safe_options(
                 else current.canary_control_target.entity_id
             ),
             CLIMATE_BRIDGE_MODE_FIELD: current.climate_bridge_mode.value,
-            CLIMATE_BRIDGE_TARGET_FIELD: (
-                None
-                if current.climate_bridge_target is None
-                else current.climate_bridge_target.origin
-            ),
+            CLIMATE_BRIDGE_TARGET_FIELD: None,
             CLIMATE_CANARY_ROOM_ID_FIELD: current.climate_canary_room_id,
             NATIVE_CLIMATE_MODE_FIELD: current.native_climate_policy.mode.value,
             NATIVE_CLIMATE_ROOM_ID_FIELD: current.native_climate_policy.room_id,
@@ -1265,7 +1179,7 @@ def _merged_safe_options(
 class HausmanHubConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Create the single safe HausmanHub configuration entry."""
 
-    VERSION = 1
+    VERSION = 2
 
     @staticmethod
     @callback
@@ -1318,8 +1232,6 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _climate_bridge_mode_draft: str | None = None
     _registry_draft: object | None = None
     _registry_preview: Mapping[str, Any] | None = None
-    _shadow_evidence: Mapping[str, Any] | None = None
-    _canary_preflight: Mapping[str, Any] | None = None
     _import_snapshot: ClimateImportSnapshot | None = None
     _import_candidates: dict[str, ImportedClimateDevice] | None = None
     _selected_import_source_id: str | None = None
@@ -1327,7 +1239,6 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _native_climate_rooms: list[dict[str, str]] | None = None
     _native_climate_policy_draft: NativeClimatePolicy | None = None
     _native_climate_preview: Mapping[str, Any] | None = None
-    _contour_source_target: str | None = None
     _contour_source_snapshot: ClimateImportSnapshot | None = None
     _contour_device_tokens: dict[str, ImportedClimateDevice] | None = None
     _contour_saved_name: str | None = None
@@ -1497,7 +1408,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                         self.config_entry.options,
                         {
                             CLIMATE_BRIDGE_MODE_FIELD: (
-                                ClimateBridgeMode.DISABLED.value
+                                ClimateControlMode.DISABLED.value
                             ),
                             CLIMATE_BRIDGE_TARGET_FIELD: None,
                             CLIMATE_CANARY_ROOM_ID_FIELD: None,
@@ -1817,7 +1728,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                     if enabled and (
                         contour.mode is not ContourMode.AUTOMATIC
                         or configuration.climate_bridge_mode
-                        is not ClimateBridgeMode.MANAGED
+                        is not ClimateControlMode.MANAGED
                     ):
                         errors["base"] = "schedule_requires_automatic_climate"
                     else:
@@ -2350,58 +2261,14 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 self.config_entry.options,
             )
         except ConfigurationViolation:
-            return await self.async_step_climate_contour_source()
-        target = configuration.climate_bridge_target
+            return self.async_abort(reason="invalid_climate_configuration")
         try:
             snapshot = await runtime.async_registry_import_snapshot()
         except Exception:
-            # Native discovery is unavailable; the one-time bridge address
-            # remains the migration fallback for the old external module.
-            return await self.async_step_climate_contour_source()
-        self._contour_source_target = None if target is None else target.origin
+            return self.async_abort(reason="climate_native_discovery_unavailable")
         self._set_contour_source_snapshot(snapshot)
         await self._async_load_saved_contour(runtime)
         return await self.async_step_climate_contour_setup()
-
-    async def async_step_climate_contour_source(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Connect the existing climate engine once, using a read-only GET."""
-
-        _, saved_target, _ = _safe_climate_bridge_defaults(
-            self.config_entry.data,
-            self.config_entry.options,
-        )
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            raw_target = user_input.get(CLIMATE_BRIDGE_TARGET_FIELD)
-            try:
-                target = climate_bridge_target(raw_target)
-                from .climate_bridge import ClimateApiClient
-
-                snapshot = await ClimateApiClient(
-                    self.hass,
-                    target,
-                ).async_fetch_state()
-                if not snapshot.runtime_fresh:
-                    raise ValueError("climate source is stale")
-            except UnsafeClimateBridgeTarget:
-                errors[CLIMATE_BRIDGE_TARGET_FIELD] = "unsafe_climate_bridge_target"
-            except Exception:
-                errors["base"] = "climate_contour_source_unavailable"
-            else:
-                self._contour_source_target = target.origin
-                self._set_contour_source_snapshot(snapshot)
-                runtime = self._climate_runtime()
-                if runtime is not None:
-                    await self._async_load_saved_contour(runtime)
-                return await self.async_step_climate_contour_setup()
-        return self.async_show_form(
-            step_id="climate_contour_source",
-            data_schema=_climate_contour_source_schema(saved_target),
-            errors=errors,
-        )
 
     async def async_step_climate_contour_setup(
         self,
@@ -2412,7 +2279,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         snapshot = self._contour_source_snapshot
         tokens = self._contour_device_tokens or {}
         if snapshot is None or not snapshot.runtime_fresh or not tokens:
-            return await self.async_step_climate_contour_source()
+            return await self.async_step_contours()
         room_options = [
             SelectOptionDict(value=room.room_id, label=room.name)
             for room in snapshot.rooms
@@ -2787,8 +2654,8 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                         self.config_entry.data,
                         self.config_entry.options,
                         {
-                            CLIMATE_BRIDGE_MODE_FIELD: ClimateBridgeMode.MANAGED.value,
-                            CLIMATE_BRIDGE_TARGET_FIELD: self._contour_source_target,
+                            CLIMATE_BRIDGE_MODE_FIELD: ClimateControlMode.MANAGED.value,
+                            CLIMATE_BRIDGE_TARGET_FIELD: None,
                             CLIMATE_CANARY_ROOM_ID_FIELD: None,
                             NATIVE_CLIMATE_MODE_FIELD: NativeClimateMode.DISABLED.value,
                             NATIVE_CLIMATE_ROOM_ID_FIELD: None,
@@ -2927,7 +2794,7 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Select a safe bridge stage before showing its required details."""
+        """Choose between disabled and fully native managed climate control."""
 
         mode_default, _, _ = _safe_climate_bridge_defaults(
             self.config_entry.data,
@@ -2936,9 +2803,9 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
         if user_input is not None:
             mode = user_input.get(CLIMATE_BRIDGE_MODE_FIELD)
-            if mode not in {value.value for value in ClimateBridgeMode}:
+            if mode not in {value.value for value in ClimateControlMode}:
                 errors[CLIMATE_BRIDGE_MODE_FIELD] = "unsafe_climate_bridge_mode"
-            elif mode == ClimateBridgeMode.DISABLED.value:
+            else:
                 options = _merged_safe_options(
                     self.config_entry.data,
                     self.config_entry.options,
@@ -2949,69 +2816,10 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                     },
                 )
                 return self.async_create_entry(title="", data=options)
-            else:
-                self._climate_bridge_mode_draft = mode
-                return await self.async_step_climate_endpoint()
 
         return self.async_show_form(
             step_id="climate_connection",
             data_schema=_climate_connection_schema(mode_default),
-            errors=errors,
-        )
-
-    async def async_step_climate_endpoint(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Request only the address and optional one-room control ID."""
-
-        mode = self._climate_bridge_mode_draft
-        if mode not in {
-            ClimateBridgeMode.SHADOW.value,
-            ClimateBridgeMode.CANARY.value,
-            ClimateBridgeMode.MANAGED.value,
-        }:
-            return await self.async_step_init()
-        _, target_default, room_default = _safe_climate_bridge_defaults(
-            self.config_entry.data,
-            self.config_entry.options,
-        )
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            target = user_input.get(CLIMATE_BRIDGE_TARGET_FIELD)
-            room_id = (
-                user_input.get(CLIMATE_CANARY_ROOM_ID_FIELD)
-                if mode == ClimateBridgeMode.CANARY.value
-                else None
-            )
-            try:
-                climate_bridge_target(target)
-            except UnsafeClimateBridgeTarget:
-                errors[CLIMATE_BRIDGE_TARGET_FIELD] = "unsafe_climate_bridge_target"
-            if mode == ClimateBridgeMode.CANARY.value:
-                try:
-                    ClimateRoom(room_id, "Temporary")  # type: ignore[arg-type]
-                except ClimateModelViolation:
-                    errors[CLIMATE_CANARY_ROOM_ID_FIELD] = "unsafe_climate_canary_room"
-            if not errors:
-                options = _merged_safe_options(
-                    self.config_entry.data,
-                    self.config_entry.options,
-                    {
-                        CLIMATE_BRIDGE_MODE_FIELD: mode,
-                        CLIMATE_BRIDGE_TARGET_FIELD: target,
-                        CLIMATE_CANARY_ROOM_ID_FIELD: room_id,
-                    },
-                )
-                return self.async_create_entry(title="", data=options)
-
-        return self.async_show_form(
-            step_id="climate_endpoint",
-            data_schema=_climate_endpoint_schema(
-                bridge_mode=mode,
-                climate_bridge_target_default=target_default,
-                climate_canary_room_id_default=room_default,
-            ),
             errors=errors,
         )
 
@@ -3194,10 +3002,6 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_climate_registry_room()
             if action == "add_device":
                 return await self.async_step_climate_registry_device()
-            if action == "review_canary_preflight":
-                return await self.async_step_climate_preflight_candidate()
-            if action == "review_shadow_evidence":
-                return await self.async_step_climate_shadow_candidate()
             if action == "advanced_json":
                 return await self.async_step_climate_registry_json()
             if action == "reset_registry":
@@ -3335,136 +3139,6 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             step_id="climate_import_device",
             data_schema=_climate_import_device_schema(selected, self._draft_rooms()),
             errors=errors,
-        )
-
-    async def async_step_climate_shadow_candidate(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Select one public HausmanHub room for a read-only evidence result."""
-
-        rooms = self._draft_rooms()
-        if not rooms:
-            return self.async_show_form(
-                step_id="climate_shadow_candidate",
-                data_schema=_climate_shadow_candidate_schema(
-                    [
-                        SelectOptionDict(
-                            value="missing",
-                            label=MISSING_CLIMATE_ROOM_LABEL,
-                        )
-                    ]
-                ),
-                errors={"base": "climate_registry_needs_room"},
-            )
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            runtime = self._climate_runtime()
-            if runtime is None:
-                errors["base"] = "climate_runtime_unavailable"
-            else:
-                try:
-                    evidence = await runtime.async_shadow_evidence(
-                        {
-                            "room_id": user_input.get(
-                                CLIMATE_SHADOW_CANDIDATE_ROOM_FIELD
-                            )
-                        }
-                    )
-                except Exception:
-                    errors["base"] = "climate_shadow_evidence_unavailable"
-                else:
-                    self._shadow_evidence = evidence
-                    return await self.async_step_climate_shadow_evidence()
-        return self.async_show_form(
-            step_id="climate_shadow_candidate",
-            data_schema=_climate_shadow_candidate_schema(rooms),
-            errors=errors,
-        )
-
-    async def async_step_climate_preflight_candidate(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Select one saved public room for a non-activating rollout preflight."""
-
-        runtime = self._climate_runtime()
-        errors: dict[str, str] = {}
-        rooms: list[dict[str, str]] = []
-        if runtime is None:
-            errors["base"] = "climate_runtime_unavailable"
-        else:
-            try:
-                saved_registry = await runtime.async_registry_payload()
-                rooms = self._rooms_from_registry_payload(saved_registry)
-            except Exception:
-                errors["base"] = "climate_preflight_unavailable"
-            else:
-                if not rooms:
-                    errors["base"] = "climate_registry_needs_room"
-        if user_input is not None and not errors and runtime is not None:
-            try:
-                preflight = await runtime.async_canary_preflight(
-                    {"room_id": user_input.get(CLIMATE_PREFLIGHT_ROOM_FIELD)}
-                )
-            except Exception:
-                errors["base"] = "climate_preflight_unavailable"
-            else:
-                self._canary_preflight = preflight
-                return await self.async_step_climate_canary_preflight()
-        if not rooms:
-            rooms = [
-                SelectOptionDict(
-                    value="missing",
-                    label=MISSING_CLIMATE_ROOM_LABEL,
-                )
-            ]
-        return self.async_show_form(
-            step_id="climate_preflight_candidate",
-            data_schema=_climate_preflight_candidate_schema(rooms),
-            errors=errors,
-        )
-
-    async def async_step_climate_canary_preflight(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Show one complete redacted result without saving or activating."""
-
-        if self._canary_preflight is None:
-            return await self.async_step_climate_preflight_candidate()
-        if (
-            user_input is not None
-            and user_input.get(CLIMATE_PREFLIGHT_CLOSE_FIELD) is True
-        ):
-            self._canary_preflight = None
-            return await self.async_step_climate_registry()
-        return self.async_show_form(
-            step_id="climate_canary_preflight",
-            data_schema=_climate_canary_preflight_schema(),
-            errors={},
-            description_placeholders=self._canary_preflight_placeholders(),
-        )
-
-    async def async_step_climate_shadow_evidence(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Show the redacted evidence result without changing settings."""
-
-        if self._shadow_evidence is None:
-            return await self.async_step_climate_shadow_candidate()
-        if (
-            user_input is not None
-            and user_input.get(CLIMATE_SHADOW_EVIDENCE_CLOSE_FIELD) is True
-        ):
-            self._shadow_evidence = None
-            return await self.async_step_climate_registry()
-        return self.async_show_form(
-            step_id="climate_shadow_evidence",
-            data_schema=_climate_shadow_evidence_schema(),
-            errors={},
-            description_placeholders=self._shadow_evidence_placeholders(),
         )
 
     async def async_step_climate_registry_room(
@@ -4161,76 +3835,4 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             ),
             "commands": _russian_yes_no(execution_values.get("commands_enabled")),
             "reasons": _russian_native_reasons(preview.get("reasons")),
-        }
-
-    def _shadow_evidence_placeholders(self) -> dict[str, str]:
-        evidence = self._shadow_evidence or {}
-        candidate = evidence.get("candidate")
-        candidate_values = candidate if isinstance(candidate, Mapping) else {}
-        counts = evidence.get("counts")
-        count_values = counts if isinstance(counts, Mapping) else {}
-        return {
-            "room_id": self._room_display_name(candidate_values.get("room_id")),
-            "status": _russian_status(candidate_values.get("status")),
-            "matched": str(candidate_values.get("matched_observation_count", 0)),
-            "required_matched": str(
-                candidate_values.get("required_matched_observation_count", 3)
-            ),
-            "translated": str(candidate_values.get("translated_action_count", 0)),
-            "anomalies": str(candidate_values.get("anomaly_count", 0)),
-            "global_rejected": str(count_values.get("rejected", 0)),
-            "reasons": _russian_reasons(candidate_values.get("reasons")),
-        }
-
-    def _canary_preflight_placeholders(self) -> dict[str, str]:
-        preflight = self._canary_preflight or {}
-        registry = preflight.get("registry")
-        registry_values = registry if isinstance(registry, Mapping) else {}
-        reconciliation = registry_values.get("reconciliation")
-        reconciliation_values = (
-            reconciliation if isinstance(reconciliation, Mapping) else {}
-        )
-        shadow = preflight.get("shadow")
-        shadow_values = shadow if isinstance(shadow, Mapping) else {}
-        scope = preflight.get("command_scope")
-        scope_values = scope if isinstance(scope, Mapping) else {}
-        actions = scope_values.get("actions")
-        action_values = actions if isinstance(actions, list) else []
-        operation = preflight.get("operation")
-        operation_values = operation if isinstance(operation, Mapping) else {}
-        rollback = preflight.get("rollback")
-        rollback_values = rollback if isinstance(rollback, Mapping) else {}
-        return {
-            "room_id": self._room_display_name(preflight.get("room_id")),
-            "status": _russian_status(preflight.get("status")),
-            "registry_matches": _russian_yes_no(
-                reconciliation_values.get("matches")
-            ),
-            "matched_devices": str(
-                reconciliation_values.get("matched_device_count", 0)
-            ),
-            "missing_devices": str(
-                reconciliation_values.get("missing_device_count", 0)
-            ),
-            "moved_devices": str(
-                reconciliation_values.get("room_mismatch_device_count", 0)
-            ),
-            "unregistered_devices": str(
-                reconciliation_values.get("unregistered_source_count", 0)
-            ),
-            "shadow_status": _russian_status(shadow_values.get("status")),
-            "matched": str(shadow_values.get("matched_observation_count", 0)),
-            "required_matched": str(
-                shadow_values.get("required_matched_observation_count", 3)
-            ),
-            "translated": str(shadow_values.get("translated_action_count", 0)),
-            "required_actions": str(
-                shadow_values.get("required_action_count", 2)
-            ),
-            "anomalies": str(shadow_values.get("anomaly_count", 0)),
-            "scope": _russian_actions(action_values),
-            "scope_qualified": _russian_yes_no(scope_values.get("qualified")),
-            "operation": _russian_status(operation_values.get("status")),
-            "rollback": _russian_status(rollback_values.get("status")),
-            "reasons": _russian_reasons(preflight.get("reasons")),
         }

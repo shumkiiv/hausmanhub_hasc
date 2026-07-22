@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .climate_bridge import ClimateBridgeMode, ClimateBridgeTarget
+from .climate_bridge import ClimateControlMode, ClimateBridgeTarget
 from .control import CanaryControlTarget
 from .native_climate import NativeClimatePolicy
 
@@ -40,7 +40,7 @@ class SafeConfiguration:
     summary_update_interval: str = SUMMARY_UPDATE_INTERVAL_DEFAULT
     canary_control_enabled: bool = False
     canary_control_target: CanaryControlTarget | None = None
-    climate_bridge_mode: ClimateBridgeMode = ClimateBridgeMode.DISABLED
+    climate_bridge_mode: ClimateControlMode = ClimateControlMode.DISABLED
     climate_bridge_target: ClimateBridgeTarget | None = None
     climate_canary_room_id: str | None = None
     native_climate_policy: NativeClimatePolicy = NativeClimatePolicy()
