@@ -92,6 +92,7 @@ CANARY_CONTROL_SCOPE = "single_input_boolean"
 CLIMATE_BRIDGE_MODE_FIELD = "climate_bridge_mode"
 CLIMATE_BRIDGE_MODE_DEFAULT = "disabled"
 CLIMATE_BRIDGE_TARGET_FIELD = "climate_bridge_target"
+CLIMATE_MIGRATION_ADDRESS_FIELD = "climate_migration_address"
 CLIMATE_CANARY_ROOM_ID_FIELD = "climate_canary_room_id"
 OPTIONS_SECTION_FIELD = "settings_section"
 CONTOUR_NAME_FIELD = "contour_name"
@@ -1142,7 +1143,13 @@ async def async_open_options_section(
     first_section = (
         "advanced_settings"
         if section
-        in {"climate_registry", "climate_connection", "native_climate", "test_switch"}
+        in {
+            "climate_registry",
+            "climate_connection",
+            "climate_migration",
+            "native_climate",
+            "test_switch",
+        }
         else section
     )
     result = await hass.config_entries.options.async_configure(
@@ -3734,6 +3741,18 @@ async def async_assert_shadow_climate_end_to_end(
             HTTPStatus.OK,
             "disposable shadow fixture must remove only its temporary registry",
         )
+        runtime_data = hass.data.get("hausman_hub", {})
+        climate_runtime = runtime_data.get("climate_runtime")
+        if climate_runtime is not None:
+            from homeassistant.helpers.storage import Store
+
+            contour_store = Store(
+                hass,
+                4,
+                f"hausman_hub.contours.{entry.entry_id}",
+            )
+            await contour_store.async_remove()
+            climate_runtime._contours = climate_runtime._contours.__class__()
     finally:
         await home_client.close()
         await bridge_server.close()
@@ -5356,6 +5375,147 @@ async def async_assert_user_deactivated_unsafe_settings_cannot_enable_lifecycle(
     return removed_entry
 
 
+async def async_assert_climate_migration_wizard(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+) -> None:
+    """Drive the migration wizard through the real options flow on a blank Core."""
+
+    climate_state = json.loads(CLIMATE_STATE_FIXTURE.read_text(encoding="utf-8"))
+    climate_state["generatedAt"] = int(time.time() * 1000)
+
+    async def state_handler(_: web.Request) -> web.Response:
+        climate_state["generatedAt"] = int(time.time() * 1000)
+        return web.json_response(climate_state)
+
+    bridge_app = web.Application()
+    bridge_app.router.add_get("/endpoint/climate/api/v1/state", state_handler)
+    bridge_server = TestServer(bridge_app, host="127.0.0.1")
+    await bridge_server.start_server()
+    bridge_origin = str(bridge_server.make_url("/")).removesuffix("/")
+    try:
+        hass.states.async_set(
+            "climate.synthetic_living_ac",
+            "cool",
+            {"friendly_name": "Living AC", "supported_features": 137},
+        )
+        hass.states.async_set(
+            "humidifier.synthetic_humidifier_source_kids",
+            "off",
+            {"friendly_name": "Kids humidifier"},
+        )
+        migration_form = await async_open_options_section(hass, entry, "climate_migration")
+        assert_result(
+            migration_form["step_id"],
+            "climate_migration",
+            "migration wizard must open its address step for an empty contour",
+        )
+        preview = await hass.config_entries.options.async_configure(
+            migration_form["flow_id"],
+            {CLIMATE_MIGRATION_ADDRESS_FIELD: bridge_origin},
+        )
+        if preview.get("errors"):
+            raise RuntimeError(f"migration address step errors: {preview['errors']}")
+        assert_result(
+            preview["step_id"],
+            "climate_migration_preview",
+            "migration wizard must open the mapping preview after one read",
+        )
+        confirm = await hass.config_entries.options.async_configure(
+            preview["flow_id"],
+            {
+                "climate_migration_entity_device_001": "humidifier.synthetic_humidifier_source_kids",
+                "climate_migration_entity_device_002": "climate.synthetic_living_ac",
+            },
+        )
+        assert_result(
+            confirm["step_id"],
+            "climate_migration_confirm",
+            "migration wizard must require an explicit confirmation",
+        )
+        done = await hass.config_entries.options.async_configure(
+            confirm["flow_id"],
+            {"confirm_climate_migration": True},
+        )
+        assert_result(
+            done["type"],
+            "create_entry",
+            "migration wizard must finish with an atomic import",
+        )
+        await hass.async_block_till_done()
+        owner = await hass.auth.async_create_user(
+            "HausmanHub migration owner",
+            group_ids=[GROUP_ID_ADMIN],
+            local_only=True,
+        )
+        owner_headers = {
+            "Authorization": f"Bearer {await async_create_test_access_token(hass, owner)}"
+        }
+        home_server = TestServer(hass.http.app, host="127.0.0.1")
+        await home_server.start_server()
+        home_client = TestClient(home_server)
+        try:
+            imported = await home_client.get(
+                CLIMATE_ADMIN_REGISTRY_PATH,
+                headers=owner_headers,
+            )
+            assert_result(
+                imported.status,
+                HTTPStatus.OK,
+                "migration must leave a readable native registry",
+            )
+            payload = await imported.json()
+            assert_result(
+                [room["id"] for room in payload["rooms"]],
+                ["kids", "living"],
+                "migration must create the legacy rooms natively",
+            )
+            source_ids = sorted(device["source_id"] for device in payload["devices"])
+            assert_result(
+                source_ids,
+                [
+                    "hausmanhub-native-climate.synthetic_living_ac",
+                    "hausmanhub-native-humidifier.synthetic_humidifier_source_kids",
+                ],
+                "migration must bind devices with fresh private ids and endpoints",
+            )
+            for device in payload["devices"]:
+                if device["source_id"] in {
+                    "synthetic-ac-source-living",
+                    "synthetic-humidifier-source-kids",
+                }:
+                    raise RuntimeError(
+                        "migration must never copy an entity id into source_id"
+                    )
+        finally:
+            await home_client.close()
+        rollback_open = await hass.config_entries.options.async_init(entry.entry_id)
+        rollback_open = await hass.config_entries.options.async_configure(
+            rollback_open["flow_id"],
+            {"settings_section": "advanced_settings"},
+        )
+        rollback_open = await hass.config_entries.options.async_configure(
+            rollback_open["flow_id"],
+            {"advanced_settings_action": "climate_migration"},
+        )
+        if rollback_open["step_id"] != "climate_migration_rollback":
+            raise RuntimeError(
+                f"finished migration must offer a safe rollback, got {rollback_open.get('step_id')}"
+            )
+        rolled_back = await hass.config_entries.options.async_configure(
+            rollback_open["flow_id"],
+            {"confirm_climate_migration_rollback": True},
+        )
+        assert_result(
+            rolled_back["type"],
+            "create_entry",
+            "safe rollback must finish cleanly",
+        )
+        await hass.async_block_till_done()
+    finally:
+        await bridge_server.close()
+
+
 async def async_run_check() -> None:
     """Exercise safe lifecycle, restart, and removal in a blank Core."""
 
@@ -5534,6 +5694,7 @@ async def async_run_check() -> None:
             assert_disabled_climate_facade(hass, domain, read_only_entry.entry_id)
             await async_assert_disabled_climate_http_access(hass)
             await async_assert_shadow_climate_end_to_end(hass, read_only_entry)
+            await async_assert_climate_migration_wizard(hass, read_only_entry)
             assert_disabled_climate_facade(hass, domain, read_only_entry.entry_id)
             if find_local_summary_routes(hass):
                 raise RuntimeError("disabled optional local page must not restore its route")

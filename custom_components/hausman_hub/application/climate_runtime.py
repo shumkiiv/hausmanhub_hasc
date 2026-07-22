@@ -57,6 +57,10 @@ from .climate_native_projections import (
     native_contour_apply_preview,
     native_contour_snapshot,
 )
+from .climate_migration import (
+    ClimateMigrationReceipt,
+    rollback_migrated_setup,
+)
 from .climate_native_setup import build_native_climate_setup_snapshot
 from .climate_comparison import build_climate_comparison_snapshot
 from .climate_demands import build_climate_demand_snapshot
@@ -1386,6 +1390,25 @@ class ClimateRuntime:
             self._contours = contours
             self.last_error = None
             return contour_registry_to_payload(contours)
+
+    async def async_rollback_climate_migration(
+        self,
+        receipt: ClimateMigrationReceipt,
+    ) -> dict[str, object]:
+        """Remove exactly the migrated setup when nothing else changed."""
+
+        async with self._lock:
+            if self._contour_store is None:
+                raise ClimateRuntimeUnavailable("contour storage is unavailable")
+            registry, contours = rollback_migrated_setup(
+                self._registry,
+                self._contours,
+                receipt,
+            )
+            return await self._async_persist_contour_setup_unlocked(
+                registry,
+                contours,
+            )
 
     async def async_replace_contour_setup(
         self,

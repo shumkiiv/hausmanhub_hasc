@@ -59,6 +59,19 @@ from .application.climate_discovery import (
     ClimateImportSnapshot,
     ImportedClimateDevice,
 )
+from .application.legacy_climate_reader import (
+    LegacyClimateReadError,
+    LegacyClimateStateReader,
+    legacy_climate_target,
+)
+from .application.climate_migration import (
+    ClimateMigrationMapping,
+    ClimateMigrationPreview,
+    ClimateMigrationReceipt,
+    ClimateMigrationViolation,
+    build_migrated_setup,
+    build_migration_preview,
+)
 from .application.contours import (
     ContourRegistryViolation,
     build_climate_contour_setup,
@@ -395,12 +408,18 @@ ADVANCED_SETTINGS_ACTION_SELECTOR = SelectSelector(
         options=[
             "climate_registry",
             "climate_connection",
+            "climate_migration",
             "native_climate",
             "test_switch",
         ],
         translation_key="advanced_settings_action",
     )
 )
+CLIMATE_MIGRATION_ADDRESS_FIELD = "climate_migration_address"
+CLIMATE_MIGRATION_SKIP_PREFIX = "climate_migration_skip_"
+CLIMATE_MIGRATION_ENTITY_PREFIX = "climate_migration_entity_"
+CLIMATE_MIGRATION_CONFIRM_FIELD = "confirm_climate_migration"
+CLIMATE_MIGRATION_ROLLBACK_FIELD = "confirm_climate_migration_rollback"
 CONTOUR_ACTION_SELECTOR = SelectSelector(
     SelectSelectorConfig(
         options=[
@@ -823,6 +842,70 @@ def _climate_registry_json_schema(default: str) -> vol.Schema:
             ): TextSelector(
                 TextSelectorConfig(multiline=True, type=TextSelectorType.TEXT)
             )
+        }
+    )
+
+
+def _climate_migration_address_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CLIMATE_MIGRATION_ADDRESS_FIELD): str
+        }
+    )
+
+
+def _climate_migration_preview_schema(preview: ClimateMigrationPreview) -> vol.Schema:
+    fields: dict[vol.Marker, object] = {}
+    for index, device in enumerate(preview.devices, start=1):
+        token = f"device_{index:03d}"
+        kinds = device.suggested_kinds or ("air_conditioner",)
+        domains: set[str] = set()
+        for kind in kinds:
+            from .application.climate_registry_import import candidate_control_domain
+
+            domain = candidate_control_domain(kind)
+            if isinstance(domain, str):
+                domains.add(domain)
+            elif isinstance(domain, tuple):
+                domains.update(domain)
+        selector_domain: str | list[str] = (
+            device.domain if device.domain in domains else sorted(domains)
+        )
+        fields[
+            vol.Required(
+                f"{CLIMATE_MIGRATION_ENTITY_PREFIX}{token}",
+            )
+        ] = EntitySelector(
+            EntitySelectorConfig(domain=selector_domain, multiple=False)
+        )
+        if device.domain == "sensor":
+            fields[
+                vol.Optional(
+                    f"{CLIMATE_MIGRATION_SKIP_PREFIX}{token}",
+                    default=False,
+                )
+            ] = StrictBooleanSelector()
+    return vol.Schema(fields)
+
+
+def _climate_migration_rollback_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CLIMATE_MIGRATION_ROLLBACK_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
+        }
+    )
+
+
+def _climate_migration_confirm_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CLIMATE_MIGRATION_CONFIRM_FIELD,
+                default=False,
+            ): StrictBooleanSelector()
         }
     )
 
@@ -1257,6 +1340,11 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _contour_registry_draft: Mapping[str, object] | None = None
     _contour_definition_draft: Mapping[str, object] | None = None
     _contour_preview: Mapping[str, Any] | None = None
+    _migration_preview: ClimateMigrationPreview | None = None
+    _migration_snapshot: ClimateImportSnapshot | None = None
+    _migration_draft: tuple[object, object, ClimateMigrationReceipt] | None = None
+    _migration_mappings: tuple[ClimateMigrationMapping, ...] | None = None
+    _migration_receipt: ClimateMigrationReceipt | None = None
     _contour_apply_preview: Mapping[str, Any] | None = None
     _contour_apply_active_profile: str | None = None
     _contour_apply_request_id: str | None = None
@@ -1309,6 +1397,8 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_climate_registry()
             if action == "climate_connection":
                 return await self.async_step_climate_connection()
+            if action == "climate_migration":
+                return await self.async_step_climate_migration()
             if action == "native_climate":
                 return await self.async_step_native_climate()
             if action == "test_switch":
@@ -2748,6 +2838,265 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             errors=errors,
         )
 
+    async def async_step_climate_migration(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Import existing external climate settings into an empty native contour."""
+
+        runtime = self._climate_runtime()
+        errors: dict[str, str] = {}
+        if runtime is None:
+            errors["base"] = "climate_runtime_unavailable"
+        else:
+            try:
+                registry = await runtime.async_registry_payload()
+                contours = await runtime.async_contour_registry_payload()
+            except Exception:
+                errors["base"] = "climate_runtime_unavailable"
+            else:
+                from .climate_migration_storage import (
+                    HomeAssistantClimateMigrationStore,
+                )
+
+                entry_id = getattr(self.config_entry, "entry_id", "hausmanhub-entry")
+                stored_receipt = await HomeAssistantClimateMigrationStore(
+                    self.hass, entry_id
+                ).async_load()
+                if stored_receipt is not None:
+                    self._migration_receipt = stored_receipt
+                    return self.async_show_form(
+                        step_id="climate_migration_rollback",
+                        data_schema=_climate_migration_rollback_schema(),
+                        errors={},
+                    )
+                if (
+                    registry.get("rooms")
+                    or registry.get("devices")
+                    or contours.get("contours")
+                ):
+                    errors["base"] = "climate_migration_not_empty"
+        if errors:
+            return self.async_show_form(
+                step_id="climate_migration",
+                data_schema=_climate_migration_address_schema(),
+                errors=errors,
+            )
+        if user_input is not None:
+            address = user_input.get(CLIMATE_MIGRATION_ADDRESS_FIELD)
+            try:
+                target = legacy_climate_target(address)
+                reader = LegacyClimateStateReader(self.hass, target)
+                snapshot = await reader.async_fetch_state()
+                self._migration_snapshot = snapshot
+                self._migration_preview = build_migration_preview(snapshot)
+            except LegacyClimateReadError as error:
+                errors[CLIMATE_MIGRATION_ADDRESS_FIELD] = (
+                    "unsafe_climate_migration_address"
+                    if "private" in str(error) or "required" in str(error) or "origin" in str(error)
+                    else "climate_migration_unavailable"
+                )
+            except ClimateMigrationViolation:
+                errors["base"] = "climate_migration_unsupported"
+            else:
+                return await self.async_step_climate_migration_preview()
+        return self.async_show_form(
+            step_id="climate_migration",
+            data_schema=_climate_migration_address_schema(),
+            errors=errors,
+        )
+
+    async def async_step_climate_migration_preview(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Confirm every legacy device mapping before any write."""
+
+        preview = self._migration_preview
+        snapshot = self._migration_snapshot
+        if preview is None or snapshot is None:
+            return await self.async_step_climate_migration()
+        runtime = self._climate_runtime()
+        if runtime is None:
+            return self.async_abort(reason="climate_runtime_unavailable")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            mappings: list[ClimateMigrationMapping] = []
+            valid = True
+            for index, device in enumerate(preview.devices, start=1):
+                token = f"device_{index:03d}"
+                entity_id = user_input.get(f"{CLIMATE_MIGRATION_ENTITY_PREFIX}{token}")
+                skipped = user_input.get(f"{CLIMATE_MIGRATION_SKIP_PREFIX}{token}")
+                if skipped is True and device.domain == "sensor":
+                    continue
+                if not isinstance(entity_id, str) or not entity_id:
+                    errors[
+                        f"{CLIMATE_MIGRATION_ENTITY_PREFIX}{token}"
+                    ] = "climate_migration_entity_required"
+                    valid = False
+                    continue
+                kinds = device.suggested_kinds or ("air_conditioner",)
+                mappings.append(
+                    ClimateMigrationMapping(
+                        legacy_source_id=device.legacy_source_id,
+                        entity_id=entity_id,
+                        kind=kinds[0],
+                    )
+                )
+            if valid and not errors:
+                try:
+                    catalog = await self._async_migration_catalog(runtime)
+                    registry, contours, receipt = build_migrated_setup(
+                        preview,
+                        tuple(mappings),
+                        catalog,
+                    )
+                    self._migration_draft = (registry, contours, receipt)
+                    self._migration_mappings = tuple(mappings)
+                except ClimateMigrationViolation:
+                    errors["base"] = "climate_migration_invalid_mapping"
+                else:
+                    return await self.async_step_climate_migration_confirm()
+        return self.async_show_form(
+            step_id="climate_migration_preview",
+            data_schema=_climate_migration_preview_schema(preview),
+            errors=errors,
+            description_placeholders=self._migration_preview_placeholders(preview),
+        )
+
+    async def async_step_climate_migration_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Atomically save the migrated setup after explicit confirmation."""
+
+        runtime = self._climate_runtime()
+        if runtime is None or self._migration_draft is None:
+            return await self.async_step_climate_migration()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get(CLIMATE_MIGRATION_CONFIRM_FIELD) is not True:
+                errors[CLIMATE_MIGRATION_CONFIRM_FIELD] = (
+                    "climate_migration_confirmation_required"
+                )
+            else:
+                try:
+                    current = await runtime.async_registry_payload()
+                    current_contours = await runtime.async_contour_registry_payload()
+                    if current.get("rooms") or current.get("devices") or current_contours.get("contours"):
+                        raise ClimateMigrationViolation("not empty")
+                    # Rebuild the draft against a fresh catalog right before
+                    # the atomic write: entities may have changed since preview.
+                    catalog = await self._async_migration_catalog(runtime)
+                    preview = self._migration_preview
+                    mappings = self._migration_mappings
+                    registry, contours, receipt = build_migrated_setup(
+                        preview,
+                        mappings,
+                        catalog,
+                    )
+                    from .application.climate_registry import registry_to_payload
+                    from .application.contours import contour_registry_to_payload
+
+                    from .climate_migration_storage import (
+                        HomeAssistantClimateMigrationStore,
+                    )
+
+                    entry_id = getattr(
+                        self.config_entry, "entry_id", "hausmanhub-entry"
+                    )
+                    migration_store = HomeAssistantClimateMigrationStore(
+                        self.hass, entry_id
+                    )
+                    await migration_store.async_save(receipt)
+                    try:
+                        await runtime.async_replace_contour_setup(
+                            registry_to_payload(registry),
+                            contour_registry_to_payload(contours),
+                        )
+                    except Exception:
+                        await migration_store.async_remove()
+                        raise
+                    self._migration_receipt = receipt
+                except ClimateMigrationViolation:
+                    errors["base"] = "climate_migration_not_empty"
+                except Exception:
+                    errors["base"] = "climate_migration_save_failed"
+                else:
+                    return await self.async_step_climate_migration_done()
+        return self.async_show_form(
+            step_id="climate_migration_confirm",
+            data_schema=_climate_migration_confirm_schema(),
+            errors=errors,
+            description_placeholders=self._migration_preview_placeholders(
+                self._migration_preview
+            ),
+        )
+
+    async def async_step_climate_migration_rollback(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Remove exactly the migrated setup when nothing else changed."""
+
+        runtime = self._climate_runtime()
+        if runtime is None or self._migration_receipt is None:
+            return await self.async_step_climate_migration()
+        if user_input is not None and user_input.get(CLIMATE_MIGRATION_ROLLBACK_FIELD) is True:
+            from .climate_migration_storage import (
+                HomeAssistantClimateMigrationStore,
+            )
+
+            try:
+                await runtime.async_rollback_climate_migration(
+                    self._migration_receipt
+                )
+            except Exception:
+                return self.async_show_form(
+                    step_id="climate_migration_rollback",
+                    data_schema=_climate_migration_rollback_schema(),
+                    errors={"base": "climate_migration_rollback_blocked"},
+                )
+            entry_id = getattr(self.config_entry, "entry_id", "hausmanhub-entry")
+            await HomeAssistantClimateMigrationStore(
+                self.hass, entry_id
+            ).async_remove()
+            self._migration_receipt = None
+            options = _merged_safe_options(
+                self.config_entry.data,
+                self.config_entry.options,
+                {},
+            )
+            return self.async_create_entry(title="", data=options)
+        return self.async_show_form(
+            step_id="climate_migration_rollback",
+            data_schema=_climate_migration_rollback_schema(),
+            errors={},
+        )
+
+    async def async_step_climate_migration_done(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Show the finished migration result."""
+
+        if self._migration_receipt is None:
+            return await self.async_step_climate_migration()
+        options = _merged_safe_options(
+            self.config_entry.data,
+            self.config_entry.options,
+            {},
+        )
+        return self.async_create_entry(title="", data=options)
+
+    async def _async_migration_catalog(self, runtime: Any):
+        view = getattr(runtime, "_ha_state_view", None)
+        if view is None:
+            from .application.climate_native_setup import ClimateHaEntityCatalog
+
+            return ClimateHaEntityCatalog(entries=())
+        return view.entity_catalog()
+
     async def async_step_test_switch(
         self,
         user_input: dict[str, Any] | None = None,
@@ -3636,6 +3985,27 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             ),
             "reasons": reason_text or "нет",
             "room_settings": "; ".join(room_settings) or "нет",
+        }
+
+    def _migration_preview_placeholders(
+        self,
+        preview: ClimateMigrationPreview | None,
+    ) -> dict[str, str]:
+        if preview is None:
+            return {}
+        rooms_text = "; ".join(
+            f"{room.name}: {room.target_temperature} °C, {room.target_humidity} %, "
+            + _RUSSIAN_CONTOUR_STRATEGY_LABELS.get(room.strategy, room.strategy)
+            for room in preview.rooms
+        )
+        devices_text = "; ".join(device.name for device in preview.devices)
+        losses = "; ".join(preview.mode_losses) if preview.mode_losses else "нет"
+        excluded = "; ".join(preview.not_migrated)
+        return {
+            "rooms": rooms_text or "нет",
+            "devices": devices_text or "нет",
+            "mode_losses": losses,
+            "not_migrated": excluded,
         }
 
     def _profile_preview_placeholders(self, contours: Any) -> dict[str, str]:

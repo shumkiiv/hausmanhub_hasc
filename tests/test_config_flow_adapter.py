@@ -231,6 +231,29 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     dt = ModuleType("homeassistant.util.dt")
     dt.now = lambda: datetime(2026, 7, 19, 12, 0)  # type: ignore[attr-defined]
 
+    storage = ModuleType("homeassistant.helpers.storage")
+
+    _stores: dict[str, object] = {}
+
+    class _FakeStore:
+        def __class_getitem__(cls, _: object) -> type:
+            return cls
+
+        def __init__(self, hass, version, key, *, max_readable_version=None):
+            self.key = key
+
+        async def async_load(self):
+            return _stores.get(self.key)
+
+        async def async_save(self, payload):
+            _stores[self.key] = payload
+
+        async def async_remove(self):
+            _stores.pop(self.key, None)
+
+    storage.Store = _FakeStore  # type: ignore[attr-defined]
+    helpers.storage = storage  # type: ignore[attr-defined]
+
     homeassistant.config_entries = config_entries  # type: ignore[attr-defined]
     homeassistant.core = core  # type: ignore[attr-defined]
     homeassistant.helpers = helpers  # type: ignore[attr-defined]
@@ -246,6 +269,7 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
         "homeassistant.data_entry_flow": data_entry_flow,
         "homeassistant.helpers": helpers,
         "homeassistant.helpers.selector": selector,
+        "homeassistant.helpers.storage": storage,
         "homeassistant.util": util,
         "homeassistant.util.dt": dt,
     }
@@ -1699,6 +1723,221 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             ["living_ac"],
             [device.device_id for device in store.saved[0].devices],
         )
+
+    async def test_climate_migration_wizard_imports_empty_native_contour(self) -> None:
+        """The migration wizard imports legacy settings only into an empty contour."""
+
+        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
+        from custom_components.hausman_hub.domain.climate import ClimateRegistry
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
+        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
+        from tests.test_climate_import import source_payload
+        from tests.test_climate_runtime import SnapshotStateView
+
+        class Store:
+            def __init__(self) -> None:
+                self.registry = ClimateRegistry()
+                self.saved = []
+
+            async def async_load(self):
+                return self.registry
+
+            async def async_save(self, registry):
+                self.registry = registry
+                self.saved.append(registry)
+
+        class ContourStore:
+            def __init__(self) -> None:
+                from custom_components.hausman_hub.domain.contours import ContourRegistry
+
+                self.registry = ContourRegistry()
+                self.saved = []
+
+            async def async_load(self):
+                return self.registry
+
+            async def async_save(self, registry):
+                self.registry = registry
+                self.saved.append(registry)
+
+        class BridgeView:
+            snapshot = __import__(
+                "tests.climate_bridge_fixture", fromlist=["import_climate_state"]
+            ).import_climate_state(source_payload(), now_ms=1784280005000)
+
+        from custom_components.hausman_hub.application.climate_registry import (
+            registry_from_payload,
+        )
+        from tests.test_climate_import import registry_payload
+
+        store = Store()
+        contour_store = ContourStore()
+        state_view_registry = registry_from_payload(registry_payload())
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=SafeConfiguration(
+                mode="shadow",
+                climate_bridge_mode=ClimateControlMode.MANAGED,
+            ),
+            registry_store=store,
+            contour_store=contour_store,
+            ha_state_view=SnapshotStateView(state_view_registry, BridgeView()),
+        )
+        await runtime.async_start()
+        options_flow = self.config_flow.HausmanHubOptionsFlow()
+        options_flow.config_entry = FakeConfigEntry(
+            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
+            {"mode": "shadow"},
+        )
+        options_flow.hass = SimpleNamespace(  # type: ignore[attr-defined]
+            data={"hausman_hub": {"climate_runtime": runtime}}
+        )
+
+        from unittest.mock import patch
+
+        from custom_components.hausman_hub.application.legacy_climate_reader import (
+            LegacyClimateStateReader,
+        )
+
+        async def fake_fetch(self):
+            from tests.climate_bridge_fixture import import_climate_state
+
+            return import_climate_state(source_payload(), now_ms=1784280005000)
+
+        await options_flow.async_step_init(
+            {"settings_section": "advanced_settings"}
+        )
+        await options_flow.async_step_advanced_settings(
+            {"advanced_settings_action": "climate_migration"}
+        )
+        with patch.object(
+            LegacyClimateStateReader, "async_fetch_state", fake_fetch
+        ):
+            preview = await options_flow.async_step_climate_migration(
+                {"climate_migration_address": "http://192.168.1.10:1880"}
+            )
+        self.assertEqual("climate_migration_preview", preview["step_id"])
+        confirm = await options_flow.async_step_climate_migration_preview(
+            {
+                "climate_migration_entity_device_001": "humidifier.synthetic_humidifier_source_kids",
+                "climate_migration_entity_device_002": "climate.synthetic_living_ac",
+            }
+        )
+        self.assertEqual("climate_migration_confirm", confirm["step_id"])
+        done = await options_flow.async_step_climate_migration_confirm(
+            {"confirm_climate_migration": True}
+        )
+        self.assertEqual("create_entry", done["type"])
+        self.assertEqual(1, len(store.saved))
+        self.assertEqual(
+            ["kids", "living"],
+            [room.room_id for room in store.saved[0].rooms],
+        )
+        self.assertEqual(
+            ["hausmanhub-native-climate.synthetic_living_ac",
+             "hausmanhub-native-humidifier.synthetic_humidifier_source_kids"],
+            sorted(device.source_id for device in store.saved[0].devices),
+        )
+        self.assertEqual(1, len(contour_store.saved))
+
+    async def test_climate_migration_rollback_removes_only_migrated_objects(self) -> None:
+        """A stored receipt allows one safe rollback until anything else changes."""
+
+        from custom_components.hausman_hub.application.climate_runtime import ClimateRuntime
+        from custom_components.hausman_hub.domain.climate import ClimateRegistry
+        from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
+        from custom_components.hausman_hub.domain.configuration import SafeConfiguration
+        from custom_components.hausman_hub.domain.contours import ContourRegistry
+        from custom_components.hausman_hub.application.climate_registry import registry_from_payload
+        from tests.test_climate_import import registry_payload, source_payload
+        from tests.test_climate_runtime import SnapshotStateView
+        from tests.climate_bridge_fixture import import_climate_state
+        from unittest.mock import patch
+
+        class Store:
+            def __init__(self) -> None:
+                self.registry = ClimateRegistry()
+                self.saved = []
+
+            async def async_load(self):
+                return self.registry
+
+            async def async_save(self, registry):
+                self.registry = registry
+                self.saved.append(registry)
+
+        class ContourStore:
+            def __init__(self) -> None:
+                self.registry = ContourRegistry()
+                self.saved = []
+
+            async def async_load(self):
+                return self.registry
+
+            async def async_save(self, registry):
+                self.registry = registry
+                self.saved.append(registry)
+
+        class BridgeView:
+            snapshot = import_climate_state(source_payload(), now_ms=1784280005000)
+
+        store = Store()
+        contour_store = ContourStore()
+        state_view_registry = registry_from_payload(registry_payload())
+        runtime = ClimateRuntime(
+            entry_id="entry",
+            configuration=SafeConfiguration(
+                mode="shadow",
+                climate_bridge_mode=ClimateControlMode.MANAGED,
+            ),
+            registry_store=store,
+            contour_store=contour_store,
+            ha_state_view=SnapshotStateView(state_view_registry, BridgeView()),
+        )
+        await runtime.async_start()
+        options_flow = self.config_flow.HausmanHubOptionsFlow()
+        options_flow.config_entry = FakeConfigEntry(
+            {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
+            {"mode": "shadow"},
+        )
+        options_flow.hass = SimpleNamespace(  # type: ignore[attr-defined]
+            data={"hausman_hub": {"climate_runtime": runtime}}
+        )
+
+        from custom_components.hausman_hub.application.legacy_climate_reader import (
+            LegacyClimateStateReader,
+        )
+
+        async def fake_fetch(self):
+            return import_climate_state(source_payload(), now_ms=1784280005000)
+
+        await options_flow.async_step_init({"settings_section": "advanced_settings"})
+        await options_flow.async_step_advanced_settings(
+            {"advanced_settings_action": "climate_migration"}
+        )
+        with patch.object(LegacyClimateStateReader, "async_fetch_state", fake_fetch):
+            await options_flow.async_step_climate_migration(
+                {"climate_migration_address": "http://192.168.1.10:1880"}
+            )
+        await options_flow.async_step_climate_migration_preview(
+            {
+                "climate_migration_entity_device_001": "humidifier.synthetic_humidifier_source_kids",
+                "climate_migration_entity_device_002": "climate.synthetic_living_ac",
+            }
+        )
+        await options_flow.async_step_climate_migration_confirm(
+            {"confirm_climate_migration": True}
+        )
+        self.assertEqual(["kids", "living"], [room.room_id for room in store.saved[0].rooms])
+
+        rollback_form = await options_flow.async_step_climate_migration()
+        self.assertEqual("climate_migration_rollback", rollback_form["step_id"])
+        done = await options_flow.async_step_climate_migration_rollback(
+            {"confirm_climate_migration_rollback": True}
+        )
+        self.assertEqual("create_entry", done["type"])
+        self.assertEqual(ClimateRegistry(), store.registry)
+        self.assertEqual(ContourRegistry(), contour_store.registry)
 
     async def test_options_import_candidates_without_private_id_copying(self) -> None:
         """Opaque selector choices populate private bindings only after confirmation."""

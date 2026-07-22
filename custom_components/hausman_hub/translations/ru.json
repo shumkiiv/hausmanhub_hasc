@@ -506,7 +506,8 @@
         "climate_registry": "Проверить старый список комнат и устройств",
         "climate_connection": "Проверить подключение системы климата",
         "native_climate": "Проверить встроенный расчёт без управления",
-        "test_switch": "Проверить связь на тестовом переключателе"
+        "test_switch": "Проверить связь на тестовом переключателе",
+        "climate_migration": "Перенести настройки из старой климатической системы"
       }
     },
     "contour_action": {
@@ -593,18 +594,38 @@
   },
   "entity": {
     "sensor": {
-      "areas_count": {"name": "Количество помещений"},
-      "devices_count": {"name": "Количество устройств"},
-      "entities_count": {"name": "Количество объектов Home Assistant"},
-      "sensors_count": {"name": "Количество датчиков"},
-      "available_entities_count": {"name": "Доступные объекты"},
-      "unavailable_entities_count": {"name": "Недоступные объекты"},
-      "unknown_entities_count": {"name": "Объекты с неизвестным состоянием"},
-      "not_reported_entities_count": {"name": "Объекты без состояния"},
-      "disabled_entities_count": {"name": "Отключённые объекты"}
+      "areas_count": {
+        "name": "Количество помещений"
+      },
+      "devices_count": {
+        "name": "Количество устройств"
+      },
+      "entities_count": {
+        "name": "Количество объектов Home Assistant"
+      },
+      "sensors_count": {
+        "name": "Количество датчиков"
+      },
+      "available_entities_count": {
+        "name": "Доступные объекты"
+      },
+      "unavailable_entities_count": {
+        "name": "Недоступные объекты"
+      },
+      "unknown_entities_count": {
+        "name": "Объекты с неизвестным состоянием"
+      },
+      "not_reported_entities_count": {
+        "name": "Объекты без состояния"
+      },
+      "disabled_entities_count": {
+        "name": "Отключённые объекты"
+      }
     },
     "switch": {
-      "canary_control": {"name": "Пробный переключатель HausmanHub"}
+      "canary_control": {
+        "name": "Пробный переключатель HausmanHub"
+      }
     }
   }
 }
