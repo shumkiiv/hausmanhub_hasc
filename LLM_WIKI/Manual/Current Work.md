@@ -97,5 +97,13 @@
   response version, and shallow tests. All findings were fixed. The final
   direct read-only OpenAI fallback review returned PASS in session
   `ses_071864f04ffe3MwHXRFVF4Mm5X`.
-- Publication of 1.17.2 is pending. No live Home Assistant write, update, or
-  restart occurred.
+- Release commit `1618e0b` was pushed to `origin/main`; GitHub Actions run
+  `29998820030` passed.
+- Stable release `v1.17.2` was published at
+  https://github.com/shumkiiv/hausmanhub_hacs/releases/tag/v1.17.2. The remote
+  tag resolves exactly to `1618e0b`; its manifest declares `1.17.2`, the
+  combined panel contract is version 2, and the tagged frontend guards
+  `snapshot: null`.
+- No live Home Assistant write, update, or restart occurred. Next: refresh
+  HACS, install `1.17.2`, restart Home Assistant, and hard-refresh the
+  administrator browser.

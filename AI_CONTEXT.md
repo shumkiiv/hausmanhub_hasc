@@ -437,8 +437,15 @@ Last updated: 2026-07-23.
   contract-version, and test-depth gaps in session
   `ses_0718c1edaffeElMNdo58oqRoi3`; after all three were fixed, the final
   direct read-only OpenAI fallback review returned PASS in OpenCode session
-  `ses_071864f04ffe3MwHXRFVF4Mm5X`. Publication is pending. No live Home
-  Assistant write, update, or restart occurred.
+  `ses_071864f04ffe3MwHXRFVF4Mm5X`. Release commit `1618e0b` was pushed to
+  `origin/main`, GitHub Actions run `29998820030` passed, and stable release
+  `v1.17.2` was published at
+  https://github.com/shumkiiv/hausmanhub_hacs/releases/tag/v1.17.2. The remote
+  tag resolves exactly to `1618e0b`; its manifest declares `1.17.2`, its panel
+  API contract declares version 2, and the tagged frontend guards the absent
+  snapshot. No live Home Assistant write, update, or restart occurred. Next:
+  refresh HACS, install `1.17.2`, restart Home Assistant, and hard-refresh the
+  administrator browser.
 - Version 1.16.0 completes roadmap item 38. Windows, presence,
   outdoor temperature, and sensor quality now shape climate decisions.
   An open or unreadable configured window hard-locks its room into
@@ -2303,5 +2310,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-23T13:17:53+03:00.
+- Last sync: 2026-07-23T13:20:22+03:00.
 <!-- llm-wiki-sync:end -->
