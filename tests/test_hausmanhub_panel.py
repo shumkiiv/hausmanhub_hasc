@@ -49,13 +49,31 @@ class PanelJavaScriptContractTest(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, content)
 
-    def test_panel_script_posts_only_to_the_admin_panel_routes(self) -> None:
+    def test_panel_script_posts_only_to_approved_admin_routes(self) -> None:
         content = PANEL_JS.read_text(encoding="utf-8")
 
+        for approved in (
+            '"hausman_hub/v1/admin/panel"',
+            '"hausman_hub/v1/admin/climate-mode"',
+            '"hausman_hub/v1/admin/home-environment"',
+            '"hausman_hub/v1/admin/climate-room-signals"',
+            '"hausman_hub/v1/admin/climate-drafts/current"',
+            '"hausman_hub/v1/admin/climate-profiles"',
+            '"hausman_hub/v1/admin/climate-schedule"',
+        ):
+            with self.subTest(approved=approved):
+                self.assertIn(approved, content)
         self.assertIn('`${PANEL_API}/apply`', content)
         self.assertIn('`${PANEL_API}/temporary-temperature`', content)
-        self.assertNotIn("/api/hausman_hub/v1/actions", content)
-        self.assertNotIn("climate-drafts", content)
+        for retired in (
+            "/api/hausman_hub/v1/actions",
+            "climate-shadow-evidence",
+            "climate-canary-preflight",
+            "climate-registry",
+            "climate-import",
+        ):
+            with self.subTest(retired=retired):
+                self.assertNotIn(retired, content)
 
     def test_panel_script_tolerates_an_unavailable_climate_snapshot(self) -> None:
         script = f"""
@@ -69,6 +87,7 @@ class PanelJavaScriptContractTest(unittest.TestCase):
               this.className = "";
               this.textContent = "";
               this.disabled = false;
+              this.style = {{}};
             }}
             appendChild(child) {{
               this.children.push(child);
