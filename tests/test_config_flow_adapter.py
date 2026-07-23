@@ -85,6 +85,41 @@ class FakeTimeSelector:
     """Represent a local clock picker without a Home Assistant runtime."""
 
 
+class FakeNumberSelectorMode:
+    """Mirror the Home Assistant number selector input modes."""
+
+    BOX = "box"
+    SLIDER = "slider"
+
+
+class FakeNumberSelectorConfig:
+    """Capture the numeric bounds shown by the threshold selectors."""
+
+    def __init__(
+        self,
+        *,
+        min: float,
+        max: float,
+        step: float,
+        unit_of_measurement: str,
+        mode: str,
+    ) -> None:
+        self.min = min
+        self.max = max
+        self.step = step
+        self.unit_of_measurement = unit_of_measurement
+        self.mode = mode
+
+
+class FakeNumberSelector:
+    """Represent a numeric threshold selector without a Home Assistant runtime."""
+
+    selector_type = "number"
+
+    def __init__(self, config: FakeNumberSelectorConfig) -> None:
+        self.config = config
+
+
 class FakeEntitySelectorConfig:
     """Capture the exact entity domain permitted by the canary selector."""
 
@@ -190,6 +225,28 @@ class FakeOptionsFlow:
             **kwargs,
         }
 
+    def async_show_menu(
+        self,
+        *,
+        step_id: str,
+        menu_options: list[str],
+        **kwargs: object,
+    ) -> dict[str, object]:
+        return {
+            "type": "menu",
+            "step_id": step_id,
+            "menu_options": menu_options,
+            **kwargs,
+        }
+
+    def add_suggested_values_to_schema(
+        self,
+        schema: FakeSchema,
+        suggested_values: dict[str, object],
+    ) -> FakeSchema:
+        schema.suggested_values = suggested_values
+        return schema
+
 
 def fake_home_assistant_modules() -> dict[str, ModuleType]:
     """Build only the imports required by config_flow.py, entirely in memory."""
@@ -220,6 +277,9 @@ def fake_home_assistant_modules() -> dict[str, ModuleType]:
     selector.BooleanSelector = FakeBooleanSelector  # type: ignore[attr-defined]
     selector.EntitySelector = FakeEntitySelector  # type: ignore[attr-defined]
     selector.EntitySelectorConfig = FakeEntitySelectorConfig  # type: ignore[attr-defined]
+    selector.NumberSelector = FakeNumberSelector  # type: ignore[attr-defined]
+    selector.NumberSelectorConfig = FakeNumberSelectorConfig  # type: ignore[attr-defined]
+    selector.NumberSelectorMode = FakeNumberSelectorMode  # type: ignore[attr-defined]
     selector.SelectSelector = FakeSelectSelector  # type: ignore[attr-defined]
     selector.SelectSelectorConfig = FakeSelectSelectorConfig  # type: ignore[attr-defined]
     selector.TextSelector = FakeTextSelector  # type: ignore[attr-defined]
@@ -340,10 +400,6 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             "summary_update_interval": self.config_flow.SUMMARY_UPDATE_INTERVAL_SELECTOR,
             "climate_bridge_mode": self.config_flow.CLIMATE_BRIDGE_MODE_SELECTOR,
             "native_climate_mode": self.config_flow.NATIVE_CLIMATE_MODE_SELECTOR,
-            "settings_section": self.config_flow.OPTIONS_SECTION_SELECTOR,
-            "advanced_settings_action": (
-                self.config_flow.ADVANCED_SETTINGS_ACTION_SELECTOR
-            ),
             "contour_action": self.config_flow.CONTOUR_ACTION_SELECTOR,
             "contour_mode": self.config_flow.CONTOUR_MODE_SELECTOR,
             "contour_strategy": self.config_flow.CONTOUR_STRATEGY_SELECTOR,
@@ -362,22 +418,35 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                     all(isinstance(option, str) for option in selector.config.options)
                 )
 
-    def assert_section_form(self, schema: FakeSchema) -> None:
-        """Verify the short first screen that only selects one settings area."""
+    def assert_section_menu(self, result: dict[str, object]) -> None:
+        """Verify the native Home Assistant menu for ordinary settings."""
 
-        self.assertEqual(1, len(schema.fields))
-        field, selector = next(iter(schema.fields.items()))
-        self.assertIsInstance(field, FakeRequired)
-        self.assertEqual("settings_section", field.key)
-        self.assertEqual("contours", field.default)
-        self.assertIsInstance(selector, FakeSelectSelector)
+        self.assertEqual("menu", result["type"])
+        self.assertEqual("init", result["step_id"])
         self.assertEqual(
             [
                 "contours",
+                "home_environment",
                 "general_settings",
                 "advanced_settings",
             ],
-            selector.config.options,
+            result["menu_options"],
+        )
+
+    def assert_advanced_menu(self, result: dict[str, object]) -> None:
+        """Verify the native Home Assistant menu for technical settings."""
+
+        self.assertEqual("menu", result["type"])
+        self.assertEqual("advanced_settings", result["step_id"])
+        self.assertEqual(
+            [
+                "climate_registry",
+                "climate_connection",
+                "climate_migration",
+                "native_climate",
+                "test_switch",
+            ],
+            result["menu_options"],
         )
 
     def assert_general_settings_fields(
@@ -540,10 +609,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {"mode": "read-only", "direct_execution_status": "direct_execution_blocked"},
             {},
         )
-        section_result = await options_flow.async_step_init(
-            {"settings_section": "general_settings", "unmodelled": "outside_contract"}
-        )
-        self.assertEqual("general_settings", section_result["step_id"])
+        section_result = await options_flow.async_step_init()
+        self.assert_section_menu(section_result)
         options_result = await options_flow.async_step_general_settings(extra_input)
 
         self.assertEqual("create_entry", options_result["type"])
@@ -574,17 +641,14 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         )
 
         initial_form = await options_flow.async_step_init()
-        general_form = await options_flow.async_step_init(
-            {"settings_section": "general_settings"}
-        )
+        general_form = await options_flow.async_step_general_settings()
         shadow_result = await options_flow.async_step_general_settings({"mode": "shadow"})
 
         proxy_flow = self.config_flow.HausmanHubOptionsFlow()
         proxy_flow.config_entry = options_flow.config_entry
         proxy_result = await proxy_flow.async_step_general_settings({"mode": "proxy"})
 
-        self.assertEqual("form", initial_form["type"])
-        self.assert_section_form(initial_form["schema"])
+        self.assert_section_menu(initial_form)
         self.assert_general_settings_fields(
             general_form["schema"], "read-only", True, "5m"
         )
@@ -602,8 +666,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("form", proxy_result["type"])
         self.assertEqual({"mode": "unsafe_mode"}, proxy_result["errors"])
 
-    async def test_options_menu_rejects_an_unknown_settings_area(self) -> None:
-        """The short menu cannot be used to jump to an unapproved step."""
+    async def test_options_menu_exposes_only_approved_settings_areas(self) -> None:
+        """The framework receives exactly the approved native menu targets."""
 
         options_flow = self.config_flow.HausmanHubOptionsFlow()
         options_flow.config_entry = FakeConfigEntry(
@@ -611,16 +675,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             {},
         )
 
-        result = await options_flow.async_step_init(
-            {"settings_section": "unknown_settings"}
-        )
-
-        self.assertEqual("form", result["type"])
-        self.assert_section_form(result["schema"])
-        self.assertEqual(
-            {"settings_section": "unsafe_settings_section"},
-            result["errors"],
-        )
+        self.assert_section_menu(await options_flow.async_step_init())
+        self.assert_advanced_menu(await options_flow.async_step_advanced_settings())
 
     async def test_options_form_hides_a_broken_saved_configuration(self) -> None:
         """A damaged saved configuration cannot make shadow look selected."""
@@ -676,8 +732,7 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
                 result = await options_flow.async_step_init()
                 general = await options_flow.async_step_general_settings()
 
-                self.assertEqual("form", result["type"])
-                self.assert_section_form(result["schema"])
+                self.assert_section_menu(result)
                 self.assert_general_settings_fields(
                     general["schema"], "read-only", True, "5m"
                 )
@@ -891,12 +946,9 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        await options_flow.async_step_init(
-            {"settings_section": "advanced_settings"}
-        )
-        mode_form = await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "native_climate"}
-        )
+        self.assert_section_menu(await options_flow.async_step_init())
+        self.assert_advanced_menu(await options_flow.async_step_advanced_settings())
+        mode_form = await options_flow.async_step_native_climate()
         policy_form = await options_flow.async_step_native_climate(
             {"native_climate_mode": "preview"}
         )
@@ -1069,14 +1121,12 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        contour_menu = await options_flow.async_step_init(
-            {"settings_section": "contours"}
-        )
+        contour_menu = await options_flow.async_step_init()
         setup_form = await options_flow.async_step_contours(
             {"contour_action": "configure_climate"}
         )
 
-        self.assertEqual("contours", contour_menu["step_id"])
+        self.assert_section_menu(contour_menu)
         self.assertEqual("climate_contour_setup", setup_form["step_id"])
         fields = {
             marker.key: selector
@@ -1669,12 +1719,9 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        await options_flow.async_step_init(
-            {"settings_section": "advanced_settings"}
-        )
-        editor = await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "climate_registry"}
-        )
+        self.assert_section_menu(await options_flow.async_step_init())
+        self.assert_advanced_menu(await options_flow.async_step_advanced_settings())
+        editor = await options_flow.async_step_climate_registry()
         room_form = await options_flow.async_step_climate_registry(
             {"climate_registry_action": "add_room"}
         )
@@ -1804,12 +1851,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
 
             return import_climate_state(source_payload(), now_ms=1784280005000)
 
-        await options_flow.async_step_init(
-            {"settings_section": "advanced_settings"}
-        )
-        await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "climate_migration"}
-        )
+        self.assert_section_menu(await options_flow.async_step_init())
+        self.assert_advanced_menu(await options_flow.async_step_advanced_settings())
         with patch.object(
             LegacyClimateStateReader, "async_fetch_state", fake_fetch
         ):
@@ -1911,10 +1954,8 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
         async def fake_fetch(self):
             return import_climate_state(source_payload(), now_ms=1784280005000)
 
-        await options_flow.async_step_init({"settings_section": "advanced_settings"})
-        await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "climate_migration"}
-        )
+        self.assert_section_menu(await options_flow.async_step_init())
+        self.assert_advanced_menu(await options_flow.async_step_advanced_settings())
         with patch.object(LegacyClimateStateReader, "async_fetch_state", fake_fetch):
             await options_flow.async_step_climate_migration(
                 {"climate_migration_address": "http://192.168.1.10:1880"}
@@ -2017,10 +2058,9 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             data={"hausman_hub": {"climate_runtime": runtime}}
         )
 
-        await options_flow.async_step_init({"settings_section": "advanced_settings"})
-        await options_flow.async_step_advanced_settings(
-            {"advanced_settings_action": "climate_registry"}
-        )
+        self.assert_section_menu(await options_flow.async_step_init())
+        self.assert_advanced_menu(await options_flow.async_step_advanced_settings())
+        await options_flow.async_step_climate_registry()
         ac_choices = await options_flow.async_step_climate_registry(
             {"climate_registry_action": "import_candidate"}
         )
@@ -2127,4 +2167,3 @@ class ConfigFlowAdapterTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertEqual([], bridge.executed)
-

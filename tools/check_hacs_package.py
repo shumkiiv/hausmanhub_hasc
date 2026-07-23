@@ -236,7 +236,9 @@ def find_hacs_package_violations(
     changelog = read_utf8_text(indexed_files, CHANGELOG_PATH, findings)
     if manifest is not None and changelog is not None:
         version = manifest.get("version")
-        if isinstance(version, str) and f"## {version} —" not in changelog:
+    if isinstance(version, str) and not any(
+        marker in changelog for marker in (f"## {version} -", f"## {version} —")
+    ):
             findings.append(f"{CHANGELOG_PATH}: must describe manifest version {version}")
 
     return tuple(sorted(findings))

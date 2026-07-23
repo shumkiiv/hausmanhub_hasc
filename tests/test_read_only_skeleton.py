@@ -61,13 +61,13 @@ class ReadOnlySkeletonTest(unittest.TestCase):
         self.assertEqual("hausman_hub", manifest["domain"])
         self.assertTrue(manifest["config_flow"])
         self.assertTrue(manifest["single_config_entry"])
-        self.assertEqual("1.16.0", manifest["version"])
+        self.assertEqual("1.17.0", manifest["version"])
 
     def test_current_manifest_version_has_a_plain_change_note(self) -> None:
         manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
         change_history = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-        self.assertIn(f"## {manifest['version']} —", change_history)
+        self.assertIn(f"## {manifest['version']} -", change_history)
 
     def test_local_access_guides_explain_the_exact_allowed_address_shapes(self) -> None:
         """The visible instructions must not weaken the checked address boundary."""
@@ -1768,7 +1768,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             core_check_source,
         )
         self.assertIn(
-            "options form must still open for manual repair",
+            "options flow must show a native menu",
             core_check_source,
         )
         self.assertIn(
@@ -2288,7 +2288,20 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             self.assertIn("mode", content["selector"])
             self.assertIn("unsafe_mode", content["config"]["error"])
             steps = content["options"]["step"]
-            self.assertEqual({"settings_section"}, set(steps["init"]["data"]))
+            self.assertEqual(
+                {"contours", "home_environment", "general_settings", "advanced_settings"},
+                set(steps["init"]["menu_options"]),
+            )
+            self.assertEqual(
+                {
+                    "outdoor_temperature_entity_id",
+                    "presence_entity_id",
+                    "central_heating_entity_id",
+                    "heating_lockout_high",
+                    "heating_lockout_low",
+                },
+                set(steps["home_environment"]["data"]),
+            )
             self.assertEqual(
                 {"mode", "local_summary_enabled", "summary_update_interval"},
                 set(steps["general_settings"]["data"]),
@@ -2321,7 +2334,9 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                 {"confirm_native_climate_preview"},
                 set(steps["native_climate_confirm"]["data"]),
             )
-            self.assertIn("unsafe_settings_section", content["options"]["error"])
+            self.assertIn("invalid_heating_lockout_high", content["options"]["error"])
+            self.assertIn("invalid_heating_lockout_low", content["options"]["error"])
+            self.assertIn("invalid_heating_lockout_order", content["options"]["error"])
             self.assertIn(
                 "unsafe_local_summary_setting",
                 content["options"]["error"],
@@ -2347,21 +2362,13 @@ class ReadOnlySkeletonTest(unittest.TestCase):
             self.assertIn("unsafe_canary_control_target", content["options"]["error"])
             self.assertEqual(
                 {
-                    "contours",
-                    "general_settings",
-                    "advanced_settings",
-                },
-                set(content["selector"]["settings_section"]["options"]),
-            )
-            self.assertEqual(
-                {
                     "climate_registry",
                     "climate_connection",
                     "climate_migration",
                     "native_climate",
                     "test_switch",
                 },
-                set(content["selector"]["advanced_settings_action"]["options"]),
+                set(steps["advanced_settings"]["menu_options"]),
             )
             self.assertEqual(
                 {
@@ -2421,7 +2428,7 @@ class ReadOnlySkeletonTest(unittest.TestCase):
                     content["selector"]["mode"]["options"],
                 )
                 self.assertIn("mode", user_step["data_description"])
-                self.assertEqual({"settings_section"}, set(steps["init"]["data"]))
+                self.assertIn("home_environment", steps["init"]["menu_options"])
 
         for section in ("config", "options", "selector"):
             self.assertEqual(russian[section], english[section])

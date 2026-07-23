@@ -23,6 +23,9 @@ from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -123,9 +126,17 @@ from .domain.contours import (
 )
 
 
-OPTIONS_SECTION_FIELD = "settings_section"
-OPTIONS_SECTION_DEFAULT = "contours"
-ADVANCED_SETTINGS_ACTION_FIELD = "advanced_settings_action"
+OUTDOOR_TEMPERATURE_ENTITY_FIELD = "outdoor_temperature_entity_id"
+PRESENCE_ENTITY_FIELD = "presence_entity_id"
+CENTRAL_HEATING_ENTITY_FIELD = "central_heating_entity_id"
+HEATING_LOCKOUT_HIGH_FIELD = "heating_lockout_high"
+HEATING_LOCKOUT_LOW_FIELD = "heating_lockout_low"
+HEATING_LOCKOUT_HIGH_DEFAULT = 18.0
+HEATING_LOCKOUT_LOW_DEFAULT = 16.0
+HEATING_LOCKOUT_HIGH_MIN = -40.0
+HEATING_LOCKOUT_HIGH_MAX = 60.0
+HEATING_LOCKOUT_LOW_MIN = -40.0
+HEATING_LOCKOUT_LOW_MAX = 60.0
 CONTOUR_ACTION_FIELD = "contour_action"
 CONTOUR_NAME_FIELD = "contour_name"
 CONTOUR_MODE_FIELD = "contour_mode"
@@ -393,26 +404,19 @@ NATIVE_CLIMATE_MODE_SELECTOR = SelectSelector(
         translation_key="native_climate_mode",
     )
 )
-OPTIONS_SECTION_SELECTOR = SelectSelector(
-    SelectSelectorConfig(
-        options=[
-            "contours",
-            "general_settings",
-            "advanced_settings",
-        ],
-        translation_key="settings_section",
+OUTDOOR_TEMPERATURE_ENTITY_SELECTOR = EntitySelector(
+    EntitySelectorConfig(domain=["sensor"], multiple=False)
+)
+PRESENCE_ENTITY_SELECTOR = EntitySelector(
+    EntitySelectorConfig(
+        domain=["binary_sensor", "person", "device_tracker"],
+        multiple=False,
     )
 )
-ADVANCED_SETTINGS_ACTION_SELECTOR = SelectSelector(
-    SelectSelectorConfig(
-        options=[
-            "climate_registry",
-            "climate_connection",
-            "climate_migration",
-            "native_climate",
-            "test_switch",
-        ],
-        translation_key="advanced_settings_action",
+CENTRAL_HEATING_ENTITY_SELECTOR = EntitySelector(
+    EntitySelectorConfig(
+        domain=["binary_sensor", "switch", "input_boolean"],
+        multiple=False,
     )
 )
 CLIMATE_MIGRATION_ADDRESS_FIELD = "climate_migration_address"
@@ -541,28 +545,66 @@ def _mode_schema(default: str) -> vol.Schema:
     return vol.Schema({vol.Required(MODE_FIELD, default=default): MODE_SELECTOR})
 
 
-def _options_section_schema() -> vol.Schema:
-    """Keep ordinary contour setup separate from optional advanced tools."""
-
+def _home_environment_schema(
+    *,
+    high_default: float,
+    low_default: float,
+) -> vol.Schema:
     return vol.Schema(
         {
+            vol.Optional(
+                OUTDOOR_TEMPERATURE_ENTITY_FIELD,
+            ): OUTDOOR_TEMPERATURE_ENTITY_SELECTOR,
+            vol.Optional(
+                PRESENCE_ENTITY_FIELD,
+            ): PRESENCE_ENTITY_SELECTOR,
+            vol.Optional(
+                CENTRAL_HEATING_ENTITY_FIELD,
+            ): CENTRAL_HEATING_ENTITY_SELECTOR,
             vol.Required(
-                OPTIONS_SECTION_FIELD,
-                default=OPTIONS_SECTION_DEFAULT,
-            ): OPTIONS_SECTION_SELECTOR
+                HEATING_LOCKOUT_HIGH_FIELD,
+                default=high_default,
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=HEATING_LOCKOUT_HIGH_MIN,
+                    max=HEATING_LOCKOUT_HIGH_MAX,
+                    step=0.5,
+                    unit_of_measurement="°C",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Required(
+                HEATING_LOCKOUT_LOW_FIELD,
+                default=low_default,
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=HEATING_LOCKOUT_LOW_MIN,
+                    max=HEATING_LOCKOUT_LOW_MAX,
+                    step=0.5,
+                    unit_of_measurement="°C",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
         }
     )
 
 
-def _advanced_settings_schema() -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(
-                ADVANCED_SETTINGS_ACTION_FIELD,
-                default="climate_connection",
-            ): ADVANCED_SETTINGS_ACTION_SELECTOR
-        }
-    )
+def _optional_entity_id(value: object) -> str | None:
+    """Treat an empty picker answer as an unbound signal."""
+
+    return value if isinstance(value, str) and value else None
+
+
+def _threshold_default(value: object, default: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return float(value)
+
+
+def _valid_threshold(value: object, *, minimum: float, maximum: float) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return minimum <= float(value) <= maximum
 
 
 def _contour_action_schema() -> vol.Schema:
@@ -1365,23 +1407,16 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     _temporary_temperature_receipt: Mapping[str, Any] | None = None
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Show one short choice instead of mixing unrelated settings."""
+        """Show one short menu instead of mixing unrelated settings."""
 
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            section = user_input.get(OPTIONS_SECTION_FIELD)
-            if section == "contours":
-                return await self.async_step_contours()
-            if section == "general_settings":
-                return await self.async_step_general_settings()
-            if section == "advanced_settings":
-                return await self.async_step_advanced_settings()
-            errors[OPTIONS_SECTION_FIELD] = "unsafe_settings_section"
-
-        return self.async_show_form(
+        return self.async_show_menu(
             step_id="init",
-            data_schema=_options_section_schema(),
-            errors=errors,
+            menu_options=[
+                "contours",
+                "home_environment",
+                "general_settings",
+                "advanced_settings",
+            ],
         )
 
     async def async_step_advanced_settings(
@@ -1390,24 +1425,15 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Keep migration, diagnostics, and service tests out of normal setup."""
 
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            action = user_input.get(ADVANCED_SETTINGS_ACTION_FIELD)
-            if action == "climate_registry":
-                return await self.async_step_climate_registry()
-            if action == "climate_connection":
-                return await self.async_step_climate_connection()
-            if action == "climate_migration":
-                return await self.async_step_climate_migration()
-            if action == "native_climate":
-                return await self.async_step_native_climate()
-            if action == "test_switch":
-                return await self.async_step_test_switch()
-            errors[ADVANCED_SETTINGS_ACTION_FIELD] = "unsafe_advanced_action"
-        return self.async_show_form(
+        return self.async_show_menu(
             step_id="advanced_settings",
-            data_schema=_advanced_settings_schema(),
-            errors=errors,
+            menu_options=[
+                "climate_registry",
+                "climate_connection",
+                "climate_migration",
+                "native_climate",
+                "test_switch",
+            ],
         )
 
     async def async_step_contours(
@@ -2835,6 +2861,131 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
                 local_page_default,
                 interval_default,
             ),
+            errors=errors,
+        )
+
+    async def async_step_home_environment(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Configure the home signals used by climate decisions."""
+
+        runtime = self._climate_runtime()
+        payload: dict[str, object] | None = None
+        if runtime is not None:
+            try:
+                payload = await runtime.async_registry_payload()
+            except Exception:
+                payload = None
+        if payload is None:
+            return self.async_show_form(
+                step_id="home_environment",
+                data_schema=_home_environment_schema(
+                    high_default=HEATING_LOCKOUT_HIGH_DEFAULT,
+                    low_default=HEATING_LOCKOUT_LOW_DEFAULT,
+                ),
+                errors={"base": "climate_runtime_unavailable"},
+            )
+
+        home = payload.get("home")
+        if not isinstance(home, Mapping):
+            home = {}
+        current_entities = {
+            OUTDOOR_TEMPERATURE_ENTITY_FIELD: _optional_entity_id(
+                home.get("outdoor_temperature_entity_id")
+            ),
+            PRESENCE_ENTITY_FIELD: _optional_entity_id(
+                home.get("presence_entity_id")
+            ),
+            CENTRAL_HEATING_ENTITY_FIELD: _optional_entity_id(
+                home.get("central_heating_entity_id")
+            ),
+        }
+        high_default = _threshold_default(
+            home.get("heating_lockout_high"),
+            HEATING_LOCKOUT_HIGH_DEFAULT,
+        )
+        low_default = _threshold_default(
+            home.get("heating_lockout_low"),
+            HEATING_LOCKOUT_LOW_DEFAULT,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            current_entities = {
+                OUTDOOR_TEMPERATURE_ENTITY_FIELD: _optional_entity_id(
+                    user_input.get(OUTDOOR_TEMPERATURE_ENTITY_FIELD)
+                ),
+                PRESENCE_ENTITY_FIELD: _optional_entity_id(
+                    user_input.get(PRESENCE_ENTITY_FIELD)
+                ),
+                CENTRAL_HEATING_ENTITY_FIELD: _optional_entity_id(
+                    user_input.get(CENTRAL_HEATING_ENTITY_FIELD)
+                ),
+            }
+            high = user_input.get(HEATING_LOCKOUT_HIGH_FIELD)
+            low = user_input.get(HEATING_LOCKOUT_LOW_FIELD)
+            if not _valid_threshold(
+                high,
+                minimum=HEATING_LOCKOUT_HIGH_MIN,
+                maximum=HEATING_LOCKOUT_HIGH_MAX,
+            ):
+                errors[HEATING_LOCKOUT_HIGH_FIELD] = "invalid_heating_lockout_high"
+            if not _valid_threshold(
+                low,
+                minimum=HEATING_LOCKOUT_LOW_MIN,
+                maximum=HEATING_LOCKOUT_LOW_MAX,
+            ):
+                errors[HEATING_LOCKOUT_LOW_FIELD] = "invalid_heating_lockout_low"
+            if not errors and float(low) >= float(high):
+                errors[HEATING_LOCKOUT_LOW_FIELD] = "invalid_heating_lockout_order"
+            if not errors:
+                home_update = {
+                    "outdoor_temperature_entity_id": current_entities[
+                        OUTDOOR_TEMPERATURE_ENTITY_FIELD
+                    ],
+                    "presence_entity_id": current_entities[PRESENCE_ENTITY_FIELD],
+                    "central_heating_entity_id": current_entities[
+                        CENTRAL_HEATING_ENTITY_FIELD
+                    ],
+                    "heating_lockout_high": float(high),
+                    "heating_lockout_low": float(low),
+                }
+                try:
+                    await runtime.async_update_home_environment(home_update)
+                except Exception:
+                    errors["base"] = "invalid_climate_registry"
+                else:
+                    return self.async_create_entry(
+                        title="",
+                        data=dict(self.config_entry.options),
+                    )
+            if _valid_threshold(
+                high,
+                minimum=HEATING_LOCKOUT_HIGH_MIN,
+                maximum=HEATING_LOCKOUT_HIGH_MAX,
+            ):
+                high_default = float(high)
+            if _valid_threshold(
+                low,
+                minimum=HEATING_LOCKOUT_LOW_MIN,
+                maximum=HEATING_LOCKOUT_LOW_MAX,
+            ):
+                low_default = float(low)
+
+        schema = _home_environment_schema(
+            high_default=high_default,
+            low_default=low_default,
+        )
+        suggested = {
+            key: value
+            for key, value in current_entities.items()
+            if value is not None
+        }
+        if suggested:
+            schema = self.add_suggested_values_to_schema(schema, suggested)
+        return self.async_show_form(
+            step_id="home_environment",
+            data_schema=schema,
             errors=errors,
         )
 

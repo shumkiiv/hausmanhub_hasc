@@ -1382,6 +1382,22 @@ class ClimateRuntime:
             self.last_error = None
             return registry_to_payload(registry)
 
+    async def async_update_home_environment(
+        self,
+        home: dict[str, object],
+    ) -> dict[str, object]:
+        """Atomically replace only the saved home environment settings."""
+
+        async with self._lock:
+            payload = registry_to_payload(self._registry)
+            payload["home"] = home
+            registry = registry_from_payload(payload)
+            validate_contour_bindings(self._contours, registry)
+            await self._registry_store.async_save(registry)
+            self._registry = registry
+            self.last_error = None
+            return registry_to_payload(registry)
+
     async def async_replace_contours(self, payload: object) -> dict[str, object]:
         """Replace contour definitions while keeping their bindings exact."""
 

@@ -1,0 +1,23 @@
+# Current Work
+
+## 2026-07-23 - HausmanHub 1.17.0 local release candidate
+
+- Completed the Home Environment settings step and native options menus.
+- Oracle review found atomic update, threshold range, and coverage gaps.
+  One safe fix iteration added a runtime-locked home update and aligned the
+  form with the registry's -40..60 °C range.
+- `python3 tools/check_local_release.py` passed through a temporary Git index;
+  its full suite reports 618 successful tests.
+- Built the manual Home Assistant test archive
+  `/home/ivsh/projects/УД-hasc/releases/HausmanHub-1.17.0-test.zip` from the
+  current working tree. It contains only `custom_components/hausman_hub`,
+  includes `frontend/hausman-hub-panel.js`, declares version `1.17.0`, and
+  passes `unzip -t`.
+- Archive SHA-256:
+  `82f5f8d4a5dc43d642be3d6e4fa9339970ff91e30478890fcb78053153f56b45`.
+- Disposable Home Assistant Core checks remain blocked because the expected
+  Python environments under `/tmp/hausmanhub-core-2026.6.4` and `2026.7.0`
+  are absent.
+- The user explicitly authorized commit, push, tag, and GitHub Release
+  publication on 2026-07-23. Publication is the next operation; no live Home
+  Assistant action is authorized.

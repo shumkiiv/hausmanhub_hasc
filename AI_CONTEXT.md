@@ -356,6 +356,31 @@ Last updated: 2026-07-23.
   repository remain unchanged. The final staged tree passed 513 local tests,
   the HACS/package/boundary/Android checks, and disposable Home Assistant
   Core   2026.6.4/2026.7.0.
+- Version 1.17.0 local release candidate complete (settings page rework, user request
+  2026-07-23: best-practice design, reorganize, push, release). Plan:
+  `.omo/plans/2026-07-23-settings-page-home-environment.md`. Scope:
+  expose item 38 home signals in the options UI (previously only raw
+  JSON editor) and convert navigation selects to native HA menus.
+   `config_flow.py` has a `home_environment` options step with three optional
+   entity pickers and two required box NumberSelectors. Both heating lockout
+   thresholds use the registry range -40..60 °C and require `low < high`.
+   `ClimateRuntime.async_update_home_environment()` replaces only the home
+   block under the runtime lock, preserving concurrent room/device changes.
+   The initial and advanced screens use `async_show_menu`; translations, unit
+   tests, Core smoke navigation, README, manifest 1.17.0, changelog, and HACS
+   validation are updated. `check_local_release.py` passed through a temporary
+   Git index with 618 tests. Disposable Core checks were skipped because their
+   expected Python environments are absent. A manual Home Assistant test archive
+   was built from the
+   current working tree at
+   `/home/ivsh/projects/УД-hasc/releases/HausmanHub-1.17.0-test.zip`.
+   It contains only `custom_components/hausman_hub`, includes the sidebar panel,
+   passes `unzip -t`, and has SHA-256
+   `82f5f8d4a5dc43d642be3d6e4fa9339970ff91e30478890fcb78053153f56b45`.
+   The user explicitly authorized commit, push, tag, and GitHub Release
+   publication on 2026-07-23; publication is the next operation. After
+   publication, test the HACS release in Home Assistant and provision disposable
+   Core environments for the deferred smoke check.
 - Version 1.16.0 completes roadmap item 38. Windows, presence,
   outdoor temperature, and sensor quality now shape climate decisions.
   An open or unreadable configured window hard-locks its room into
@@ -368,17 +393,23 @@ Last updated: 2026-07-23.
   unreadable presence changes no target, and auto-humidifying is
   denied for both absent and unknown presence. A weather lockout
   blocks automatic heating from 18 degrees outdoor and re-enables it
-  from 16, keeping the previous permission inside the band from
-  hydraulic activity; cooling is untouched, manual and temporary
-  targets bypass it, and both thresholds are registry options (16/18
-  defaults). Central heating now distinguishes unbound (neutral) from
-  bound-but-off-or-unavailable (hydraulic radiators blocked and driven
-  to safe-off); electric floors, heat pumps, and air conditioners are
-  unaffected. The frozen reference suite was re-fingerprinted for the
-  suspect-temperature and central-heating behavior changes, and 17 new
-  acceptance tests cover the setback, lockout hysteresis, gates, and
-  force safe-off semantics. The final tree passed 610 local tests, the
-  full release gate, and disposable Core 2026.6.4 and 2026.7.0.
+  from 16, keeping the previous explicit home-level permission inside
+  the band (first observation there fails closed); cooling is
+  untouched, manual and temporary targets bypass it, and both
+  thresholds are registry options (16/18 defaults). Central heating
+  now distinguishes unbound (neutral) from bound-but-off-or-unavailable
+  (hydraulic radiators blocked and driven to safe-off); electric
+  floors, heat pumps, and air conditioners are unaffected. The frozen
+  reference suite was re-fingerprinted for the suspect-temperature and
+  central-heating behavior changes, and 26 new acceptance tests cover
+  the setback, lockout hysteresis, gates, and force safe-off
+  semantics. Independent review returned FAIL (activity-based
+  hysteresis was not a sound latch; away-setback formula was
+  questioned); one fix iteration replaced the activity latch with
+  explicit home-level weather-heating state, and a probe confirmed the
+  away-setback formula matches its ±2 invariant on the exact
+  questioned cases. The final tree passed 618 local tests, the full
+  release gate, and disposable Core 2026.6.4 and 2026.7.0.
   Remaining roadmap: 39 (per-room schedules and profiles), 40
   (standalone climate release), then 41-50 (HausmanHub 2.0 platform).
 - Version 1.15.0 completes roadmap item 37. A safe migration wizard
@@ -2214,5 +2245,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-23T02:24:19+03:00.
+- Last sync: 2026-07-23T11:29:32+03:00.
 <!-- llm-wiki-sync:end -->

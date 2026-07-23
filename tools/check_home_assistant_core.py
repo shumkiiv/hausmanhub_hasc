@@ -94,7 +94,6 @@ CLIMATE_BRIDGE_MODE_DEFAULT = "disabled"
 CLIMATE_BRIDGE_TARGET_FIELD = "climate_bridge_target"
 CLIMATE_MIGRATION_ADDRESS_FIELD = "climate_migration_address"
 CLIMATE_CANARY_ROOM_ID_FIELD = "climate_canary_room_id"
-OPTIONS_SECTION_FIELD = "settings_section"
 CONTOUR_NAME_FIELD = "contour_name"
 CONTOUR_MODE_FIELD = "contour_mode"
 CONTOUR_ROOMS_FIELD = "contour_rooms"
@@ -955,31 +954,14 @@ def serialized_options_fields(options_form: dict[str, Any]) -> list[dict[str, An
     return serialized_schema
 
 
-def assert_options_form_uses_safe_native_selectors(options_form: dict[str, Any]) -> None:
-    """Require the first options screen to contain only one section selector."""
+def assert_options_menu(options_menu: dict[str, Any]) -> None:
+    """Require the first options screen to use the approved native menu."""
 
-    serialized_schema = serialized_options_fields(options_form)
-    if len(serialized_schema) != 1:
-        raise RuntimeError("initial options form must expose only one settings section")
-    field = serialized_schema[0]
+    assert_result(options_menu["type"], "menu", "options flow must show a native menu")
     assert_result(
-        field.get("name"),
-        OPTIONS_SECTION_FIELD,
-        "initial options form must ask only which settings area to open",
-    )
-    selector = field.get("selector")
-    if not isinstance(selector, dict) or not isinstance(selector.get("select"), dict):
-        raise RuntimeError("settings section must use Home Assistant's select selector")
-    select = selector["select"]
-    assert_result(
-        select.get("translation_key"),
-        OPTIONS_SECTION_FIELD,
-        "settings section selector must retain translated choices",
-    )
-    assert_result(
-        select.get("options"),
-        ["contours", "general_settings", "advanced_settings"],
-        "initial options form must expose the ordinary contour workflow first",
+        options_menu.get("menu_options"),
+        ["contours", "home_environment", "general_settings", "advanced_settings"],
+        "options menu must expose only approved settings areas",
     )
 
 
@@ -1138,8 +1120,7 @@ async def async_open_options_section(
     """Open one separated HausmanHub options area through the real first screen."""
 
     initial = await hass.config_entries.options.async_init(entry.entry_id)
-    assert_result(initial["type"], "form", "options flow must show its section menu")
-    assert_options_form_uses_safe_native_selectors(initial)
+    assert_options_menu(initial)
     first_section = (
         "advanced_settings"
         if section
@@ -1154,17 +1135,17 @@ async def async_open_options_section(
     )
     result = await hass.config_entries.options.async_configure(
         initial["flow_id"],
-        {OPTIONS_SECTION_FIELD: first_section},
+        {"next_step_id": first_section},
     )
     if first_section == "advanced_settings":
         assert_result(
             (result["type"], result.get("step_id")),
-            ("form", "advanced_settings"),
+            ("menu", "advanced_settings"),
             "options menu must keep technical tools behind advanced settings",
         )
         result = await hass.config_entries.options.async_configure(
             initial["flow_id"],
-            {"advanced_settings_action": section},
+            {"next_step_id": section},
         )
     assert_result(
         (result["type"], result.get("step_id")),
@@ -1699,28 +1680,11 @@ async def async_assert_broken_options_form_defaults_to_read_only(
     saved_data = dict(entry.data)
     saved_options = dict(entry.options)
     options_form = await hass.config_entries.options.async_init(entry.entry_id)
-    assert_result(
-        options_form["type"],
-        "form",
-        f"{scenario_name} options form must still open for manual repair",
-    )
-    assert_options_form_uses_safe_native_selectors(options_form)
-    section_schema = getattr(options_form.get("data_schema"), "schema", None)
-    if not isinstance(section_schema, dict) or len(section_schema) != 1:
-        raise RuntimeError(f"{scenario_name} must keep a one-field settings menu")
-    section_field = next(iter(section_schema))
-    section_default_factory = getattr(section_field, "default", None)
-    if not callable(section_default_factory):
-        raise RuntimeError(f"{scenario_name} settings menu must provide a safe default")
-    assert_result(
-        section_default_factory(),
-        "contours",
-        f"{scenario_name} settings menu must start with automatic contours",
-    )
+    assert_options_menu(options_form)
 
     general_form = await hass.config_entries.options.async_configure(
         options_form["flow_id"],
-        {OPTIONS_SECTION_FIELD: "general_settings"},
+        {"next_step_id": "general_settings"},
     )
     assert_general_settings_form(general_form)
     schema_fields = getattr(general_form.get("data_schema"), "schema", None)
@@ -5492,11 +5456,11 @@ async def async_assert_climate_migration_wizard(
         rollback_open = await hass.config_entries.options.async_init(entry.entry_id)
         rollback_open = await hass.config_entries.options.async_configure(
             rollback_open["flow_id"],
-            {"settings_section": "advanced_settings"},
+            {"next_step_id": "advanced_settings"},
         )
         rollback_open = await hass.config_entries.options.async_configure(
             rollback_open["flow_id"],
-            {"advanced_settings_action": "climate_migration"},
+            {"next_step_id": "climate_migration"},
         )
         if rollback_open["step_id"] != "climate_migration_rollback":
             raise RuntimeError(
