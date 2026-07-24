@@ -675,11 +675,13 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         fetches_before = bridge.fetch_count
         options = await runtime.async_climate_setup_options()
         revision = options["snapshot_revision"]
+        setup_revision = (await runtime.async_current_contour_setup())["setup_revision"]
         self.assertEqual(fetches_before, bridge.fetch_count)
 
         draft = await runtime.async_create_contour_draft(
             {
                 "snapshot_revision": revision,
+                "setup_revision": setup_revision,
                 "name": "Климат",
                 "mode": "automatic",
                 "rooms": [
@@ -736,9 +738,11 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         )
         await runtime.async_start()
         options = await runtime.async_climate_setup_options()
+        setup_revision = (await runtime.async_current_contour_setup())["setup_revision"]
         draft = await runtime.async_create_contour_draft(
             {
                 "snapshot_revision": options["snapshot_revision"],
+                "setup_revision": setup_revision,
                 "name": "Климат дома",
                 "mode": "automatic",
                 "rooms": [
@@ -823,9 +827,11 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
         )
         await runtime.async_start()
         options = await runtime.async_climate_setup_options()
+        setup_revision = (await runtime.async_current_contour_setup())["setup_revision"]
         draft = await runtime.async_create_contour_draft(
             {
                 "snapshot_revision": options["snapshot_revision"],
+                "setup_revision": setup_revision,
                 "name": "Климат",
                 "mode": "observe",
                 "rooms": [
@@ -3054,4 +3060,3 @@ class ClimateRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(1, len(store.saved))
         self.assertEqual("living_ac", result["devices"][0]["id"])
-

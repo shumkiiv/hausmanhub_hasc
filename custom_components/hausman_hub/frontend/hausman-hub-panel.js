@@ -3,7 +3,10 @@ const PANEL_API = "hausman_hub/v1/admin/panel";
 const MODE_API = "hausman_hub/v1/admin/climate-mode";
 const HOME_API = "hausman_hub/v1/admin/home-environment";
 const WINDOWS_API = "hausman_hub/v1/admin/climate-room-signals";
+const DRAFT_API = "hausman_hub/v1/admin/climate-drafts";
 const SETUP_API = "hausman_hub/v1/admin/climate-drafts/current";
+const DRAFT_VALIDATE_API = `${DRAFT_API}/validate`;
+const DRAFT_SAVE_API = `${DRAFT_API}/save`;
 const PROFILES_API = "hausman_hub/v1/admin/climate-profiles";
 const SCHEDULE_API = "hausman_hub/v1/admin/climate-schedule";
 const REFRESH_MS = 30000;
@@ -11,6 +14,11 @@ const REFRESH_MS = 30000;
 const PROFILE_CONTRACT = { name: "hausman-hub-climate-profile-update-request", version: 1 };
 const SCHEDULE_CONTRACT = { name: "hausman-hub-climate-schedule-update-request", version: 1 };
 const STRATEGY_ORDER = ["soft", "normal", "aggressive"];
+const CONTOUR_MODE_ORDER = ["observe", "automatic"];
+const ACTIVE_DEVICE_TYPES = new Set([
+  "air_conditioner", "radiator_thermostat", "humidifier", "floor_heating",
+]);
+const SENSOR_DEVICE_TYPES = new Set(["temperature_sensor", "humidity_sensor"]);
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function el(tag, className, text) {
@@ -60,7 +68,22 @@ class HausmanHubPanel extends HTMLElement {
     this._notice = "";
     this._timer = null;
     this._shell = null;
-    this._dirty = { home: false, windows: false, profiles: false, schedule: false, mode: false };
+    this._dirty = {
+      wizard: false, home: false, windows: false, profiles: false, schedule: false, mode: false,
+    };
+    this._wizard = {
+      open: false,
+      loading: false,
+      options: null,
+      optionsError: false,
+      draft: null,
+      validation: null,
+      fingerprint: null,
+      setupRevision: null,
+    };
+    this._wizardFields = null;
+    this._wizardIssues = null;
+    this._wizardButtons = null;
     this._onVisible = () => {
       if (!document.hidden) this._load();
     };
@@ -195,8 +218,10 @@ class HausmanHubPanel extends HTMLElement {
     }
     this._renderReadiness(shell.readiness, this._data.readiness);
     const snapshot = this._data.snapshot;
+    if (!this._dirty.wizard) {
+      this._renderContour(shell.contour, snapshot, this._settings.setup);
+    }
     this._renderRooms(shell.rooms, snapshot);
-    this._renderContours(shell.contours, snapshot);
     if (!this._dirty.profiles) this._renderProfiles(shell.profiles, this._settings.setup);
     if (!this._dirty.schedule) this._renderSchedule(shell.schedule, this._settings);
     if (!this._dirty.home) this._renderHome(shell.home, this._settings.home);
@@ -236,6 +261,8 @@ class HausmanHubPanel extends HTMLElement {
       input[type="number"] { font: inherit; width: 72px; padding: 6px;
         border-radius: 8px; border: 1px solid var(--divider-color, #ccc);
         margin-right: 8px; }
+      input[type="text"] { font: inherit; width: min(320px, 100%); padding: 6px;
+        border-radius: 8px; border: 1px solid var(--divider-color, #ccc); }
       input[type="time"] { font: inherit; padding: 6px; border-radius: 8px;
         border: 1px solid var(--divider-color, #ccc); margin-right: 8px; }
       select { font: inherit; padding: 6px; border-radius: 8px;
@@ -245,6 +272,11 @@ class HausmanHubPanel extends HTMLElement {
       .chip { display: inline-block; border-radius: 10px; padding: 2px 10px;
         font-size: 12px; background: var(--secondary-background-color, #e5e5e5);
         margin: 2px 4px 2px 0; }
+      .room-block { border-top: 1px solid var(--divider-color, #ddd); margin-top: 14px;
+        padding-top: 10px; }
+      .device-option { margin: 4px 0; }
+      .wizard-issues { color: var(--error-color, #db4437); font-size: 13px; margin-top: 6px; }
+      .wizard-success { color: var(--success-color, #43a047); font-size: 13px; margin-top: 8px; }
     `;
     root.appendChild(style);
     const container = el("div");
@@ -260,7 +292,7 @@ class HausmanHubPanel extends HTMLElement {
     loading.style.display = "none";
     container.appendChild(loading);
     const sections = {};
-    ["readiness", "rooms", "contours", "profiles", "schedule", "home", "windows"].forEach((name) => {
+    ["readiness", "contour", "rooms", "profiles", "schedule", "home", "windows"].forEach((name) => {
       const node = el("div");
       container.appendChild(node);
       sections[name] = node;
@@ -269,9 +301,10 @@ class HausmanHubPanel extends HTMLElement {
   }
 
   _clearDynamic() {
-    ["readiness", "rooms", "contours"].forEach((name) => {
+    ["readiness", "rooms"].forEach((name) => {
       this._shell[name].innerHTML = "";
     });
+    if (!this._dirty.wizard) this._shell.contour.innerHTML = "";
     ["profiles", "schedule", "home", "windows"].forEach((name) => {
       if (!this._dirty[name]) this._shell[name].innerHTML = "";
     });
@@ -360,12 +393,529 @@ class HausmanHubPanel extends HTMLElement {
     container.appendChild(grid);
   }
 
-  _renderContours(container, snapshot) {
+  _renderContourWizard(container, setup) {
+    if (!setup) {
+      container.appendChild(el("div", "card muted", "Настройка контура временно недоступна."));
+      return;
+    }
+    const configured = setup.status !== "not_configured";
+    if (configured && !this._wizard.open) {
+      const card = el("div", "card");
+      card.appendChild(el("h3", null, setup.name || "Климатический контур"));
+      const modes = (setup.display_names && setup.display_names.modes) || {};
+      this._row(card, "Режим", modes[setup.mode] || setup.mode);
+      const summary = setup.summary || {};
+      this._row(card, "Комнат", summary.room_count || 0);
+      this._row(card, "Устройств", summary.device_count || 0);
+      (setup.issues || []).forEach((issue) => {
+        if (issue && issue.message) card.appendChild(el("div", "wizard-issues", issue.message));
+      });
+      const edit = el("button", null, "Изменить контур");
+      edit.disabled = this._busy || setup.editing_allowed !== true;
+      edit.addEventListener("click", () => this._openWizard(setup));
+      card.appendChild(edit);
+      if (setup.editing_allowed !== true) {
+        card.appendChild(
+          el("div", "muted", "Редактирование недоступно: данные устройств устарели или изменились.")
+        );
+      }
+      container.appendChild(card);
+      return;
+    }
+
+    if (!this._wizard.options) {
+      const card = el("div", "card");
+      card.appendChild(el(
+        "h3", null,
+        configured ? "Изменение климатического контура" : "Создание климатического контура"
+      ));
+      if (this._wizard.optionsError) {
+        card.appendChild(el("div", "muted", "Не удалось загрузить комнаты и устройства."));
+        const retry = el("button", "secondary", "Повторить загрузку");
+        retry.disabled = this._wizard.loading;
+        retry.addEventListener("click", () => this._loadWizardOptions(true));
+        card.appendChild(retry);
+      } else {
+        card.appendChild(el("div", "muted", "Загрузка комнат и устройств..."));
+        if (!this._wizard.loading) this._loadWizardOptions();
+      }
+      container.appendChild(card);
+      return;
+    }
+    this._renderWizardForm(container, setup, this._wizard.options);
+  }
+
+  async _loadWizardOptions(force = false) {
+    if (!this._hass || this._wizard.loading) return;
+    if (this._wizard.options && !force) return;
+    this._wizard.loading = true;
+    this._wizard.optionsError = false;
+    if (force) this._wizard.options = null;
+    try {
+      this._wizard.options = await this._hass.callApi("GET", DRAFT_API);
+      this._wizard.optionsError = false;
+    } catch (error) {
+      this._wizard.options = null;
+      this._wizard.optionsError = true;
+    } finally {
+      this._wizard.loading = false;
+    }
+    if (!this._dirty.wizard) this._render();
+  }
+
+  _openWizard(setup) {
+    if (setup.status !== "not_configured" && setup.editing_allowed !== true) return;
+    this._wizard.open = true;
+    this._wizard.setupRevision = setup.setup_revision;
+    this._wizard.optionsError = false;
+    this._wizard.draft = null;
+    this._wizard.validation = null;
+    this._wizard.fingerprint = null;
+    this._dirty.wizard = false;
+    this._render();
+  }
+
+  _cancelWizard() {
+    this._wizard.open = false;
+    this._wizard.setupRevision = null;
+    this._wizard.draft = null;
+    this._wizard.validation = null;
+    this._wizard.fingerprint = null;
+    this._wizardFields = null;
+    this._wizardIssues = null;
+    this._wizardButtons = null;
+    this._dirty.wizard = false;
+    this._render();
+  }
+
+  _renderWizardForm(container, setup, options) {
+    if (this._wizard.setupRevision === null) {
+      this._wizard.setupRevision = setup.setup_revision;
+    }
+    const editing = setup.status !== "not_configured";
+    const currentRooms = new Map((setup.rooms || []).map((room) => [room.id, room]));
+    const deviceTypes = (options.display_names && options.display_names.device_types) || {};
+    const strategies = (options.display_names && options.display_names.strategies) || {};
+    const modes = (options.display_names && options.display_names.modes) || {};
+    const fields = { rooms: {}, candidateBoxes: {}, controls: [] };
+    const issues = { rooms: {}, global: null, success: null };
+    const card = el("div", "card");
+    card.appendChild(el(
+      "h3", null,
+      editing ? "Изменение климатического контура" : "Создание климатического контура"
+    ));
+
+    const name = el("input");
+    name.type = "text";
+    name.value = setup.name || "Климат";
+    name.addEventListener("input", () => this._wizardChanged());
+    const nameRow = el("label", null, "Название контура");
+    nameRow.appendChild(name);
+    card.appendChild(nameRow);
+
+    const mode = selectField(
+      CONTOUR_MODE_ORDER.map((code) => ({ value: code, label: modes[code] || code })),
+      setup.mode || "observe",
+      () => this._wizardChanged()
+    );
+    const modeRow = el("label", null, "Режим");
+    modeRow.appendChild(mode);
+    card.appendChild(modeRow);
+    fields.name = name;
+    fields.mode = mode;
+    fields.controls.push(name, mode);
+
+    (options.rooms || []).forEach((room) => {
+      const currentRoom = currentRooms.get(room.id);
+      const currentDevices = new Map(
+        (((currentRoom && currentRoom.devices) || [])).map((device) => [device.candidate_id, device])
+      );
+      const candidates = (options.devices || []).filter((candidate) => (
+        (candidate.room_id === room.id || candidate.room_id === "")
+        && (candidate.can_add === true || currentDevices.has(candidate.candidate_id))
+      ));
+      const suggested = !editing && candidates.some(
+        (candidate) => candidate.can_add === true && candidate.suggested_room_id === room.id
+      );
+      const canUseRoom = room.selectable === true || Boolean(currentRoom);
+      const block = el("div", "room-block");
+      const include = el("input");
+      include.type = "checkbox";
+      include.value = room.id;
+      include.checked = Boolean(currentRoom) || suggested;
+      include.disabled = !canUseRoom;
+      const includeRow = el("label", null, `Включить комнату «${room.name || room.id}»`);
+      includeRow.appendChild(include);
+      block.appendChild(includeRow);
+
+      const profiles = (currentRoom && currentRoom.profiles) || {};
+      const activeProfile = ["day", "night"].includes(profiles.active_profile)
+        ? profiles.active_profile : "day";
+      const activeSettings = profiles[activeProfile] || {};
+      const temperature = numberField(
+        activeSettings.target_temperature === undefined ? 22 : activeSettings.target_temperature,
+        18, 28, 0.5, () => this._wizardChanged()
+      );
+      const humidity = numberField(
+        activeSettings.target_humidity === undefined ? 45 : activeSettings.target_humidity,
+        30, 70, 5, () => this._wizardChanged()
+      );
+      const strategy = selectField(
+        STRATEGY_ORDER.map((code) => ({ value: code, label: strategies[code] || code })),
+        activeSettings.strategy || "normal",
+        () => this._wizardChanged()
+      );
+      const temperatureLabel = editing
+        ? "Активный профиль: целевая температура, °C" : "Целевая температура, °C";
+      const temperatureRow = el("label", null, temperatureLabel);
+      temperatureRow.appendChild(temperature);
+      block.appendChild(temperatureRow);
+      const humidityLabel = editing
+        ? "Активный профиль: целевая влажность, %" : "Целевая влажность, %";
+      const humidityRow = el("label", null, humidityLabel);
+      humidityRow.appendChild(humidity);
+      block.appendChild(humidityRow);
+      const strategyRow = el("label", null, "Стратегия");
+      strategyRow.appendChild(strategy);
+      block.appendChild(strategyRow);
+
+      const roomFields = {
+        include, temperature, humidity, strategy, devices: [], canUseRoom, toggle: null,
+      };
+      const appendDevices = (title, allowedTypes) => {
+        block.appendChild(el("h4", null, title));
+        let count = 0;
+        candidates.forEach((candidate) => {
+          const currentDevice = currentDevices.get(candidate.candidate_id);
+          const suggestedTypes = Array.isArray(candidate.suggested_types)
+            ? candidate.suggested_types : [];
+          const recommended = candidate.recommended_type || suggestedTypes[0];
+          suggestedTypes.filter((type) => allowedTypes.has(type)).forEach((type) => {
+            const checkbox = el("input");
+            checkbox.type = "checkbox";
+            checkbox.value = candidate.candidate_id;
+            checkbox.checked = Boolean(
+              (currentDevice && currentDevice.type === type)
+              || (!editing && candidate.can_add === true
+                && candidate.suggested_room_id === room.id && recommended === type)
+            );
+            checkbox.addEventListener("change", () => {
+              if (checkbox.checked) {
+                (fields.candidateBoxes[candidate.candidate_id] || []).forEach((peer) => {
+                  if (peer !== checkbox) peer.checked = false;
+                });
+              }
+              this._wizardChanged();
+            });
+            const label = el(
+              "label", "device-option", `${candidate.name} - ${deviceTypes[type] || type}`
+            );
+            label.appendChild(checkbox);
+            block.appendChild(label);
+            const choice = { checkbox, candidateId: candidate.candidate_id, type };
+            roomFields.devices.push(choice);
+            fields.candidateBoxes[candidate.candidate_id] =
+              fields.candidateBoxes[candidate.candidate_id] || [];
+            fields.candidateBoxes[candidate.candidate_id].push(checkbox);
+            count += 1;
+          });
+        });
+        if (!count) block.appendChild(el("div", "muted", "Подходящих устройств нет."));
+      };
+      appendDevices("Устройства управления", ACTIVE_DEVICE_TYPES);
+      appendDevices("Датчики", SENSOR_DEVICE_TYPES);
+
+      const roomIssues = el("div", "wizard-issues");
+      block.appendChild(roomIssues);
+      issues.rooms[room.id] = roomIssues;
+      roomFields.toggle = () => {
+        const enabled = include.checked && canUseRoom;
+        temperature.disabled = !enabled;
+        humidity.disabled = !enabled;
+        strategy.disabled = !enabled;
+        roomFields.devices.forEach((device) => { device.checkbox.disabled = !enabled; });
+      };
+      include.addEventListener("change", () => {
+        roomFields.toggle();
+        this._wizardChanged();
+      });
+      roomFields.toggle();
+      fields.rooms[room.id] = roomFields;
+      fields.controls.push(include, temperature, humidity, strategy);
+      roomFields.devices.forEach((device) => fields.controls.push(device.checkbox));
+      card.appendChild(block);
+    });
+
+    const globalIssues = el("div", "wizard-issues");
+    const success = el("div", "wizard-success");
+    issues.global = globalIssues;
+    issues.success = success;
+    card.appendChild(globalIssues);
+    card.appendChild(success);
+
+    const check = el("button", null, "Проверить контур");
+    const save = el("button", null, "Сохранить контур");
+    const cancel = el("button", "secondary", "Отмена");
+    check.disabled = this._busy || (!editing && options.draft_creation_allowed !== true);
+    save.disabled = true;
+    cancel.disabled = this._busy;
+    check.addEventListener("click", () => this._checkWizard());
+    save.addEventListener("click", () => this._saveWizard());
+    cancel.addEventListener("click", () => this._cancelWizard());
+    card.appendChild(check);
+    card.appendChild(save);
+    card.appendChild(cancel);
+    if (!editing && options.draft_creation_allowed !== true) {
+      card.appendChild(
+        el("div", "muted", "Создание недоступно: обновите данные комнат и устройств.")
+      );
+    }
+    this._wizardFields = fields;
+    this._wizardIssues = issues;
+    this._wizardButtons = { check, save, cancel, editing, creationAllowed: options.draft_creation_allowed === true };
+    container.appendChild(card);
+  }
+
+  _wizardChanged() {
+    this._dirty.wizard = true;
+    this._wizard.draft = null;
+    this._wizard.validation = null;
+    this._wizard.fingerprint = null;
+    this._clearWizardIssues();
+    if (this._wizardButtons) this._wizardButtons.save.disabled = true;
+  }
+
+  _clearWizardIssues() {
+    if (!this._wizardIssues) return;
+    Object.values(this._wizardIssues.rooms).forEach((node) => { node.innerHTML = ""; });
+    this._wizardIssues.global.innerHTML = "";
+    this._wizardIssues.success.innerHTML = "";
+  }
+
+  _collectWizardPayload() {
+    const fields = this._wizardFields;
+    const options = this._wizard.options;
+    if (!fields || !options) return { error: "Мастер контура ещё не готов." };
+    const name = String(fields.name.value || "").trim();
+    if (!name || name.length > 120) {
+      return { error: "Введите название контура длиной не более 120 символов." };
+    }
+    if (!CONTOUR_MODE_ORDER.includes(fields.mode.value)) {
+      return { error: "Выберите режим климатического контура." };
+    }
+    const setupRevision = this._wizard.setupRevision;
+    if (!Number.isSafeInteger(setupRevision) || setupRevision < 0) {
+      return { error: "Настройки контура изменились. Обновите страницу и повторите." };
+    }
+    const rooms = [];
+    const selectedCandidates = new Set();
+    for (const room of options.rooms || []) {
+      const entry = fields.rooms[room.id];
+      if (!entry || !entry.include.checked) continue;
+      const rawTemperature = entry.temperature.value;
+      const rawHumidity = entry.humidity.value;
+      const temperature = Number(rawTemperature);
+      const humidity = Number(rawHumidity);
+      if (
+        rawTemperature === "" || !Number.isFinite(temperature)
+        || temperature < 18 || temperature > 28 || !Number.isInteger(temperature * 2)
+      ) {
+        return { error: `Проверьте температуру в комнате «${room.name || room.id}»: 18-28 °C, шаг 0,5 °C.` };
+      }
+      if (
+        rawHumidity === "" || !Number.isFinite(humidity)
+        || humidity < 30 || humidity > 70 || !Number.isInteger(humidity / 5)
+      ) {
+        return { error: `Проверьте влажность в комнате «${room.name || room.id}»: 30-70 %, шаг 5 %.` };
+      }
+      if (!STRATEGY_ORDER.includes(entry.strategy.value)) {
+        return { error: `Выберите стратегию для комнаты «${room.name || room.id}».` };
+      }
+      const devices = [];
+      for (const choice of entry.devices) {
+        if (!choice.checkbox.checked) continue;
+        if (selectedCandidates.has(choice.candidateId)) {
+          return { error: "Одно устройство нельзя выбрать для нескольких комнат или типов." };
+        }
+        selectedCandidates.add(choice.candidateId);
+        devices.push({ candidate_id: choice.candidateId, type: choice.type });
+      }
+      if (!devices.length) {
+        return { error: `Выберите хотя бы одно устройство в комнате «${room.name || room.id}».` };
+      }
+      rooms.push({
+        room_id: room.id,
+        target_temperature: temperature,
+        target_humidity: humidity,
+        strategy: entry.strategy.value,
+        devices,
+      });
+    }
+    if (!rooms.length) return { error: "Выберите хотя бы одну комнату." };
+    return {
+      payload: {
+        snapshot_revision: options.snapshot_revision,
+        setup_revision: setupRevision,
+        name,
+        mode: fields.mode.value,
+        rooms,
+      },
+    };
+  }
+
+  _showWizardMessage(message) {
+    this._clearWizardIssues();
+    if (this._wizardIssues) this._wizardIssues.global.appendChild(el("div", null, message));
+  }
+
+  _showWizardValidation(validation) {
+    this._clearWizardIssues();
+    (validation.issues || []).forEach((issue) => {
+      const target = issue.room_id && this._wizardIssues.rooms[issue.room_id]
+        ? this._wizardIssues.rooms[issue.room_id] : this._wizardIssues.global;
+      target.appendChild(el("div", null, issue.message));
+    });
+    const ready = validation.status === "ready" && validation.save_allowed === true;
+    if (ready) {
+      this._wizardIssues.success.appendChild(
+        el("div", null, "Контур проверен. Можно сохранять.")
+      );
+    } else if (!(validation.issues || []).length) {
+      this._wizardIssues.global.appendChild(
+        el("div", null, "Контур не прошёл проверку. Проверьте выбранные значения.")
+      );
+    }
+    this._wizardButtons.save.disabled = this._busy || !ready;
+  }
+
+  _setWizardBusy(busy) {
+    if (!this._wizardFields || !this._wizardButtons) return;
+    this._wizardFields.name.disabled = busy;
+    this._wizardFields.mode.disabled = busy;
+    Object.values(this._wizardFields.rooms).forEach((room) => {
+      room.include.disabled = busy || !room.canUseRoom;
+      if (busy) {
+        room.temperature.disabled = true;
+        room.humidity.disabled = true;
+        room.strategy.disabled = true;
+        room.devices.forEach((device) => { device.checkbox.disabled = true; });
+      } else {
+        room.toggle();
+      }
+    });
+    this._wizardButtons.check.disabled = busy
+      || (!this._wizardButtons.editing && !this._wizardButtons.creationAllowed);
+    const ready = this._wizard.validation
+      && this._wizard.validation.status === "ready"
+      && this._wizard.validation.save_allowed === true;
+    this._wizardButtons.save.disabled = busy || !ready;
+    this._wizardButtons.cancel.disabled = busy;
+  }
+
+  async _checkWizard() {
+    if (this._busy) return;
+    const collected = this._collectWizardPayload();
+    if (collected.error) {
+      this._showWizardMessage(collected.error);
+      return;
+    }
+    if (!window.confirm("Проверить климатический контур с выбранными комнатами и устройствами?")) return;
+    this._busy = true;
+    this._dirty.wizard = true;
+    this._notice = "";
+    this._setWizardBusy(true);
+    try {
+      const draft = await this._hass.callApi("POST", DRAFT_API, collected.payload);
+      const validation = await this._hass.callApi("POST", DRAFT_VALIDATE_API, draft);
+      this._wizard.draft = draft;
+      this._wizard.validation = validation;
+      this._wizard.fingerprint = JSON.stringify(collected.payload);
+      this._showWizardValidation(validation);
+    } catch (error) {
+      if (error && error.status === 409) {
+        await this._resetWizardAfterConflict();
+      } else {
+        this._showWizardMessage("Проверить контур не удалось. Проверьте значения и состояние устройств.");
+      }
+    } finally {
+      this._busy = false;
+      this._setWizardBusy(false);
+      this._render();
+    }
+  }
+
+  async _saveWizard() {
+    if (this._busy) return;
+    const validation = this._wizard.validation;
+    if (
+      !this._wizard.draft || !validation
+      || validation.status !== "ready" || validation.save_allowed !== true
+    ) return;
+    const collected = this._collectWizardPayload();
+    if (collected.error || JSON.stringify(collected.payload) !== this._wizard.fingerprint) {
+      this._wizardChanged();
+      this._showWizardMessage("Форма изменилась после проверки. Проверьте контур ещё раз.");
+      return;
+    }
+    if (!window.confirm(
+      "Сохранить климатический контур? Настройка будет записана атомарно, команды устройствам не отправятся."
+    )) return;
+    this._busy = true;
+    this._setWizardBusy(true);
+    try {
+      await this._hass.callApi("POST", DRAFT_SAVE_API, this._wizard.draft);
+      this._dirty.wizard = false;
+      this._wizard.open = false;
+      this._wizard.setupRevision = null;
+      this._wizard.draft = null;
+      this._wizard.validation = null;
+      this._wizard.fingerprint = null;
+      this._wizard.options = null;
+      this._wizardFields = null;
+      this._wizardIssues = null;
+      this._wizardButtons = null;
+      this._notice = "Контур сохранён. Команды устройствам не отправлялись.";
+      this._error = false;
+      await this._load();
+      await this._loadWizardOptions(true);
+    } catch (error) {
+      if (error && error.status === 409) {
+        await this._resetWizardAfterConflict();
+      } else {
+        this._showWizardMessage("Сохранить контур не удалось. Проверьте значения и состояние устройств.");
+      }
+    } finally {
+      this._busy = false;
+      this._setWizardBusy(false);
+      this._render();
+    }
+  }
+
+  async _resetWizardAfterConflict() {
+    this._dirty.wizard = false;
+    this._wizard.open = false;
+    this._wizard.setupRevision = null;
+    this._wizard.options = null;
+    this._wizard.optionsError = false;
+    this._wizard.draft = null;
+    this._wizard.validation = null;
+    this._wizard.fingerprint = null;
+    this._wizardFields = null;
+    this._wizardIssues = null;
+    this._wizardButtons = null;
+    this._notice = "Настройки изменились в другом окне. Данные обновлены, откройте мастер и повторите действие.";
+    await this._load();
+  }
+
+  _renderContour(container, snapshot, setup) {
     container.innerHTML = "";
+    if (!setup && !snapshot) return;
+    container.appendChild(el("h2", null, "Контур"));
+    this._renderContourWizard(container, setup);
+    if (this._wizard.open || (setup && setup.status === "not_configured")) return;
     if (!snapshot) return;
     const contours = (snapshot.contours || []).filter((item) => item.kind === "climate");
     if (!contours.length) return;
-    container.appendChild(el("h2", null, "Климатический контур"));
     contours.forEach((contour) => {
       const card = el("div", "card");
       card.appendChild(el("h3", null, contour.name));
@@ -468,8 +1018,12 @@ class HausmanHubPanel extends HTMLElement {
     const card = el("div", "card");
     if (setup.status === "not_configured") {
       card.appendChild(
-        el("div", "muted", "Климатический контур ещё не настроен. Создайте его через мастер настроек интеграции.")
+        el("div", "muted", "Климатический контур ещё не настроен. Создайте его в разделе «Контур» выше.")
       );
+      const openWizard = el("button", "secondary", "Открыть мастер контура");
+      openWizard.disabled = this._busy;
+      openWizard.addEventListener("click", () => this._openWizard(setup));
+      card.appendChild(openWizard);
       container.appendChild(card);
       return;
     }
@@ -485,11 +1039,11 @@ class HausmanHubPanel extends HTMLElement {
           && setup.display_names.profiles[profile]) || profile;
         card.appendChild(el("h4", null, title));
         const temperature = numberField(
-          values.target_temperature, 10, 35, 0.5,
+          values.target_temperature, 18, 28, 0.5,
           () => { this._dirty.profiles = true; }
         );
         const humidity = numberField(
-          values.target_humidity, 0, 100, 1,
+          values.target_humidity, 30, 70, 5,
           () => { this._dirty.profiles = true; }
         );
         const strategy = selectField(
@@ -532,8 +1086,10 @@ class HausmanHubPanel extends HTMLElement {
           const humidity = Number(rawHumidity);
           if (
             rawTemperature === "" || rawHumidity === ""
-            || !Number.isFinite(temperature) || temperature < 10 || temperature > 35
-            || !Number.isFinite(humidity) || humidity < 0 || humidity > 100
+            || !Number.isFinite(temperature) || temperature < 18 || temperature > 28
+            || !Number.isInteger(temperature * 2)
+            || !Number.isFinite(humidity) || humidity < 30 || humidity > 70
+            || !Number.isInteger(humidity / 5)
           ) {
             invalid = true;
           }
@@ -546,7 +1102,7 @@ class HausmanHubPanel extends HTMLElement {
         rooms.push({ room_id: roomId, profiles });
       });
       if (invalid) {
-        this._notice = "Проверьте температуру (10–35 °C) и влажность (0–100 %).";
+        this._notice = "Проверьте температуру (18–28 °C, шаг 0,5) и влажность (30–70 %, шаг 5).";
         this._render();
         return;
       }
@@ -808,11 +1364,11 @@ class HausmanHubPanel extends HTMLElement {
   }
 
   _temp(value) {
-    return typeof value === "number" ? `${value.toFixed(1)} °C` : "—";
+    return typeof value === "number" ? `${value.toFixed(1)} °C` : "нет данных";
   }
 
   _humidity(value) {
-    return typeof value === "number" ? `${Math.round(value)} %` : "—";
+    return typeof value === "number" ? `${Math.round(value)} %` : "нет данных";
   }
 }
 

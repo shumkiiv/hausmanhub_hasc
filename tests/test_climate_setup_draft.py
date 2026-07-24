@@ -22,9 +22,15 @@ from custom_components.hausman_hub.application.climate_setup import (
     climate_device_candidates,
     climate_draft_save_receipt,
     climate_setup_options,
+    current_climate_contour_setup,
     create_climate_contour_draft,
     validate_climate_contour_draft,
 )
+from custom_components.hausman_hub.application.contours import (
+    build_climate_contour_setup,
+    with_climate_schedule,
+)
+from tests.test_climate_setup_current import configured_setup
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -453,7 +459,7 @@ class ClimateSetupDraftTest(unittest.TestCase):
                         request,
                     )
 
-    def test_configured_candidate_and_extra_fields_are_not_silently_accepted(self) -> None:
+    def test_configured_candidate_is_accepted_only_unchanged_in_its_room(self) -> None:
         configured_registry = registry_from_payload(
             load_json(ROOT / "fixtures" / "hausmanhub_climate_v1" / "registry.json")
         )
@@ -462,11 +468,31 @@ class ClimateSetupDraftTest(unittest.TestCase):
             configured_registry,
             self.snapshot,
         )["snapshot_revision"]  # type: ignore[index]
+        draft = create_climate_contour_draft(
+            configured_registry,
+            self.snapshot,
+            configured_request,
+        )
+        self.draft_validator.validate(draft)
+
+        retyped = copy.deepcopy(configured_request)
+        retyped["rooms"][0]["devices"][0]["type"] = "floor_heating"  # type: ignore[index]
         with self.assertRaisesRegex(ClimateSetupViolation, "unavailable"):
             create_climate_contour_draft(
                 configured_registry,
                 self.snapshot,
-                configured_request,
+                retyped,
+            )
+
+        moved = copy.deepcopy(configured_request)
+        moved["rooms"][0]["devices"] = [  # type: ignore[index]
+            {"candidate_id": "candidate_0001", "type": "humidifier"}
+        ]
+        with self.assertRaisesRegex(ClimateSetupViolation, "unavailable"):
+            create_climate_contour_draft(
+                configured_registry,
+                self.snapshot,
+                moved,
             )
 
         extra = copy.deepcopy(self.request)
@@ -477,6 +503,241 @@ class ClimateSetupDraftTest(unittest.TestCase):
                 self.snapshot,
                 extra,
             )
+
+    def test_edit_preserves_profiles_schedule_overrides_bindings_and_ids(self) -> None:
+        registry, contours, snapshot = configured_setup()
+        registry_payload = registry_to_payload(registry)  # type: ignore[arg-type]
+        registry_payload["home"]["outdoor_temperature_entity_id"] = (  # type: ignore[index]
+            "sensor.outdoor"
+        )
+        for room_payload in registry_payload["rooms"]:  # type: ignore[union-attr]
+            if room_payload["id"] == "living":
+                room_payload["window_entity_id"] = "binary_sensor.living_window"
+        registry = registry_from_payload(registry_payload)
+        current = current_climate_contour_setup(
+            registry,
+            contours,  # type: ignore[arg-type]
+            snapshot,  # type: ignore[arg-type]
+        )
+        request_rooms = []
+        for room in current["rooms"]:  # type: ignore[union-attr]
+            active_profile = room["profiles"]["active_profile"]
+            active = room["profiles"][active_profile]
+            request_rooms.append(
+                {
+                    "room_id": room["id"],
+                    "target_temperature": (
+                        26.0 if room["id"] == "living" else active["target_temperature"]
+                    ),
+                    "target_humidity": active["target_humidity"],
+                    "strategy": active["strategy"],
+                    "devices": [
+                        {
+                            "candidate_id": device["candidate_id"],
+                            "type": device["type"],
+                        }
+                        for device in room["devices"]
+                    ],
+                }
+            )
+        request = {
+            "snapshot_revision": current["snapshot_revision"],
+            "setup_revision": current["setup_revision"],
+            "name": current["name"],
+            "mode": current["mode"],
+            "rooms": request_rooms,
+        }
+        self.request_validator.validate(request)
+        missing_revision = copy.deepcopy(request)
+        missing_revision.pop("setup_revision")
+        with self.assertRaises(ClimateSetupViolation) as missing:
+            create_climate_contour_draft(
+                registry,
+                snapshot,  # type: ignore[arg-type]
+                missing_revision,
+                contours=contours,  # type: ignore[arg-type]
+            )
+        self.assertEqual("setup_changed", missing.exception.code)
+        draft = create_climate_contour_draft(
+            registry,
+            snapshot,  # type: ignore[arg-type]
+            request,
+            contours=contours,  # type: ignore[arg-type]
+        )
+
+        updated_registry, updated_contours, validation = (
+            build_climate_contour_draft_setup(
+                registry,
+                snapshot,  # type: ignore[arg-type]
+                draft,
+                contours=contours,  # type: ignore[arg-type]
+            )
+        )
+
+        self.assertEqual("ready", validation["status"])
+        updated = updated_contours.contour("climate")
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        living = next(room for room in updated.rooms if room.room_id == "living")
+        kids = next(room for room in updated.rooms if room.room_id == "kids")
+        self.assertEqual(26.0, living.day_profile.target_temperature)
+        self.assertEqual(22.0, living.night_profile.target_temperature)
+        self.assertEqual(21.0, kids.night_profile.target_temperature)
+        self.assertTrue(updated.schedule.enabled)
+        self.assertEqual("07:00", updated.schedule.day_start)
+        self.assertEqual("day", updated.schedule.last_applied_profile.value)  # type: ignore[union-attr]
+        self.assertEqual(23.5, living.temporary_override.target_temperature)  # type: ignore[union-attr]
+        self.assertEqual(
+            [device.device_id for device in registry.devices],  # type: ignore[union-attr]
+            [device.device_id for device in updated_registry.devices],
+        )
+        self.assertEqual(
+            "sensor.outdoor",
+            updated_registry.home.outdoor_temperature_entity_id,
+        )
+        self.assertEqual(
+            "binary_sensor.living_window",
+            updated_registry.room("living").window_entity_id,  # type: ignore[union-attr]
+        )
+
+        stale_request = copy.deepcopy(request)
+        stale_request["setup_revision"] += 1
+        with self.assertRaises(ClimateSetupViolation) as stale:
+            create_climate_contour_draft(
+                registry,
+                snapshot,  # type: ignore[arg-type]
+                stale_request,
+                contours=contours,  # type: ignore[arg-type]
+            )
+        self.assertEqual("setup_changed", stale.exception.code)
+
+        changed_contours = with_climate_schedule(
+            contours,  # type: ignore[arg-type]
+            enabled=True,
+            day_start="08:00",
+            night_start="23:00",
+        )
+        with self.assertRaises(ClimateSetupViolation) as changed:
+            validate_climate_contour_draft(
+                registry,
+                snapshot,  # type: ignore[arg-type]
+                draft,
+                contours=changed_contours,
+            )
+        self.assertEqual("setup_changed", changed.exception.code)
+
+    def test_adding_an_earlier_sensor_keeps_existing_public_device_id(self) -> None:
+        initial_source = copy.deepcopy(load_json(SOURCE_FIXTURE))
+        initial_source["devices"].append(  # type: ignore[union-attr]
+            {
+                "id": "sensor-zulu",
+                "name": "Zulu temperature",
+                "roomId": "living",
+                "domain": "sensor",
+                "category": "temperature",
+                "state": "22.0",
+                "unavailable": False,
+            }
+        )
+        initial_snapshot = import_climate_state(initial_source)
+        registry, contours = build_climate_contour_setup(
+            initial_snapshot,
+            room_ids=["living"],
+            source_ids=["synthetic-ac-source-living", "sensor-zulu"],
+            name="Климат",
+            mode="automatic",
+            target_temperature=22.0,
+            target_humidity=45,
+            strategy="normal",
+        )
+        zulu_before = next(
+            device for device in registry.devices if device.source_id == "sensor-zulu"
+        )
+
+        updated_source = copy.deepcopy(initial_source)
+        updated_source["devices"].append(  # type: ignore[union-attr]
+            {
+                "id": "sensor-alpha",
+                "name": "Alpha temperature",
+                "roomId": "living",
+                "domain": "sensor",
+                "category": "temperature",
+                "state": "23.0",
+                "unavailable": False,
+            }
+        )
+        updated_snapshot = import_climate_state(updated_source)
+        options = climate_setup_options(registry, updated_snapshot)
+        current = current_climate_contour_setup(
+            registry,
+            contours,
+            updated_snapshot,
+        )
+        candidate_by_name = {
+            device["name"]: device["candidate_id"]
+            for device in options["devices"]  # type: ignore[union-attr]
+        }
+        current_room = current["rooms"][0]  # type: ignore[index]
+        devices = [
+            {
+                "candidate_id": device["candidate_id"],
+                "type": device["type"],
+            }
+            for device in current_room["devices"]
+        ]
+        devices.append(
+            {
+                "candidate_id": candidate_by_name["Alpha temperature"],
+                "type": "temperature_sensor",
+            }
+        )
+        draft = create_climate_contour_draft(
+            registry,
+            updated_snapshot,
+            {
+                "snapshot_revision": options["snapshot_revision"],
+                "setup_revision": current["setup_revision"],
+                "name": "Климат",
+                "mode": "automatic",
+                "rooms": [
+                    {
+                        "room_id": "living",
+                        "target_temperature": 22.0,
+                        "target_humidity": 45,
+                        "strategy": "normal",
+                        "devices": devices,
+                    }
+                ],
+            },
+            contours=contours,
+        )
+
+        updated_registry, updated_contours, _ = build_climate_contour_draft_setup(
+            registry,
+            updated_snapshot,
+            draft,
+            contours=contours,
+        )
+
+        zulu_after = next(
+            device
+            for device in updated_registry.devices
+            if device.source_id == "sensor-zulu"
+        )
+        alpha = next(
+            device
+            for device in updated_registry.devices
+            if device.source_id == "sensor-alpha"
+        )
+        self.assertEqual(zulu_before.device_id, zulu_after.device_id)
+        self.assertNotEqual(zulu_after.device_id, alpha.device_id)
+        saved = updated_contours.contour("climate")
+        self.assertIsNotNone(saved)
+        assert saved is not None
+        self.assertEqual(
+            {device.device_id for device in updated_registry.devices},
+            set(saved.rooms[0].device_ids),
+        )
 
 
 if __name__ == "__main__":

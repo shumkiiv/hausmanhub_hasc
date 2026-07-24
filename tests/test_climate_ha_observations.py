@@ -596,6 +596,166 @@ class NativeHaObservationTest(unittest.TestCase):
         assert room is not None
         self.assertIs(room.data_status, ClimateDataStatus.STALE)
 
+    def test_multiple_temperature_sensors_aggregate_to_median(self) -> None:
+        base = full_registry()
+        extra = sensor_device(
+            "living_temperature_2",
+            ClimateDeviceKind.TEMPERATURE_SENSOR,
+            ClimateEndpointRole.TEMPERATURE,
+            "sensor.living_temperature_2",
+        )
+        extra_3 = sensor_device(
+            "living_temperature_3",
+            ClimateDeviceKind.TEMPERATURE_SENSOR,
+            ClimateEndpointRole.TEMPERATURE,
+            "sensor.living_temperature_3",
+        )
+        merged = ClimateRegistry(
+            rooms=base.rooms,
+            devices=(*base.devices, extra, extra_3),
+            home=base.home,
+        )
+        states = full_states()
+        states["sensor.living_temperature"] = ha_state(
+            "sensor.living_temperature", "22.0"
+        )
+        states["sensor.living_temperature_2"] = ha_state(
+            "sensor.living_temperature_2", "26.0"
+        )
+        states["sensor.living_temperature_3"] = ha_state(
+            "sensor.living_temperature_3", "24.0"
+        )
+
+        observation = self.build(registry=merged, states=states)
+        room = observation.room("living")
+
+        self.assertIsNotNone(room)
+        assert room is not None
+        self.assertEqual(24.0, room.temperature)
+        self.assertIs(room.data_status, ClimateDataStatus.FRESH)
+
+    def test_two_temperature_sensors_aggregate_to_average_of_pair(self) -> None:
+        base = full_registry()
+        extra = sensor_device(
+            "living_temperature_2",
+            ClimateDeviceKind.TEMPERATURE_SENSOR,
+            ClimateEndpointRole.TEMPERATURE,
+            "sensor.living_temperature_2",
+        )
+        merged = ClimateRegistry(
+            rooms=base.rooms,
+            devices=(*base.devices, extra),
+            home=base.home,
+        )
+        states = full_states()
+        states["sensor.living_temperature"] = ha_state(
+            "sensor.living_temperature", "22.0"
+        )
+        states["sensor.living_temperature_2"] = ha_state(
+            "sensor.living_temperature_2", "24.0"
+        )
+
+        observation = self.build(registry=merged, states=states)
+        room = observation.room("living")
+
+        self.assertIsNotNone(room)
+        assert room is not None
+        self.assertEqual(23.0, room.temperature)
+
+    def test_unavailable_sensor_is_excluded_from_median(self) -> None:
+        base = full_registry()
+        extra = sensor_device(
+            "living_temperature_2",
+            ClimateDeviceKind.TEMPERATURE_SENSOR,
+            ClimateEndpointRole.TEMPERATURE,
+            "sensor.living_temperature_2",
+        )
+        extra_3 = sensor_device(
+            "living_temperature_3",
+            ClimateDeviceKind.TEMPERATURE_SENSOR,
+            ClimateEndpointRole.TEMPERATURE,
+            "sensor.living_temperature_3",
+        )
+        merged = ClimateRegistry(
+            rooms=base.rooms,
+            devices=(*base.devices, extra, extra_3),
+            home=base.home,
+        )
+        states = full_states()
+        states["sensor.living_temperature"] = ha_state(
+            "sensor.living_temperature", "22.0"
+        )
+        states["sensor.living_temperature_2"] = ha_state(
+            "sensor.living_temperature_2", "unavailable"
+        )
+        states["sensor.living_temperature_3"] = ha_state(
+            "sensor.living_temperature_3", "24.0"
+        )
+
+        observation = self.build(registry=merged, states=states)
+        room = observation.room("living")
+
+        self.assertIsNotNone(room)
+        assert room is not None
+        self.assertEqual(23.0, room.temperature)
+        self.assertIs(room.data_status, ClimateDataStatus.FRESH)
+
+    def test_stale_sensor_is_excluded_when_fresh_group_values_exist(self) -> None:
+        base = full_registry()
+        extra = sensor_device(
+            "living_humidity_2",
+            ClimateDeviceKind.HUMIDITY_SENSOR,
+            ClimateEndpointRole.HUMIDITY,
+            "sensor.living_humidity_2",
+        )
+        merged = ClimateRegistry(
+            rooms=base.rooms,
+            devices=(*base.devices, extra),
+            home=base.home,
+        )
+        states = full_states()
+        states["sensor.living_humidity"] = ha_state("sensor.living_humidity", "41")
+        states["sensor.living_humidity_2"] = ha_state(
+            "sensor.living_humidity_2", "45", updated=STALE
+        )
+
+        observation = self.build(registry=merged, states=states)
+        room = observation.room("living")
+
+        self.assertIsNotNone(room)
+        assert room is not None
+        self.assertEqual(41.0, room.humidity)
+        self.assertIs(room.data_status, ClimateDataStatus.FRESH)
+
+    def test_all_stale_sensor_values_keep_a_stale_median(self) -> None:
+        base = full_registry()
+        extra = sensor_device(
+            "living_humidity_2",
+            ClimateDeviceKind.HUMIDITY_SENSOR,
+            ClimateEndpointRole.HUMIDITY,
+            "sensor.living_humidity_2",
+        )
+        merged = ClimateRegistry(
+            rooms=base.rooms,
+            devices=(*base.devices, extra),
+            home=base.home,
+        )
+        states = full_states()
+        states["sensor.living_humidity"] = ha_state(
+            "sensor.living_humidity", "41", updated=STALE
+        )
+        states["sensor.living_humidity_2"] = ha_state(
+            "sensor.living_humidity_2", "45", updated=STALE
+        )
+
+        observation = self.build(registry=merged, states=states)
+        room = observation.room("living")
+
+        self.assertIsNotNone(room)
+        assert room is not None
+        self.assertEqual(43.0, room.humidity)
+        self.assertIs(room.data_status, ClimateDataStatus.STALE)
+
     def test_non_finite_sensor_text_stays_absent(self) -> None:
         states = full_states()
         states["sensor.living_temperature"] = ha_state(

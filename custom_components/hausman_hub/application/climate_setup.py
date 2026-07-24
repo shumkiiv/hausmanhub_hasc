@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 import json
 
-from ..domain.climate import ClimateRegistry
+from ..domain.climate import ClimateRegistry, ClimateRoom
 from ..domain.contours import ContourMode, ContourRegistry
 from .contours import (
     ContourRegistryViolation,
@@ -16,6 +17,7 @@ from .contours import (
     validate_contour_bindings,
     with_climate_room_profiles,
     with_climate_schedule,
+    with_climate_temporary_temperature,
 )
 from .climate_discovery import ClimateImportSnapshot
 from .climate_native_setup import UNASSIGNED_CANDIDATE_ROOM
@@ -66,6 +68,7 @@ _CLIMATE_DRAFT_MODES = frozenset({"observe", "automatic"})
 _CLIMATE_DRAFT_FIELDS = frozenset(
     {"snapshot_revision", "name", "mode", "rooms"}
 )
+_CLIMATE_DRAFT_EDIT_FIELDS = _CLIMATE_DRAFT_FIELDS | {"setup_revision"}
 _CLIMATE_DRAFT_ROOM_FIELDS = frozenset(
     {
         "room_id",
@@ -492,6 +495,8 @@ def create_climate_contour_draft(
     registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot,
     payload: object,
+    *,
+    contours: ContourRegistry | None = None,
 ) -> dict[str, object]:
     """Create one deterministic, non-persistent contour draft from fresh choices."""
 
@@ -499,7 +504,29 @@ def create_climate_contour_draft(
         raise ClimateSetupViolation("climate draft registry must be valid")
     if not isinstance(snapshot, ClimateImportSnapshot):
         raise ClimateSetupViolation("climate draft snapshot must be valid")
-    values = _exact_mapping(payload, _CLIMATE_DRAFT_FIELDS, "climate draft")
+    if contours is not None and not isinstance(contours, ContourRegistry):
+        raise ClimateSetupViolation("climate draft contours must be valid")
+    values = _climate_draft_request(payload)
+    setup_revision = (
+        None if contours is None else climate_setup_revision(registry, contours)
+    )
+    if contours is not None and "setup_revision" not in values:
+        raise ClimateSetupViolation(
+            "climate setup revision is required",
+            code="setup_changed",
+        )
+    if "setup_revision" in values:
+        requested_setup_revision = values["setup_revision"]
+        if (
+            type(requested_setup_revision) is not int
+            or not 0 <= requested_setup_revision <= JSON_SAFE_INTEGER_MAXIMUM
+        ):
+            raise ClimateSetupViolation("climate setup revision is invalid")
+        if setup_revision is not None and requested_setup_revision != setup_revision:
+            raise ClimateSetupViolation(
+                "climate setup changed after it was opened",
+                code="setup_changed",
+            )
     requested_revision = values["snapshot_revision"]
     if (
         type(requested_revision) is not int
@@ -597,7 +624,15 @@ def create_climate_contour_draft(
             if candidate_id in selected_candidate_ids:
                 raise ClimateSetupViolation("climate draft candidate is repeated")
             candidate = candidate_by_id.get(candidate_id)
-            if candidate is None or candidate["selectable"] is not True:
+            if candidate is None:
+                raise ClimateSetupViolation("climate draft candidate is unavailable")
+            kept_configured = (
+                candidate["configured"] is True
+                and candidate["status"] == "already_configured"
+                and candidate["configured_room_id"] == room_id
+                and candidate["configured_type"] == selected_type
+            )
+            if candidate["selectable"] is not True and not kept_configured:
                 raise ClimateSetupViolation("climate draft candidate is unavailable")
             if candidate["room_id"] not in {room_id, UNASSIGNED_CANDIDATE_ROOM}:
                 raise ClimateSetupViolation("climate draft candidate room differs")
@@ -635,6 +670,9 @@ def create_climate_contour_draft(
         "mode": mode,
         "rooms": normalized_rooms,
     }
+    revision_values = dict(draft_values)
+    if setup_revision is not None:
+        revision_values["setup_revision"] = setup_revision
     return {
         "contract": {
             "name": CLIMATE_DRAFT_CONTRACT_NAME,
@@ -642,7 +680,7 @@ def create_climate_contour_draft(
         },
         "generated_at": snapshot.generated_at,
         "snapshot_revision": current_revision,
-        "draft_revision": _json_safe_revision(draft_values),
+        "draft_revision": _json_safe_revision(revision_values),
         "status": "created",
         "save_allowed": False,
         "validation_required": True,
@@ -1204,6 +1242,8 @@ def validate_climate_contour_draft(
     registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot,
     payload: object,
+    *,
+    contours: ContourRegistry | None = None,
 ) -> dict[str, object]:
     """Validate one unchanged draft deeply without saving or commanding."""
 
@@ -1257,19 +1297,38 @@ def validate_climate_contour_draft(
             }
         )
 
+    expected_request = {
+        "snapshot_revision": draft["snapshot_revision"],
+        "name": draft["name"],
+        "mode": draft["mode"],
+        "rooms": request_rooms,
+    }
+    if contours is not None:
+        expected_request["setup_revision"] = climate_setup_revision(
+            registry,
+            contours,
+        )
     expected = create_climate_contour_draft(
         registry,
         snapshot,
-        {
-            "snapshot_revision": draft["snapshot_revision"],
-            "name": draft["name"],
-            "mode": draft["mode"],
-            "rooms": request_rooms,
-        },
+        expected_request,
+        contours=contours,
     )
     comparable_draft = dict(draft)
     comparable_draft["generated_at"] = expected["generated_at"]
     if comparable_draft != expected:
+        comparable_without_revision = dict(comparable_draft)
+        expected_without_revision = dict(expected)
+        comparable_without_revision.pop("draft_revision", None)
+        expected_without_revision.pop("draft_revision", None)
+        if (
+            contours is not None
+            and comparable_without_revision == expected_without_revision
+        ):
+            raise ClimateSetupViolation(
+                "climate setup changed after the draft was created",
+                code="setup_changed",
+            )
         raise ClimateSetupViolation("climate draft was changed after creation")
 
     source_ids = _ordered_candidate_source_ids(registry, snapshot)
@@ -1387,10 +1446,17 @@ def build_climate_contour_draft_setup(
     registry: ClimateRegistry,
     snapshot: ClimateImportSnapshot,
     payload: object,
+    *,
+    contours: ContourRegistry | None = None,
 ) -> tuple[ClimateRegistry, ContourRegistry, dict[str, object]]:
     """Build the exact deeply validated pair that may be saved atomically."""
 
-    validation = validate_climate_contour_draft(registry, snapshot, payload)
+    validation = validate_climate_contour_draft(
+        registry,
+        snapshot,
+        payload,
+        contours=contours,
+    )
     if validation["save_allowed"] is not True:
         raise ClimateSetupViolation(
             "climate draft is not ready to save",
@@ -1444,7 +1510,26 @@ def build_climate_contour_draft_setup(
             source_room_assignments[
                 source_by_candidate[device["candidate_id"]]
             ] = room_id
-    climate_registry, contours = build_climate_contour_setup(
+    current_contour = None if contours is None else contours.contour("climate")
+    selected_room_ids = set(room_ids)
+    prior_profiles = (
+        None
+        if current_contour is None
+        else {
+            room.room_id: climate_room_profiles(room)
+            for room in current_contour.rooms
+            if room.room_id in selected_room_ids
+        }
+    )
+    prior_schedule = None
+    if current_contour is not None:
+        contour_payloads = contour_registry_to_payload(contours)["contours"]
+        prior_schedule = next(
+            item["schedule"]
+            for item in contour_payloads
+            if item["id"] == "climate"
+        )
+    climate_registry, updated_contours = build_climate_contour_setup(
         snapshot,
         room_ids=room_ids,
         source_ids=selected_source_ids,
@@ -1453,8 +1538,134 @@ def build_climate_contour_draft_setup(
         name=draft["name"],
         mode=draft["mode"],
         room_parameters=room_parameters,
+        room_profiles=prior_profiles,
+        schedule=prior_schedule,
     )
-    return climate_registry, contours, validation
+    climate_registry, device_id_replacements = _preserve_registry_settings(
+        registry,
+        climate_registry,
+    )
+    updated_contours = _replace_contour_device_ids(
+        updated_contours,
+        device_id_replacements,
+    )
+    validate_contour_bindings(updated_contours, climate_registry)
+    if current_contour is not None:
+        updated = updated_contours.contour("climate")
+        if (
+            updated is not None
+            and updated.mode is ContourMode.AUTOMATIC
+            and updated.schedule.enabled
+        ):
+            for room in current_contour.rooms:
+                if (
+                    room.room_id in selected_room_ids
+                    and room.temporary_override is not None
+                ):
+                    updated_contours = with_climate_temporary_temperature(
+                        updated_contours,
+                        room_id=room.room_id,
+                        target_temperature=(
+                            room.temporary_override.target_temperature
+                        ),
+                    )
+    return climate_registry, updated_contours, validation
+
+
+def _preserve_registry_settings(
+    current: ClimateRegistry,
+    rebuilt: ClimateRegistry,
+) -> tuple[ClimateRegistry, dict[str, str]]:
+    """Keep stable bindings and unrelated room/home settings during draft save."""
+
+    reusable = {
+        device.source_id: device
+        for device in current.devices
+        if any(
+            candidate.source_id == device.source_id
+            and candidate.room_id == device.room_id
+            and candidate.kind is device.kind
+            for candidate in rebuilt.devices
+        )
+    }
+    reserved_ids = {device.device_id for device in reusable.values()}
+    used_ids: set[str] = set()
+    devices = []
+    device_id_replacements: dict[str, str] = {}
+    for device in rebuilt.devices:
+        previous = reusable.get(device.source_id)
+        if previous is not None:
+            selected = previous
+        else:
+            selected = replace(
+                device,
+                device_id=_available_device_id(
+                    device.device_id,
+                    used_ids | reserved_ids,
+                ),
+            )
+        used_ids.add(selected.device_id)
+        devices.append(selected)
+        device_id_replacements[device.device_id] = selected.device_id
+
+    rooms = tuple(
+        ClimateRoom(
+            room_id=room.room_id,
+            name=(current.room(room.room_id) or room).name,
+            window_entity_id=(
+                None
+                if current.room(room.room_id) is None
+                else current.room(room.room_id).window_entity_id
+            ),
+        )
+        for room in rebuilt.rooms
+    )
+    return (
+        ClimateRegistry(
+            version=rebuilt.version,
+            rooms=rooms,
+            devices=tuple(devices),
+            home=current.home,
+        ),
+        device_id_replacements,
+    )
+
+
+def _replace_contour_device_ids(
+    contours: ContourRegistry,
+    replacements: dict[str, str],
+) -> ContourRegistry:
+    return ContourRegistry(
+        version=contours.version,
+        contours=tuple(
+            replace(
+                contour,
+                rooms=tuple(
+                    replace(
+                        room,
+                        device_ids=tuple(
+                            replacements[device_id]
+                            for device_id in room.device_ids
+                        ),
+                    )
+                    for room in contour.rooms
+                ),
+            )
+            for contour in contours.contours
+        ),
+    )
+
+
+def _available_device_id(preferred: str, unavailable: set[str]) -> str:
+    if preferred not in unavailable:
+        return preferred
+    ordinal = 2
+    while True:
+        suffix = f"_{ordinal}"
+        candidate = f"{preferred[: 64 - len(suffix)]}{suffix}"
+        if candidate not in unavailable:
+            return candidate
+        ordinal += 1
 
 
 def climate_draft_save_receipt(
@@ -1530,6 +1741,15 @@ def _exact_mapping(
 ) -> dict[str, object]:
     if not isinstance(value, dict) or set(value) != fields:
         raise ClimateSetupViolation(f"{label} fields are invalid")
+    return value
+
+
+def _climate_draft_request(value: object) -> dict[str, object]:
+    if not isinstance(value, dict) or frozenset(value) not in {
+        _CLIMATE_DRAFT_FIELDS,
+        _CLIMATE_DRAFT_EDIT_FIELDS,
+    }:
+        raise ClimateSetupViolation("climate draft fields are invalid")
     return value
 
 

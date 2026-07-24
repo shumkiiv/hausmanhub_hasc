@@ -1831,9 +1831,11 @@ class NativeProjectionSwitchTest(unittest.IsolatedAsyncioTestCase):
         await instance.async_start()
 
         options = await instance.async_climate_setup_options()
+        setup_revision = (await instance.async_current_contour_setup())["setup_revision"]
         draft = await instance.async_create_contour_draft(
             {
                 "snapshot_revision": options["snapshot_revision"],
+                "setup_revision": setup_revision,
                 "name": "Климат",
                 "mode": "automatic",
                 "rooms": [

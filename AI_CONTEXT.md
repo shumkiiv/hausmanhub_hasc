@@ -1,17 +1,25 @@
 # HausmanHub AI Context
 
-Last updated: 2026-07-23.
+Last updated: 2026-07-24.
 
 ## Project state
 
-- The work plan `.omo/plans/2026-07-23-full-panel-configuration.md` was reviewed
-  for executability on 2026-07-23 and rejected pending two corrections. It
-  points to nonexistent `tests/test_climate_api*.py`; the existing admin API
-  coverage is in `tests/test_local_summary_access.py`. The 1.20.0 release task
-  also needs concrete QA scenarios for the draft editor and import flow, with a
-  named tool, steps, and expected outcomes. No source code or plan content was
-  changed. Next: correct the test reference and add the missing 1.20.0 QA
-  scenarios, then re-run the plan review against the on-disk file.
+- Version 1.20.0 is a fully checked local release candidate, not published.
+  The HausmanHub page now creates and edits the climate contour, explicitly
+  assigns multiple temperature/humidity sensors to each room, and aggregates
+  fresh same-kind readings by median. Draft editing requires both snapshot and
+  setup revisions; the editor pins the opening revision across background
+  refreshes. Rebuilding preserves day/night profiles, schedule, temporary
+  targets, home/window bindings, and stable device ids. The final staged gate
+  passed 667 tests plus all package/version/naming/repository checks. Kimi could
+  not review because of monthly-quota HTTP 403 in sessions
+  `ses_06d2c2c5dffeN0XSTyHEP2COU5` and
+  `ses_06d2bd4bfffemV5aBst01z8SFG`; OpenAI fallback review first found and
+  reproduced two revision races in `ses_06d2b5149ffeS2TLwe5BIXroYF`. One fix
+  iteration closed both, and final read-only review passed in
+  `ses_06d1aaeceffeott73dPiL0oZhk`. No commit, push, release, or live Home
+  Assistant change occurred. Next: commit/push/release only on an explicit user
+  request.
 
 - Product and Home Assistant integration name: **HausmanHub**. **HACS** is only
   the installation/update mechanism and is never the product name. The old
@@ -2461,5 +2469,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-23T20:51:52+03:00.
+- Last sync: 2026-07-24T09:56:42+03:00.
 <!-- llm-wiki-sync:end -->

@@ -333,7 +333,12 @@ class ClimateRuntime:
 
         async with self._lock:
             snapshot = await self._async_native_setup_snapshot_unlocked()
-            return create_climate_contour_draft(self._registry, snapshot, payload)
+            return create_climate_contour_draft(
+                self._registry,
+                snapshot,
+                payload,
+                contours=self._contours,
+            )
 
     async def async_climate_setup_options(self) -> dict[str, object]:
         """Return current safe choices for the local climate setup form."""
@@ -365,6 +370,7 @@ class ClimateRuntime:
                 self._registry,
                 snapshot,
                 payload,
+                contours=self._contours,
             )
 
     async def async_save_contour_draft(
@@ -381,6 +387,7 @@ class ClimateRuntime:
                 self._registry,
                 snapshot,
                 payload,
+                contours=self._contours,
             )
             await self._async_persist_contour_setup_unlocked(registry, contours)
             return climate_draft_save_receipt(payload, validation)

@@ -264,6 +264,8 @@ def _room_sensor_number(
     observed_at: int,
 ) -> tuple[float | None, bool]:
     role = _SENSOR_ROLES[kind]
+    fresh_values: list[float] = []
+    stale_values: list[float] = []
     for device in registry.devices:
         if device.room_id != room_id or device.kind is not kind:
             continue
@@ -276,8 +278,23 @@ def _room_sensor_number(
         value = _number(state.state)
         if value is None:
             continue
-        return value, _is_fresh(state, observed_at)
+        if _is_fresh(state, observed_at):
+            fresh_values.append(value)
+        else:
+            stale_values.append(value)
+    if fresh_values:
+        return _median(fresh_values), True
+    if stale_values:
+        return _median(stale_values), False
     return None, True
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
 
 
 def _is_fresh(state: ClimateHaEntityState, observed_at: int) -> bool:

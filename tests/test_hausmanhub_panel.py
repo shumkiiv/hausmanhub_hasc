@@ -18,7 +18,7 @@ PANEL_JS = (
     / "frontend"
     / "hausman-hub-panel.js"
 )
-MAX_PANEL_JS_BYTES = 48 * 1024
+MAX_PANEL_JS_BYTES = 64 * 1024
 
 
 class PanelJavaScriptContractTest(unittest.TestCase):

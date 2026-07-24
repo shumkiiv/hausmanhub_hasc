@@ -1112,8 +1112,10 @@ class LocalSummaryAccessTest(unittest.TestCase):
             options_response.payload["contract"]["name"],
         )
         revision = options_response.payload["snapshot_revision"]
+        current_setup = asyncio.run(runtime.async_current_contour_setup())
         request = {
             "snapshot_revision": revision,
+            "setup_revision": current_setup["setup_revision"],
             "name": "Климат",
             "mode": "automatic",
             "rooms": [
@@ -1131,6 +1133,22 @@ class LocalSummaryAccessTest(unittest.TestCase):
                 }
             ],
         }
+        missing_setup_revision = dict(request)
+        missing_setup_revision.pop("setup_revision")
+        missing_setup_response = asyncio.run(
+            view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    owner,
+                    path,
+                    missing_setup_revision,
+                )
+            )
+        )
+        self.assertEqual(409, missing_setup_response.status)
+        self.assertEqual([], store.saved)
+        self.assertEqual([], contour_store.saved)
+        self.assertEqual([], bridge.executed)
 
         response = asyncio.run(
             view.post(
@@ -1196,6 +1214,24 @@ class LocalSummaryAccessTest(unittest.TestCase):
             )
         )
         self.assertEqual(409, changed_response.status)
+        self.assertEqual([], store.saved)
+        self.assertEqual([], contour_store.saved)
+        self.assertEqual([], bridge.executed)
+        stale_setup_request = dict(request)
+        stale_setup_request["setup_revision"] = (
+            current_setup["setup_revision"] + 1
+        )
+        stale_setup_response = asyncio.run(
+            view.post(
+                FakeJsonRequest(
+                    "192.168.1.20",
+                    owner,
+                    path,
+                    stale_setup_request,
+                )
+            )
+        )
+        self.assertEqual(409, stale_setup_response.status)
         self.assertEqual([], store.saved)
         self.assertEqual([], contour_store.saved)
         self.assertEqual([], bridge.executed)

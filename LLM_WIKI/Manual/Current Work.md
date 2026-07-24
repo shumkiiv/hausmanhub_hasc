@@ -1,5 +1,27 @@
 # Current Work
 
+## 2026-07-24 - HausmanHub 1.20.0 local release candidate
+
+- The page-owned contour wizard now supports initial creation and safe editing,
+  per-room comfort targets, and explicit multi-selection of temperature and
+  humidity sensors. Fresh same-kind readings are aggregated by median; stale
+  values are used only when the whole group is stale.
+- Every runtime draft request now requires `snapshot_revision` and
+  `setup_revision`. The browser pins the revision that populated the form, so
+  a 30-second background refresh cannot attach new authority to old fields.
+- Editing preserves both profiles, the schedule and last-applied marker,
+  temporary targets, home signals, window bindings, unchanged endpoint/source
+  bindings, and stable public device ids. Six executed-JavaScript scenarios and
+  backend/API regressions cover the complete draft -> validate -> save path.
+- The final staged release gate passed 667 tests and every package, version,
+  naming, Android compatibility, and repository-safety check.
+- Kimi review attempts failed with monthly-quota HTTP 403. OpenAI fallback
+  review `ses_06d2b5149ffeS2TLwe5BIXroYF` returned FAIL for two reproducible
+  revision races; one bounded fix iteration resolved both. Final read-only
+  review `ses_06d1aaeceffeott73dPiL0oZhk` returned PASS.
+- Nothing was committed, pushed, published, or changed in live Home Assistant.
+  Next: perform commit/push/release only after an explicit user request.
+
 ## 2026-07-23 - HausmanHub 1.19.0 published
 
 - The sidebar page is now the full climate configuration UI: mode switch,

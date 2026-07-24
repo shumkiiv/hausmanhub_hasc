@@ -70,6 +70,9 @@ ADMIN_ROOM_SIGNALS_PATH = "/api/hausman_hub/v1/admin/climate-room-signals"
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 MAX_ACTION_BODY_BYTES = 16 * 1024
 MAX_CLIMATE_SETUP_BODY_BYTES = 256 * 1024
+_DRAFT_CONFLICT_CODES = frozenset(
+    {"snapshot_changed", "setup_changed", "data_stale"}
+)
 TABLET_GROUP_ID = "system-users"
 HOME_IPV4_NETWORKS: Final[tuple[IPv4Network, ...]] = (
     IPv4Network("10.0.0.0/8"),
@@ -371,7 +374,7 @@ class ClimateAdminDraftView(_ClimateView):
         except ClimateSetupViolation as error:
             status = (
                 HTTPStatus.CONFLICT
-                if error.code in {"snapshot_changed", "data_stale"}
+                if error.code in _DRAFT_CONFLICT_CODES
                 else HTTPStatus.BAD_REQUEST
             )
             return self.json_message(
@@ -438,7 +441,7 @@ class ClimateAdminDraftValidationView(_ClimateView):
         except ClimateSetupViolation as error:
             status = (
                 HTTPStatus.CONFLICT
-                if error.code in {"snapshot_changed", "data_stale"}
+                if error.code in _DRAFT_CONFLICT_CODES
                 else HTTPStatus.BAD_REQUEST
             )
             return self.json_message(
@@ -482,7 +485,7 @@ class ClimateAdminDraftSaveView(_ClimateView):
         except ClimateSetupViolation as error:
             status = (
                 HTTPStatus.CONFLICT
-                if error.code in {"snapshot_changed", "data_stale"}
+                if error.code in _DRAFT_CONFLICT_CODES
                 else HTTPStatus.BAD_REQUEST
             )
             return self.json_message(
