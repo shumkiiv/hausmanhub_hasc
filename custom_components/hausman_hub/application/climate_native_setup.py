@@ -17,12 +17,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain.climate import ClimateDevice, ClimateDeviceKind, ClimateRegistry
+from ..domain.climate import (
+    ClimateDevice,
+    ClimateDeviceKind,
+    ClimateModelViolation,
+    ClimateRegistry,
+    ClimateRoom,
+)
 from ..domain.climate_observation import (
     ClimateDataStatus,
     ClimateObservationSnapshot,
 )
 from .climate_discovery import (
+    MAX_CLIMATE_DEVICES,
+    MAX_CLIMATE_ROOMS,
     SUPPORTED_BACKEND_COMMAND_TYPES,
     ClimateImportSnapshot,
     ImportedClimateDevice,
@@ -44,6 +52,22 @@ class ClimateNativeSetupViolation(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ClimateHaCatalogRoom:
+    """One stable logical room projected from a Home Assistant area."""
+
+    room_id: str
+    name: str
+
+    def __post_init__(self) -> None:
+        try:
+            ClimateRoom(room_id=self.room_id, name=self.name)
+        except ClimateModelViolation as error:
+            raise ClimateNativeSetupViolation(
+                "catalog room must have a stable id and bounded name"
+            ) from error
+
+
+@dataclass(frozen=True, slots=True)
 class ClimateHaCatalogEntry:
     """One bounded Home Assistant entity candidate for climate discovery."""
 
@@ -55,6 +79,7 @@ class ClimateHaCatalogEntry:
     friendly_name: str | None
     available: bool
     last_updated_ms: int
+    room_id: str = UNASSIGNED_CANDIDATE_ROOM
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,15 +87,36 @@ class ClimateHaEntityCatalog:
     """An immutable bounded enumeration of climate-relevant entities."""
 
     entries: tuple[ClimateHaCatalogEntry, ...]
+    rooms: tuple[ClimateHaCatalogRoom, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.entries) is not tuple or any(
             not isinstance(entry, ClimateHaCatalogEntry) for entry in self.entries
         ):
             raise ClimateNativeSetupViolation("catalog entries must be immutable")
+        if type(self.rooms) is not tuple or any(
+            not isinstance(room, ClimateHaCatalogRoom) for room in self.rooms
+        ):
+            raise ClimateNativeSetupViolation("catalog rooms must be immutable")
+        if len(self.entries) > MAX_CLIMATE_DEVICES:
+            raise ClimateNativeSetupViolation("catalog has too many entities")
+        if len(self.rooms) > MAX_CLIMATE_ROOMS:
+            raise ClimateNativeSetupViolation("catalog has too many rooms")
         entity_ids = [entry.entity_id for entry in self.entries]
         if len(set(entity_ids)) != len(entity_ids):
             raise ClimateNativeSetupViolation("catalog entity ids must be unique")
+        room_ids = [room.room_id for room in self.rooms]
+        if len(set(room_ids)) != len(room_ids):
+            raise ClimateNativeSetupViolation("catalog room ids must be unique")
+        known_rooms = set(room_ids)
+        if any(
+            not isinstance(entry.room_id, str)
+            or (entry.room_id and entry.room_id not in known_rooms)
+            for entry in self.entries
+        ):
+            raise ClimateNativeSetupViolation(
+                "catalog entity room must reference a catalog room"
+            )
 
     def entry(self, entity_id: str) -> ClimateHaCatalogEntry | None:
         """Return one catalog entry by exact entity id."""
@@ -79,6 +125,11 @@ class ClimateHaEntityCatalog:
             (entry for entry in self.entries if entry.entity_id == entity_id),
             None,
         )
+
+    def room(self, room_id: str) -> ClimateHaCatalogRoom | None:
+        """Return one catalog room by its stable public id."""
+
+        return next((room for room in self.rooms if room.room_id == room_id), None)
 
 
 def build_native_climate_setup_snapshot(
@@ -114,29 +165,44 @@ def build_native_climate_setup_snapshot(
         generated_at=observation.observed_at,
         runtime_fresh=observation.data_status is ClimateDataStatus.FRESH,
         rooms=tuple(
-            _room(registry, observation, room_id) for room_id in _room_ids(registry)
+            _room(registry, observation, catalog, room_id)
+            for room_id in _room_ids(registry, catalog)
         ),
         devices=tuple(bound) + tuple(unbound),
     )
 
 
-def _room_ids(registry: ClimateRegistry) -> tuple[str, ...]:
-    return tuple(room.room_id for room in registry.rooms)
+def _room_ids(
+    registry: ClimateRegistry,
+    catalog: ClimateHaEntityCatalog,
+) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            [room.room_id for room in registry.rooms]
+            + [room.room_id for room in catalog.rooms]
+        )
+    )
 
 
 def _room(
     registry: ClimateRegistry,
     observation: ClimateObservationSnapshot,
+    catalog: ClimateHaEntityCatalog,
     room_id: str,
 ) -> ImportedClimateRoom:
     configured = registry.room(room_id)
     observed = observation.room(room_id)
+    discovered = catalog.room(room_id)
     return ImportedClimateRoom(
         room_id=room_id,
         name=(
             configured.name
             if configured is not None
-            else (observed.name if observed is not None else room_id)
+            else (
+                discovered.name
+                if discovered is not None
+                else (observed.name if observed is not None else room_id)
+            )
         ),
         temperature=None if observed is None else observed.temperature,
         humidity=None if observed is None else observed.humidity,
@@ -191,7 +257,7 @@ def _unbound_device(entry: ClimateHaCatalogEntry) -> ImportedClimateDevice:
     return ImportedClimateDevice(
         source_id=entry.entity_id,
         name=entry.friendly_name or entry.entity_id,
-        room_id=UNASSIGNED_CANDIDATE_ROOM,
+        room_id=entry.room_id,
         domain=entry.domain,
         category=entry.device_class or entry.domain,
         state=entry.state,

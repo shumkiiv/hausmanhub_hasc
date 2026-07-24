@@ -257,7 +257,9 @@ class HausmanHubPanel extends HTMLElement {
         background: var(--primary-color, #03a9f4); color: #fff; }
       button.secondary { background: var(--secondary-background-color, #e5e5e5);
         color: var(--primary-text-color, #212121); }
-      button:disabled { opacity: 0.5; cursor: default; }
+      button:disabled { opacity: 1; cursor: default;
+        background: var(--disabled-color, #bdbdbd);
+        color: var(--secondary-text-color, #727272); }
       input[type="number"] { font: inherit; width: 72px; padding: 6px;
         border-radius: 8px; border: 1px solid var(--divider-color, #ccc);
         margin-right: 8px; }
@@ -268,6 +270,13 @@ class HausmanHubPanel extends HTMLElement {
       select { font: inherit; padding: 6px; border-radius: 8px;
         border: 1px solid var(--divider-color, #ccc); max-width: 260px; }
       label { font-size: 14px; display: block; margin: 8px 0 2px; }
+      label.form-field { display: grid; grid-template-columns: minmax(190px, 280px) minmax(0, 1fr);
+        align-items: center; gap: 12px; margin: 10px 0; }
+      label.form-field > input, label.form-field > select { margin: 0; }
+      label.checkbox-field, label.device-option { display: flex; align-items: flex-start;
+        gap: 8px; margin: 8px 0; }
+      label.checkbox-field > input, label.device-option > input {
+        order: -1; flex: 0 0 auto; margin: 2px 0 0; }
       .reasons { font-size: 13px; margin: 6px 0 0; }
       .chip { display: inline-block; border-radius: 10px; padding: 2px 10px;
         font-size: 12px; background: var(--secondary-background-color, #e5e5e5);
@@ -277,6 +286,13 @@ class HausmanHubPanel extends HTMLElement {
       .device-option { margin: 4px 0; }
       .wizard-issues { color: var(--error-color, #db4437); font-size: 13px; margin-top: 6px; }
       .wizard-success { color: var(--success-color, #43a047); font-size: 13px; margin-top: 8px; }
+      .action-help { margin-top: 8px; }
+      @media (max-width: 640px) {
+        :host { padding: 12px; }
+        label.form-field { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+        label.form-field > input[type="text"], label.form-field > select {
+          box-sizing: border-box; width: 100%; max-width: none; }
+      }
     `;
     root.appendChild(style);
     const container = el("div");
@@ -509,7 +525,7 @@ class HausmanHubPanel extends HTMLElement {
     name.type = "text";
     name.value = setup.name || "Климат";
     name.addEventListener("input", () => this._wizardChanged());
-    const nameRow = el("label", null, "Название контура");
+    const nameRow = el("label", "form-field", "Название контура");
     nameRow.appendChild(name);
     card.appendChild(nameRow);
 
@@ -518,7 +534,7 @@ class HausmanHubPanel extends HTMLElement {
       setup.mode || "observe",
       () => this._wizardChanged()
     );
-    const modeRow = el("label", null, "Режим");
+    const modeRow = el("label", "form-field", "Режим");
     modeRow.appendChild(mode);
     card.appendChild(modeRow);
     fields.name = name;
@@ -544,7 +560,9 @@ class HausmanHubPanel extends HTMLElement {
       include.value = room.id;
       include.checked = Boolean(currentRoom) || suggested;
       include.disabled = !canUseRoom;
-      const includeRow = el("label", null, `Включить комнату «${room.name || room.id}»`);
+      const includeRow = el(
+        "label", "checkbox-field", `Включить комнату «${room.name || room.id}»`
+      );
       includeRow.appendChild(include);
       block.appendChild(includeRow);
 
@@ -567,15 +585,15 @@ class HausmanHubPanel extends HTMLElement {
       );
       const temperatureLabel = editing
         ? "Активный профиль: целевая температура, °C" : "Целевая температура, °C";
-      const temperatureRow = el("label", null, temperatureLabel);
+      const temperatureRow = el("label", "form-field", temperatureLabel);
       temperatureRow.appendChild(temperature);
       block.appendChild(temperatureRow);
       const humidityLabel = editing
         ? "Активный профиль: целевая влажность, %" : "Целевая влажность, %";
-      const humidityRow = el("label", null, humidityLabel);
+      const humidityRow = el("label", "form-field", humidityLabel);
       humidityRow.appendChild(humidity);
       block.appendChild(humidityRow);
-      const strategyRow = el("label", null, "Стратегия");
+      const strategyRow = el("label", "form-field", "Стратегия");
       strategyRow.appendChild(strategy);
       block.appendChild(strategyRow);
 
@@ -656,8 +674,14 @@ class HausmanHubPanel extends HTMLElement {
     const check = el("button", null, "Проверить контур");
     const save = el("button", null, "Сохранить контур");
     const cancel = el("button", "secondary", "Отмена");
+    const saveHint = el(
+      "div",
+      "muted action-help",
+      "Сохранение станет доступно после успешной проверки контура."
+    );
     check.disabled = this._busy || (!editing && options.draft_creation_allowed !== true);
     save.disabled = true;
+    save.title = "Сначала проверьте контур.";
     cancel.disabled = this._busy;
     check.addEventListener("click", () => this._checkWizard());
     save.addEventListener("click", () => this._saveWizard());
@@ -665,15 +689,52 @@ class HausmanHubPanel extends HTMLElement {
     card.appendChild(check);
     card.appendChild(save);
     card.appendChild(cancel);
+    card.appendChild(saveHint);
     if (!editing && options.draft_creation_allowed !== true) {
-      card.appendChild(
-        el("div", "muted", "Создание недоступно: обновите данные комнат и устройств.")
+      const missingRooms = !(options.rooms || []).length;
+      card.appendChild(el(
+        "div",
+        "muted action-help",
+        missingRooms
+          ? "Создание недоступно: в Home Assistant не найдены зоны (комнаты)."
+          : "Создание недоступно: нет доступных климатических устройств."
+      ));
+      const refresh = el(
+        "button",
+        "secondary",
+        "Обновить комнаты и устройства"
       );
+      refresh.disabled = this._busy || this._wizard.loading;
+      refresh.addEventListener("click", () => this._refreshWizardOptions());
+      card.appendChild(refresh);
     }
     this._wizardFields = fields;
     this._wizardIssues = issues;
-    this._wizardButtons = { check, save, cancel, editing, creationAllowed: options.draft_creation_allowed === true };
+    this._wizardButtons = {
+      check,
+      save,
+      cancel,
+      saveHint,
+      editing,
+      creationAllowed: options.draft_creation_allowed === true,
+    };
     container.appendChild(card);
+  }
+
+  async _refreshWizardOptions() {
+    if (this._busy || this._wizard.loading) return;
+    if (
+      this._dirty.wizard
+      && !window.confirm("Обновить комнаты и устройства? Несохранённые изменения формы будут сброшены.")
+    ) return;
+    this._dirty.wizard = false;
+    this._wizard.draft = null;
+    this._wizard.validation = null;
+    this._wizard.fingerprint = null;
+    this._wizardFields = null;
+    this._wizardIssues = null;
+    this._wizardButtons = null;
+    await this._loadWizardOptions(true);
   }
 
   _wizardChanged() {
@@ -682,7 +743,12 @@ class HausmanHubPanel extends HTMLElement {
     this._wizard.validation = null;
     this._wizard.fingerprint = null;
     this._clearWizardIssues();
-    if (this._wizardButtons) this._wizardButtons.save.disabled = true;
+    if (this._wizardButtons) {
+      this._wizardButtons.save.disabled = true;
+      this._wizardButtons.save.title = "Сначала проверьте контур.";
+      this._wizardButtons.saveHint.textContent =
+        "Сохранение станет доступно после успешной проверки контура.";
+    }
   }
 
   _clearWizardIssues() {
@@ -786,6 +852,10 @@ class HausmanHubPanel extends HTMLElement {
       );
     }
     this._wizardButtons.save.disabled = this._busy || !ready;
+    this._wizardButtons.save.title = ready ? "" : "Сначала исправьте замечания проверки.";
+    this._wizardButtons.saveHint.textContent = ready
+      ? "Контур проверен: сохранение доступно."
+      : "Сохранение станет доступно после успешной проверки контура.";
   }
 
   _setWizardBusy(busy) {
@@ -809,6 +879,9 @@ class HausmanHubPanel extends HTMLElement {
       && this._wizard.validation.status === "ready"
       && this._wizard.validation.save_allowed === true;
     this._wizardButtons.save.disabled = busy || !ready;
+    this._wizardButtons.save.title = ready
+      ? (busy ? "Дождитесь завершения операции." : "")
+      : "Сначала проверьте контур.";
     this._wizardButtons.cancel.disabled = busy;
   }
 
@@ -1054,13 +1127,13 @@ class HausmanHubPanel extends HTMLElement {
         temperature.disabled = !editable;
         humidity.disabled = !editable;
         strategy.disabled = !editable;
-        const tempRow = el("label", null, "Температура, °C");
+        const tempRow = el("label", "form-field", "Температура, °C");
         tempRow.appendChild(temperature);
         card.appendChild(tempRow);
-        const humidityRow = el("label", null, "Влажность, %");
+        const humidityRow = el("label", "form-field", "Влажность, %");
         humidityRow.appendChild(humidity);
         card.appendChild(humidityRow);
-        const strategyRow = el("label", null, "Стратегия");
+        const strategyRow = el("label", "form-field", "Стратегия");
         strategyRow.appendChild(strategy);
         card.appendChild(strategyRow);
         fields[room.id][profile] = { temperature, humidity, strategy };
@@ -1136,7 +1209,7 @@ class HausmanHubPanel extends HTMLElement {
     enabledBox.checked = schedule.enabled === true;
     enabledBox.disabled = this._busy || !managed;
     enabledBox.addEventListener("change", () => { this._dirty.schedule = true; });
-    const enabledLabel = el("label", null,
+    const enabledLabel = el("label", "checkbox-field",
       "Автоматическое переключение профилей (в управляемом режиме устройствам отправляются команды)"
     );
     enabledLabel.appendChild(enabledBox);
@@ -1150,14 +1223,14 @@ class HausmanHubPanel extends HTMLElement {
     dayStart.type = "time";
     dayStart.value = schedule.day_start || "07:00";
     dayStart.addEventListener("input", () => { this._dirty.schedule = true; });
-    const dayRow = el("label", null, "Начало дня");
+    const dayRow = el("label", "form-field", "Начало дня");
     dayRow.appendChild(dayStart);
     card.appendChild(dayRow);
     const nightStart = el("input");
     nightStart.type = "time";
     nightStart.value = schedule.night_start || "23:00";
     nightStart.addEventListener("input", () => { this._dirty.schedule = true; });
-    const nightRow = el("label", null, "Начало ночи");
+    const nightRow = el("label", "form-field", "Начало ночи");
     nightRow.appendChild(nightStart);
     card.appendChild(nightRow);
     const saveButton = el("button", null, "Сохранить расписание");
@@ -1229,7 +1302,7 @@ class HausmanHubPanel extends HTMLElement {
       const select = selectField(options, values[binding.key], () => {
         this._dirty.home = true;
       });
-      const row = el("label", null, binding.label);
+      const row = el("label", "form-field", binding.label);
       row.appendChild(select);
       card.appendChild(row);
       selects[binding.key] = select;
@@ -1238,14 +1311,14 @@ class HausmanHubPanel extends HTMLElement {
       values.heating_lockout_high, -40, 60, 0.5,
       () => { this._dirty.home = true; }
     );
-    const highRow = el("label", null, "Блокировка отопления выше, °C");
+    const highRow = el("label", "form-field", "Блокировка отопления выше, °C");
     highRow.appendChild(high);
     card.appendChild(highRow);
     const low = numberField(
       values.heating_lockout_low, -40, 60, 0.5,
       () => { this._dirty.home = true; }
     );
-    const lowRow = el("label", null, "Разблокировка отопления ниже, °C");
+    const lowRow = el("label", "form-field", "Разблокировка отопления ниже, °C");
     lowRow.appendChild(low);
     card.appendChild(lowRow);
     const saveButton = el("button", null, "Сохранить сигналы дома");
@@ -1306,7 +1379,7 @@ class HausmanHubPanel extends HTMLElement {
       const select = selectField(roomOptions, room.window_entity_id, () => {
         this._dirty.windows = true;
       });
-      const row = el("label", null, room.name || room.id);
+      const row = el("label", "form-field", room.name || room.id);
       row.appendChild(select);
       card.appendChild(row);
       selects[room.id] = { select, original: room.window_entity_id || "" };

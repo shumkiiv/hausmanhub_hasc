@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType, SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from custom_components.hausman_hub.application.climate_native_setup import (
     ClimateHaCatalogEntry,
+    ClimateHaCatalogRoom,
     ClimateHaEntityCatalog,
     ClimateNativeSetupViolation,
     build_native_climate_setup_snapshot,
 )
-from custom_components.hausman_hub.domain.climate import ClimateDeviceKind
+from custom_components.hausman_hub.domain.climate import (
+    ClimateDeviceKind,
+    ClimateRegistry,
+)
 from custom_components.hausman_hub.domain.climate_observation import (
     ClimateDataStatus,
 )
@@ -19,8 +26,14 @@ from tests.test_climate_native_projections import _native_observation, _setup
 GENERATED_AT = 1784280000000
 
 
-def _catalog(entries: list[ClimateHaCatalogEntry]) -> ClimateHaEntityCatalog:
-    return ClimateHaEntityCatalog(entries=tuple(entries))
+def _catalog(
+    entries: list[ClimateHaCatalogEntry],
+    rooms: list[ClimateHaCatalogRoom] | None = None,
+) -> ClimateHaEntityCatalog:
+    return ClimateHaEntityCatalog(
+        entries=tuple(entries),
+        rooms=tuple(rooms or ()),
+    )
 
 
 def _entry(
@@ -31,6 +44,7 @@ def _entry(
     supported_features: int = 0,
     friendly_name: str | None = None,
     available: bool = True,
+    room_id: str = "",
 ) -> ClimateHaCatalogEntry:
     domain = entity_id.split(".", 1)[0]
     return ClimateHaCatalogEntry(
@@ -42,6 +56,7 @@ def _entry(
         friendly_name=friendly_name,
         available=available,
         last_updated_ms=GENERATED_AT,
+        room_id=room_id,
     )
 
 
@@ -175,6 +190,55 @@ class NativeSetupSnapshotTest(unittest.TestCase):
         self.assertEqual((), stray.suggested_kinds)
         self.assertEqual((), stray.command_types)
 
+    def test_ha_areas_bootstrap_an_empty_registry_and_enable_page_drafts(self) -> None:
+        from custom_components.hausman_hub.application.climate_setup import (
+            climate_setup_options,
+        )
+
+        registry, contours, _ = _setup()
+        _, observation = _native_observation(registry, contours)
+        catalog = _catalog(
+            [
+                _entry(
+                    "climate.living_ac",
+                    supported_features=129,
+                    friendly_name="Кондиционер",
+                    room_id="living",
+                ),
+                _entry(
+                    "sensor.kids_temperature",
+                    state="21.5",
+                    device_class="temperature",
+                    friendly_name="Температура детской",
+                    room_id="kids",
+                ),
+            ],
+            [
+                ClimateHaCatalogRoom("living", "Гостиная"),
+                ClimateHaCatalogRoom("kids", "Детская"),
+            ],
+        )
+
+        snapshot = build_native_climate_setup_snapshot(
+            ClimateRegistry(),
+            observation,
+            catalog,
+        )
+        options = climate_setup_options(ClimateRegistry(), snapshot)
+
+        self.assertEqual(
+            [("living", "Гостиная"), ("kids", "Детская")],
+            [(room.room_id, room.name) for room in snapshot.rooms],
+        )
+        self.assertEqual("living", snapshot.device("climate.living_ac").room_id)
+        self.assertEqual(
+            "kids",
+            snapshot.device("sensor.kids_temperature").room_id,
+        )
+        self.assertTrue(options["draft_creation_allowed"])
+        self.assertEqual(2, len(options["rooms"]))
+        self.assertEqual(2, sum(device["can_add"] is True for device in options["devices"]))
+
     def test_missing_and_unavailable_entities_stay_fail_closed(self) -> None:
         registry, contours, _ = _setup()
         bound_registry, observation = _native_observation(registry, contours)
@@ -238,6 +302,8 @@ class NativeSetupSnapshotTest(unittest.TestCase):
                     _entry("climate.guest_ac", state="heat"),
                 ]
             )
+        with self.assertRaises(ClimateNativeSetupViolation):
+            _catalog([_entry("climate.guest_ac", room_id="missing")])
         with self.assertRaises(ClimateNativeSetupViolation):
             build_native_climate_setup_snapshot(None, observation, _bound_catalog())
         with self.assertRaises(ClimateNativeSetupViolation):
@@ -335,6 +401,82 @@ class HomeAssistantEntityCatalogTest(unittest.TestCase):
             unavailable
         ).entity_catalog()
         self.assertFalse(catalog.entries[0].available)
+
+    def test_catalog_reads_ha_areas_and_inherits_device_assignment(self) -> None:
+        from custom_components.hausman_hub.climate_ha_state_view import (
+            HomeAssistantClimateStateView,
+        )
+
+        hass = _FakeHass(
+            [
+                _FakeState("climate.living_ac", "cool", {}),
+                _FakeState(
+                    "sensor.kids_temperature",
+                    "21.5",
+                    {"device_class": "temperature"},
+                ),
+                _FakeState("humidifier.mobile", "off", {}),
+            ]
+        )
+        hass.area_registry = SimpleNamespace(
+            async_list_areas=lambda: [
+                SimpleNamespace(id="living", name="Гостиная"),
+                SimpleNamespace(id="kids", name="Детская"),
+            ]
+        )
+        entity_entries = {
+            "climate.living_ac": SimpleNamespace(
+                area_id="living",
+                device_id="device_living",
+            ),
+            "sensor.kids_temperature": SimpleNamespace(
+                area_id=None,
+                device_id="device_kids",
+            ),
+        }
+        hass.entity_registry = SimpleNamespace(
+            async_get=lambda entity_id: entity_entries.get(entity_id)
+        )
+        hass.device_registry = SimpleNamespace(
+            async_get=lambda device_id: {
+                "device_living": SimpleNamespace(area_id="kids"),
+                "device_kids": SimpleNamespace(area_id="kids"),
+            }.get(device_id)
+        )
+
+        homeassistant = ModuleType("homeassistant")
+        helpers = ModuleType("homeassistant.helpers")
+        area_module = ModuleType("homeassistant.helpers.area_registry")
+        device_module = ModuleType("homeassistant.helpers.device_registry")
+        entity_module = ModuleType("homeassistant.helpers.entity_registry")
+        area_module.async_get = lambda value: value.area_registry  # type: ignore[attr-defined]
+        device_module.async_get = lambda value: value.device_registry  # type: ignore[attr-defined]
+        entity_module.async_get = lambda value: value.entity_registry  # type: ignore[attr-defined]
+        homeassistant.helpers = helpers  # type: ignore[attr-defined]
+        helpers.area_registry = area_module  # type: ignore[attr-defined]
+        helpers.device_registry = device_module  # type: ignore[attr-defined]
+        helpers.entity_registry = entity_module  # type: ignore[attr-defined]
+        fake_modules = {
+            "homeassistant": homeassistant,
+            "homeassistant.helpers": helpers,
+            "homeassistant.helpers.area_registry": area_module,
+            "homeassistant.helpers.device_registry": device_module,
+            "homeassistant.helpers.entity_registry": entity_module,
+        }
+
+        with patch.dict(sys.modules, fake_modules):
+            catalog = HomeAssistantClimateStateView(  # type: ignore[arg-type]
+                hass
+            ).entity_catalog()
+
+        self.assertEqual(
+            [("kids", "Детская"), ("living", "Гостиная")],
+            [(room.room_id, room.name) for room in catalog.rooms],
+        )
+        by_id = {entry.entity_id: entry for entry in catalog.entries}
+        self.assertEqual("living", by_id["climate.living_ac"].room_id)
+        self.assertEqual("kids", by_id["sensor.kids_temperature"].room_id)
+        self.assertEqual("", by_id["humidifier.mobile"].room_id)
 
 
 class NativeSetupWizardChainTest(unittest.TestCase):

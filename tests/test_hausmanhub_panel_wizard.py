@@ -350,6 +350,19 @@ class PanelContourWizardTest(unittest.TestCase):
         if (!temperatureSensors.every((choice) => choice.checkbox.checked)) {
           throw new Error("suggested temperature sensors were not preselected");
         }
+        const formFields = findAll(panel.shadowRoot, (node) =>
+          node.tagName === "LABEL" && String(node.className).includes("form-field"));
+        if (formFields.length < 8) throw new Error("form-field layout classes missing");
+        const checkboxes = findAll(panel.shadowRoot, (node) =>
+          node.tagName === "LABEL" && (
+            String(node.className).includes("checkbox-field")
+            || String(node.className).includes("device-option")
+          ));
+        if (!checkboxes.length) throw new Error("checkbox layout classes missing");
+        const style = findAll(panel.shadowRoot, (node) => node.tagName === "STYLE")[0];
+        if (!style || !String(style.textContent).includes("grid-template-columns")) {
+          throw new Error("responsive form grid CSS missing");
+        }
         panel._wizardFields.name.value = "Несохранённый контур";
         panel._wizardFields.name.fire("input");
         getTable["hausman_hub/v1/admin/climate-drafts/current"] = {
@@ -370,6 +383,50 @@ class PanelContourWizardTest(unittest.TestCase):
         const rendered = textOf(panel.shadowRoot);
         if (rendered.includes("entity_id") || rendered.includes("source_id")) {
           throw new Error("private binding name rendered");
+        }
+            """,
+        )
+        completed = run_panel_script(script)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_blocked_creation_explains_missing_rooms_and_refreshes_options(self) -> None:
+        blocked = copy.deepcopy(DRAFT_OPTIONS)
+        blocked["draft_creation_allowed"] = False
+        blocked["rooms"] = []
+        for candidate in blocked["devices"]:
+            candidate["can_add"] = False
+            candidate["suggested_room_id"] = None
+            candidate["suggested_room_name"] = None
+            candidate["reason"] = "room_unavailable"
+        script = panel_script(
+            get_payloads(options=blocked),
+            {},
+            """
+        let text = textOf(panel.shadowRoot);
+        if (!text.includes("не найдены зоны (комнаты)")) {
+          throw new Error("missing-room explanation absent");
+        }
+        let buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
+        const check = buttons.find((node) => node.textContent === "Проверить контур");
+        const save = buttons.find((node) => node.textContent === "Сохранить контур");
+        const refresh = buttons.find((node) => node.textContent === "Обновить комнаты и устройства");
+        if (!check || check.disabled !== true) throw new Error("blocked check must be disabled");
+        if (!save || save.disabled !== true || !save.title) {
+          throw new Error("save prerequisite must be explicit");
+        }
+        if (!refresh || refresh.disabled) throw new Error("working refresh action missing");
+        getTable["hausman_hub/v1/admin/climate-drafts"] = """
+            + json.dumps(DRAFT_OPTIONS, ensure_ascii=False)
+            + """;
+        refresh.fire("click");
+        await tick();
+        if (!panel._wizardFields.rooms.living || !panel._wizardFields.rooms.kids) {
+          throw new Error("refreshed rooms were not rendered");
+        }
+        buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
+        const refreshedCheck = buttons.find((node) => node.textContent === "Проверить контур");
+        if (!refreshedCheck || refreshedCheck.disabled) {
+          throw new Error("check stayed disabled after fresh options");
         }
             """,
         )
