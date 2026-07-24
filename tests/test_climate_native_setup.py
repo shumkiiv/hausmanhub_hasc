@@ -402,6 +402,37 @@ class HomeAssistantEntityCatalogTest(unittest.TestCase):
         ).entity_catalog()
         self.assertFalse(catalog.entries[0].available)
 
+    def test_signal_catalog_preserves_binary_sensor_device_class(self) -> None:
+        from custom_components.hausman_hub.climate_ha_state_view import (
+            HomeAssistantClimateStateView,
+        )
+
+        hass = _FakeHass(
+            [
+                _FakeState(
+                    "binary_sensor.living_motion",
+                    "off",
+                    {
+                        "device_class": "motion",
+                        "friendly_name": "Движение гостиной",
+                    },
+                ),
+                _FakeState(
+                    "binary_sensor.living_window",
+                    "off",
+                    {"device_class": "window"},
+                ),
+            ]
+        )
+
+        catalog = HomeAssistantClimateStateView(  # type: ignore[arg-type]
+            hass
+        ).signal_entity_catalog(frozenset({"binary_sensor"}))
+        by_id = {entry.entity_id: entry for entry in catalog.entries}
+
+        self.assertEqual("motion", by_id["binary_sensor.living_motion"].device_class)
+        self.assertEqual("window", by_id["binary_sensor.living_window"].device_class)
+
     def test_catalog_reads_ha_areas_and_inherits_device_assignment(self) -> None:
         from custom_components.hausman_hub.climate_ha_state_view import (
             HomeAssistantClimateStateView,

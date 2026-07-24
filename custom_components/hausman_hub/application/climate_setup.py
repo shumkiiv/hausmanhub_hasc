@@ -1617,6 +1617,11 @@ def _preserve_registry_settings(
                 if current.room(room.room_id) is None
                 else current.room(room.room_id).window_entity_id
             ),
+            presence_entity_ids=(
+                ()
+                if current.room(room.room_id) is None
+                else current.room(room.room_id).presence_entity_ids
+            ),
         )
         for room in rebuilt.rooms
     )

@@ -513,6 +513,10 @@ class ClimateSetupDraftTest(unittest.TestCase):
         for room_payload in registry_payload["rooms"]:  # type: ignore[union-attr]
             if room_payload["id"] == "living":
                 room_payload["window_entity_id"] = "binary_sensor.living_window"
+                room_payload["presence_entity_ids"] = [
+                    "binary_sensor.living_motion",
+                    "binary_sensor.living_occupancy",
+                ]
         registry = registry_from_payload(registry_payload)
         current = current_climate_contour_setup(
             registry,
@@ -598,6 +602,13 @@ class ClimateSetupDraftTest(unittest.TestCase):
         self.assertEqual(
             "binary_sensor.living_window",
             updated_registry.room("living").window_entity_id,  # type: ignore[union-attr]
+        )
+        self.assertEqual(
+            (
+                "binary_sensor.living_motion",
+                "binary_sensor.living_occupancy",
+            ),
+            updated_registry.room("living").presence_entity_ids,  # type: ignore[union-attr]
         )
 
         stale_request = copy.deepcopy(request)

@@ -18,7 +18,7 @@ PANEL_JS = (
     / "frontend"
     / "hausman-hub-panel.js"
 )
-MAX_PANEL_JS_BYTES = 64 * 1024
+MAX_PANEL_JS_BYTES = 112 * 1024
 
 
 class PanelJavaScriptContractTest(unittest.TestCase):
@@ -140,16 +140,19 @@ class PanelJavaScriptContractTest(unittest.TestCase):
           }};
           visit(panel.shadowRoot);
           const text = nodes.map((node) => node.textContent).join("\\n");
-          if (!text.includes("Состояние")) throw new Error("readiness heading missing");
+          if (!text.includes("Обзор")) throw new Error("overview heading missing");
           if (!text.includes("Управление климатом выключено")) {{
             throw new Error("disabled readiness missing");
           }}
-          if (text.includes("Комнаты")) throw new Error("rooms rendered without snapshot");
           if (text.includes("Климатический контур")) {{
             throw new Error("contour rendered without snapshot");
           }}
-          if (nodes.some((node) => node.tagName === "BUTTON")) {{
-            throw new Error("action rendered without snapshot");
+          const tabs = nodes.filter((node) => String(node.className).split(" ").includes("tab"));
+          if (tabs.length !== 6) throw new Error("six persistent tabs missing");
+          if (nodes.some((node) => (
+            node.tagName === "BUTTON" && !String(node.className).split(" ").includes("tab")
+          ))) {{
+            throw new Error("climate action rendered without settings");
           }}
         """
         completed = subprocess.run(

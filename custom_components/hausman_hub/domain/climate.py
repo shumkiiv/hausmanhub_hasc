@@ -20,10 +20,12 @@ _ENTITY_ID = re.compile(r"^[a-z][a-z0-9_]*\.[a-z0-9_]+$")
 _WINDOW_ENTITY_DOMAINS = frozenset({"binary_sensor"})
 _OUTDOOR_TEMPERATURE_ENTITY_DOMAINS = frozenset({"sensor"})
 _PRESENCE_ENTITY_DOMAINS = frozenset({"binary_sensor", "person", "device_tracker"})
+_ROOM_PRESENCE_ENTITY_DOMAINS = frozenset({"binary_sensor"})
 _CENTRAL_HEATING_ENTITY_DOMAINS = frozenset(
     {"binary_sensor", "switch", "input_boolean"}
 )
 _PASSIVE_OBSERVATION_ENTITY_DOMAINS = frozenset({"sensor"})
+MAX_ROOM_PRESENCE_ENTITIES = 32
 
 
 class ClimateModelViolation(ValueError):
@@ -119,6 +121,7 @@ class ClimateRoom:
     room_id: str
     name: str
     window_entity_id: str | None = None
+    presence_entity_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_stable_id(self.room_id, "room id")
@@ -128,6 +131,19 @@ class ClimateRoom:
             _WINDOW_ENTITY_DOMAINS,
             "room window entity",
         )
+        if type(self.presence_entity_ids) is not tuple:
+            raise ClimateModelViolation(
+                "room presence entities must be an immutable collection"
+            )
+        if len(self.presence_entity_ids) > MAX_ROOM_PRESENCE_ENTITIES:
+            raise ClimateModelViolation("room presence entities are too numerous")
+        _require_unique(self.presence_entity_ids, "room presence entities")
+        for entity_id in self.presence_entity_ids:
+            _require_entity_domain(
+                entity_id,
+                _ROOM_PRESENCE_ENTITY_DOMAINS,
+                "room presence entity",
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +314,14 @@ class ClimateRegistry:
         _require_unique((room.room_id for room in self.rooms), "room ids")
         _require_unique((device.device_id for device in self.devices), "device ids")
         _require_unique((device.source_id for device in self.devices), "device source ids")
+        _require_unique(
+            (
+                entity_id
+                for room in self.rooms
+                for entity_id in room.presence_entity_ids
+            ),
+            "room presence entities across rooms",
+        )
         room_ids = {room.room_id for room in self.rooms}
         missing_rooms = sorted(
             {device.room_id for device in self.devices if device.room_id not in room_ids}

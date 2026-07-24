@@ -1,4 +1,4 @@
-"""Local admin configuration routes for mode, home signals, and room windows."""
+"""Local admin configuration routes for mode, home signals, and room signals."""
 
 from __future__ import annotations
 
@@ -23,11 +23,14 @@ from custom_components.hausman_hub.application.climate_signal_settings import (
     CENTRAL_HEATING_DOMAINS,
     OUTDOOR_TEMPERATURE_DOMAINS,
     PRESENCE_DOMAINS,
+    ROOM_PRESENCE_DOMAINS,
     WINDOW_DOMAINS,
     ClimateSignalSettingsViolation,
     validate_climate_mode_update,
     validate_home_environment_update,
     validate_optional_signal_entity,
+    validate_room_signal_update,
+    validate_room_signal_updates,
     validate_room_window_update,
 )
 from custom_components.hausman_hub.domain.climate_bridge import ClimateControlMode
@@ -293,6 +296,174 @@ class ClimateSignalSettingsValidationTest(unittest.TestCase):
                     )
                 self.assertEqual(code, raised.exception.code)
 
+    def test_room_signal_update_accepts_multiple_presence_sensors(self) -> None:
+        known = {
+            "binary_sensor.living_window",
+            "binary_sensor.living_motion",
+            "binary_sensor.living_occupancy",
+        }
+        room_ids = frozenset({"living", "kids"})
+        self.assertEqual(
+            (
+                "living",
+                "binary_sensor.living_window",
+                (
+                    "binary_sensor.living_motion",
+                    "binary_sensor.living_occupancy",
+                ),
+            ),
+            validate_room_signal_update(
+                {
+                    "room_id": "living",
+                    "window_entity_id": "binary_sensor.living_window",
+                    "presence_entity_ids": [
+                        "binary_sensor.living_motion",
+                        "binary_sensor.living_occupancy",
+                    ],
+                },
+                room_ids=room_ids,
+                entity_known=known.__contains__,
+            ),
+        )
+        for payload, code in (
+            (
+                {
+                    "room_id": "living",
+                    "window_entity_id": None,
+                    "presence_entity_ids": [
+                        "binary_sensor.living_motion",
+                        "binary_sensor.living_motion",
+                    ],
+                },
+                "duplicate_room_presence",
+            ),
+            (
+                {
+                    "room_id": "living",
+                    "window_entity_id": None,
+                    "presence_entity_ids": ["person.ivan"],
+                },
+                "unsupported_entity_domain",
+            ),
+            (
+                {
+                    "room_id": "living",
+                    "window_entity_id": None,
+                    "presence_entity_ids": ["binary_sensor.missing"],
+                },
+                "unknown_entity",
+            ),
+            (
+                {
+                    "room_id": "living",
+                    "window_entity_id": None,
+                    "presence_entity_ids": "binary_sensor.living_motion",
+                },
+                "invalid_room_presence",
+            ),
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(ClimateSignalSettingsViolation) as raised:
+                    validate_room_signal_update(
+                        payload,
+                        room_ids=room_ids,
+                        entity_known=known.__contains__,
+                    )
+                self.assertEqual(code, raised.exception.code)
+        self.assertEqual(frozenset({"binary_sensor"}), ROOM_PRESENCE_DOMAINS)
+
+    def test_room_signal_batch_is_bounded_and_cross_room_unique(self) -> None:
+        known = {
+            "binary_sensor.living_motion",
+            "binary_sensor.kids_motion",
+        }
+        room_ids = frozenset({"living", "kids"})
+        self.assertEqual(
+            (
+                (
+                    "living",
+                    None,
+                    ("binary_sensor.living_motion",),
+                ),
+                (
+                    "kids",
+                    None,
+                    ("binary_sensor.kids_motion",),
+                ),
+            ),
+            validate_room_signal_updates(
+                {
+                    "rooms": [
+                        {
+                            "room_id": "living",
+                            "window_entity_id": None,
+                            "presence_entity_ids": [
+                                "binary_sensor.living_motion"
+                            ],
+                        },
+                        {
+                            "room_id": "kids",
+                            "window_entity_id": None,
+                            "presence_entity_ids": [
+                                "binary_sensor.kids_motion"
+                            ],
+                        },
+                    ]
+                },
+                room_ids=room_ids,
+                entity_known=known.__contains__,
+            ),
+        )
+        for payload, code in (
+            ({"rooms": []}, "invalid_room_signal_batch"),
+            (
+                {
+                    "rooms": [
+                        {
+                            "room_id": "living",
+                            "window_entity_id": None,
+                            "presence_entity_ids": [],
+                        },
+                        {
+                            "room_id": "living",
+                            "window_entity_id": None,
+                            "presence_entity_ids": [],
+                        },
+                    ]
+                },
+                "duplicate_room_update",
+            ),
+            (
+                {
+                    "rooms": [
+                        {
+                            "room_id": "living",
+                            "window_entity_id": None,
+                            "presence_entity_ids": [
+                                "binary_sensor.living_motion"
+                            ],
+                        },
+                        {
+                            "room_id": "kids",
+                            "window_entity_id": None,
+                            "presence_entity_ids": [
+                                "binary_sensor.living_motion"
+                            ],
+                        },
+                    ]
+                },
+                "duplicate_room_presence",
+            ),
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(ClimateSignalSettingsViolation) as raised:
+                    validate_room_signal_updates(
+                        payload,
+                        room_ids=room_ids,
+                        entity_known=known.__contains__,
+                    )
+                self.assertEqual(code, raised.exception.code)
+
     def test_climate_mode_update_rules(self) -> None:
         self.assertEqual(
             "disabled",
@@ -362,6 +533,74 @@ class ClimateAdminRuntimeSupportTest(unittest.TestCase):
         with self.assertRaises(ClimateRegistryViolation):
             asyncio.run(runtime.async_update_room_window("attic", None))
         self.assertEqual([], store.saved)
+
+    def test_update_room_signals_rewrites_multiple_presence_bindings(self) -> None:
+        runtime, store, _ = build_runtime(registry_with_rooms())
+        payload = asyncio.run(
+            runtime.async_update_room_signals(
+                "living",
+                "binary_sensor.living_window",
+                (
+                    "binary_sensor.living_motion",
+                    "binary_sensor.living_occupancy",
+                ),
+            )
+        )
+        living = next(room for room in payload["rooms"] if room["id"] == "living")
+        self.assertEqual(
+            [
+                "binary_sensor.living_motion",
+                "binary_sensor.living_occupancy",
+            ],
+            living["presence_entity_ids"],
+        )
+        self.assertEqual(1, len(store.saved))
+
+        moved = asyncio.run(
+            runtime.async_update_room_signal_batch(
+                (
+                    (
+                        "living",
+                        "binary_sensor.living_window",
+                        ("binary_sensor.living_occupancy",),
+                    ),
+                    (
+                        "kids",
+                        None,
+                        ("binary_sensor.living_motion",),
+                    ),
+                )
+            )
+        )
+        moved_rooms = {room["id"]: room for room in moved["rooms"]}
+        self.assertEqual(
+            ["binary_sensor.living_occupancy"],
+            moved_rooms["living"]["presence_entity_ids"],
+        )
+        self.assertEqual(
+            ["binary_sensor.living_motion"],
+            moved_rooms["kids"]["presence_entity_ids"],
+        )
+        self.assertEqual(2, len(store.saved))
+
+        with self.assertRaises(ClimateRegistryViolation):
+            asyncio.run(
+                runtime.async_update_room_signal_batch(
+                    (
+                        (
+                            "living",
+                            None,
+                            ("binary_sensor.shared_motion",),
+                        ),
+                        (
+                            "kids",
+                            None,
+                            ("binary_sensor.shared_motion",),
+                        ),
+                    )
+                )
+            )
+        self.assertEqual(2, len(store.saved))
 
     def test_climate_mode_status_reflects_mode_and_contour(self) -> None:
         runtime, _, _ = build_runtime(registry_with_rooms())
@@ -501,6 +740,18 @@ class ClimateAdminConfigurationRoutesTest(unittest.TestCase):
                 attributes={"friendly_name": "Окно"},
                 last_updated=dt(2026, 7, 19, 12, 0),
             ),
+            "binary_sensor.synthetic_motion": SimpleNamespace(
+                entity_id="binary_sensor.synthetic_motion",
+                state="off",
+                attributes={"friendly_name": "Движение"},
+                last_updated=dt(2026, 7, 19, 12, 0),
+            ),
+            "binary_sensor.synthetic_occupancy": SimpleNamespace(
+                entity_id="binary_sensor.synthetic_occupancy",
+                state="on",
+                attributes={"friendly_name": "Присутствие"},
+                last_updated=dt(2026, 7, 19, 12, 0),
+            ),
         }
         self.hass.states.values = signal_states
         self.hass.states.async_all = lambda: list(signal_states.values())
@@ -529,6 +780,8 @@ class ClimateAdminConfigurationRoutesTest(unittest.TestCase):
             state_view=SignalStateView(
                 {
                     "binary_sensor.synthetic_window": ("off", "Окно"),
+                    "binary_sensor.synthetic_motion": ("off", "Движение"),
+                    "binary_sensor.synthetic_occupancy": ("on", "Присутствие"),
                 }
             ),
         )
@@ -767,11 +1020,21 @@ class ClimateAdminConfigurationRoutesTest(unittest.TestCase):
             [item["entity_id"] for item in candidate_groups["outdoor_temperature"]],
         )
         self.assertEqual(
-            ["binary_sensor.synthetic_window", "person.synthetic_ivan"],
+            [
+                "binary_sensor.synthetic_motion",
+                "binary_sensor.synthetic_occupancy",
+                "binary_sensor.synthetic_window",
+                "person.synthetic_ivan",
+            ],
             [item["entity_id"] for item in candidate_groups["presence"]],
         )
         self.assertEqual(
-            ["binary_sensor.synthetic_window", "switch.synthetic_central"],
+            [
+                "binary_sensor.synthetic_motion",
+                "binary_sensor.synthetic_occupancy",
+                "binary_sensor.synthetic_window",
+                "switch.synthetic_central",
+            ],
             [item["entity_id"] for item in candidate_groups["central_heating"]],
         )
 
@@ -826,20 +1089,56 @@ class ClimateAdminConfigurationRoutesTest(unittest.TestCase):
         self.assertEqual(200, response.status)
         self.assertEqual(
             [
-                {"id": "living", "name": "Гостиная", "window_entity_id": None},
-                {"id": "kids", "name": "Детская", "window_entity_id": None},
+                {
+                    "id": "living",
+                    "name": "Гостиная",
+                    "window_entity_id": None,
+                    "presence_entity_ids": [],
+                },
+                {
+                    "id": "kids",
+                    "name": "Детская",
+                    "window_entity_id": None,
+                    "presence_entity_ids": [],
+                },
             ],
             response.payload["rooms"],
         )
         self.assertEqual(
-            ["binary_sensor.synthetic_window"],
+            [
+                "binary_sensor.synthetic_motion",
+                "binary_sensor.synthetic_occupancy",
+                "binary_sensor.synthetic_window",
+            ],
             [item["entity_id"] for item in response.payload["candidates"]],
+        )
+        self.assertEqual(
+            [
+                "binary_sensor.synthetic_motion",
+                "binary_sensor.synthetic_occupancy",
+                "binary_sensor.synthetic_window",
+            ],
+            [
+                item["entity_id"]
+                for item in response.payload["presence_candidates"]
+            ],
         )
 
         bound = self._post(
             path,
             self._admin(),
-            {"room_id": "living", "window_entity_id": "binary_sensor.synthetic_window"},
+            {
+                "rooms": [
+                    {
+                        "room_id": "living",
+                        "window_entity_id": "binary_sensor.synthetic_window",
+                        "presence_entity_ids": [
+                            "binary_sensor.synthetic_motion",
+                            "binary_sensor.synthetic_occupancy",
+                        ],
+                    }
+                ],
+            },
         )
         self.assertEqual(200, bound.status)
         rooms = {room["id"]: room for room in bound.payload["rooms"]}
@@ -848,6 +1147,46 @@ class ClimateAdminConfigurationRoutesTest(unittest.TestCase):
             rooms["living"]["window_entity_id"],
         )
         self.assertIsNone(rooms["kids"]["window_entity_id"])
+        self.assertEqual(
+            [
+                "binary_sensor.synthetic_motion",
+                "binary_sensor.synthetic_occupancy",
+            ],
+            rooms["living"]["presence_entity_ids"],
+        )
+
+        moved = self._post(
+            path,
+            self._admin(),
+            {
+                "rooms": [
+                    {
+                        "room_id": "living",
+                        "window_entity_id": "binary_sensor.synthetic_window",
+                        "presence_entity_ids": [
+                            "binary_sensor.synthetic_occupancy"
+                        ],
+                    },
+                    {
+                        "room_id": "kids",
+                        "window_entity_id": None,
+                        "presence_entity_ids": [
+                            "binary_sensor.synthetic_motion"
+                        ],
+                    },
+                ],
+            },
+        )
+        self.assertEqual(200, moved.status)
+        moved_rooms = {room["id"]: room for room in moved.payload["rooms"]}
+        self.assertEqual(
+            ["binary_sensor.synthetic_occupancy"],
+            moved_rooms["living"]["presence_entity_ids"],
+        )
+        self.assertEqual(
+            ["binary_sensor.synthetic_motion"],
+            moved_rooms["kids"]["presence_entity_ids"],
+        )
 
         cleared = self._post(
             path,
@@ -860,12 +1199,44 @@ class ClimateAdminConfigurationRoutesTest(unittest.TestCase):
                 "window_entity_id"
             ]
         )
+        self.assertEqual(
+            ["binary_sensor.synthetic_occupancy"],
+            {room["id"]: room for room in cleared.payload["rooms"]}["living"][
+                "presence_entity_ids"
+            ],
+        )
 
         for payload in (
             {"room_id": "attic", "window_entity_id": None},
             {"room_id": "living", "window_entity_id": "sensor.synthetic_outdoor"},
             {"room_id": "living", "window_entity_id": "binary_sensor.missing"},
             {"room_id": "living"},
+            {
+                "room_id": "kids",
+                "window_entity_id": None,
+                "presence_entity_ids": [
+                    "binary_sensor.synthetic_motion",
+                    "binary_sensor.synthetic_motion",
+                ],
+            },
+            {
+                "rooms": [
+                    {
+                        "room_id": "living",
+                        "window_entity_id": None,
+                        "presence_entity_ids": [
+                            "binary_sensor.synthetic_motion"
+                        ],
+                    },
+                    {
+                        "room_id": "kids",
+                        "window_entity_id": None,
+                        "presence_entity_ids": [
+                            "binary_sensor.synthetic_motion"
+                        ],
+                    },
+                ]
+            },
         ):
             with self.subTest(payload=payload):
                 self.assertEqual(400, self._post(path, self._admin(), payload).status)

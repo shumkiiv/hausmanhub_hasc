@@ -1440,6 +1440,54 @@ class ClimateRuntime:
             self.last_error = None
             return registry_to_payload(registry)
 
+    async def async_update_room_signals(
+        self,
+        room_id: str,
+        window_entity_id: str | None,
+        presence_entity_ids: tuple[str, ...],
+    ) -> dict[str, object]:
+        """Atomically replace one room's window and presence bindings."""
+
+        return await self.async_update_room_signal_batch(
+            ((room_id, window_entity_id, presence_entity_ids),)
+        )
+
+    async def async_update_room_signal_batch(
+        self,
+        updates: tuple[tuple[str, str | None, tuple[str, ...]], ...],
+    ) -> dict[str, object]:
+        """Atomically replace complete signals for a bounded set of rooms."""
+
+        async with self._lock:
+            payload = registry_to_payload(self._registry)
+            rooms = payload.get("rooms")
+            if not isinstance(rooms, list):
+                raise ClimateRegistryViolation("climate registry rooms are invalid")
+            for room_id, window_entity_id, presence_entity_ids in updates:
+                target = next(
+                    (
+                        room
+                        for room in rooms
+                        if isinstance(room, dict) and room.get("id") == room_id
+                    ),
+                    None,
+                )
+                if target is None:
+                    raise ClimateRegistryViolation(
+                        "climate registry room is unknown"
+                    )
+                target["window_entity_id"] = window_entity_id
+                if presence_entity_ids:
+                    target["presence_entity_ids"] = list(presence_entity_ids)
+                else:
+                    target.pop("presence_entity_ids", None)
+            registry = registry_from_payload(payload)
+            validate_contour_bindings(self._contours, registry)
+            await self._registry_store.async_save(registry)
+            self._registry = registry
+            self.last_error = None
+            return registry_to_payload(registry)
+
     async def async_climate_mode_status(self) -> dict[str, object]:
         """Report the saved climate control mode and contour configuration."""
 
@@ -1474,14 +1522,17 @@ class ClimateRuntime:
                 "the local signal entity catalog is unavailable"
             )
         entries = catalog(allowed_domains).entries
-        return [
-            {
+        result: list[dict[str, object]] = []
+        for entry in entries:
+            item: dict[str, object] = {
                 "entity_id": entry.entity_id,
                 "name": entry.friendly_name or entry.entity_id,
                 "available": entry.available,
             }
-            for entry in entries
-        ]
+            if entry.device_class is not None:
+                item["device_class"] = entry.device_class
+            result.append(item)
+        return result
 
     async def async_replace_contours(self, payload: object) -> dict[str, object]:
         """Replace contour definitions while keeping their bindings exact."""

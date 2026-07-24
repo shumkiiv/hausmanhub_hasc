@@ -2,9 +2,9 @@
 
 This pure boundary validates the exact payloads of the local admin routes for
 the climate control mode, the home environment signals, and the per-room
-window binding. It never touches Home Assistant, storage, or commands: the
-caller supplies an ``entity_known`` lookup, and the results are plain values
-for the runtime's atomic write methods.
+window and presence bindings. It never touches Home Assistant, storage, or
+commands: the caller supplies an ``entity_known`` lookup, and the results are
+plain values for the runtime's atomic write methods.
 """
 
 from __future__ import annotations
@@ -12,10 +12,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from math import isfinite
 
+from ..domain.climate import MAX_ROOM_PRESENCE_ENTITIES
+
 OUTDOOR_TEMPERATURE_DOMAINS = frozenset({"sensor"})
 PRESENCE_DOMAINS = frozenset({"binary_sensor", "person", "device_tracker"})
 CENTRAL_HEATING_DOMAINS = frozenset({"binary_sensor", "switch", "input_boolean"})
 WINDOW_DOMAINS = frozenset({"binary_sensor"})
+ROOM_PRESENCE_DOMAINS = frozenset({"binary_sensor"})
 HEATING_LOCKOUT_MINIMUM = -40.0
 HEATING_LOCKOUT_MAXIMUM = 60.0
 CLIMATE_MODES = frozenset({"disabled", "managed"})
@@ -31,6 +34,11 @@ HOME_ENVIRONMENT_FIELDS = frozenset(
     }
 )
 ROOM_WINDOW_FIELDS = frozenset({"room_id", "window_entity_id"})
+ROOM_SIGNAL_FIELDS = frozenset(
+    {"room_id", "window_entity_id", "presence_entity_ids"}
+)
+ROOM_SIGNAL_BATCH_FIELDS = frozenset({"rooms"})
+MAX_ROOM_SIGNAL_UPDATES = 128
 CLIMATE_MODE_FIELDS = frozenset({"mode", "expected_mode", "confirm"})
 
 
@@ -126,6 +134,94 @@ def validate_room_window_update(
         entity_known=entity_known,
     )
     return room_id, entity_id
+
+
+def validate_room_signal_update(
+    payload: object,
+    *,
+    room_ids: frozenset[str],
+    entity_known: Callable[[str], bool],
+) -> tuple[str, str | None, tuple[str, ...]]:
+    """Validate one room's complete window and presence binding replacement."""
+
+    if not isinstance(payload, Mapping) or set(payload.keys()) != set(
+        ROOM_SIGNAL_FIELDS
+    ):
+        raise ClimateSignalSettingsViolation("invalid_room_signals")
+    room_id = payload["room_id"]
+    if not isinstance(room_id, str) or not room_id or len(room_id) > 64:
+        raise ClimateSignalSettingsViolation("invalid_room")
+    if room_id not in room_ids:
+        raise ClimateSignalSettingsViolation("unknown_room")
+    window_entity_id = validate_optional_signal_entity(
+        payload["window_entity_id"],
+        allowed_domains=WINDOW_DOMAINS,
+        entity_known=entity_known,
+    )
+    raw_presence = payload["presence_entity_ids"]
+    if (
+        not isinstance(raw_presence, list)
+        or len(raw_presence) > MAX_ROOM_PRESENCE_ENTITIES
+    ):
+        raise ClimateSignalSettingsViolation("invalid_room_presence")
+    presence_entity_ids = tuple(
+        validate_optional_signal_entity(
+            entity_id,
+            allowed_domains=ROOM_PRESENCE_DOMAINS,
+            entity_known=entity_known,
+        )
+        for entity_id in raw_presence
+    )
+    if any(entity_id is None for entity_id in presence_entity_ids):
+        raise ClimateSignalSettingsViolation("invalid_room_presence")
+    normalized = tuple(
+        entity_id
+        for entity_id in presence_entity_ids
+        if entity_id is not None
+    )
+    if len(set(normalized)) != len(normalized):
+        raise ClimateSignalSettingsViolation("duplicate_room_presence")
+    return room_id, window_entity_id, normalized
+
+
+def validate_room_signal_updates(
+    payload: object,
+    *,
+    room_ids: frozenset[str],
+    entity_known: Callable[[str], bool],
+) -> tuple[tuple[str, str | None, tuple[str, ...]], ...]:
+    """Validate one bounded atomic batch of complete room signal replacements."""
+
+    if not isinstance(payload, Mapping) or set(payload.keys()) != set(
+        ROOM_SIGNAL_BATCH_FIELDS
+    ):
+        raise ClimateSignalSettingsViolation("invalid_room_signal_batch")
+    rooms = payload["rooms"]
+    if (
+        not isinstance(rooms, list)
+        or not rooms
+        or len(rooms) > MAX_ROOM_SIGNAL_UPDATES
+    ):
+        raise ClimateSignalSettingsViolation("invalid_room_signal_batch")
+    updates = tuple(
+        validate_room_signal_update(
+            room,
+            room_ids=room_ids,
+            entity_known=entity_known,
+        )
+        for room in rooms
+    )
+    updated_room_ids = tuple(update[0] for update in updates)
+    if len(set(updated_room_ids)) != len(updated_room_ids):
+        raise ClimateSignalSettingsViolation("duplicate_room_update")
+    presence_entity_ids = tuple(
+        entity_id
+        for _, _, room_presence_entity_ids in updates
+        for entity_id in room_presence_entity_ids
+    )
+    if len(set(presence_entity_ids)) != len(presence_entity_ids):
+        raise ClimateSignalSettingsViolation("duplicate_room_presence")
+    return updates
 
 
 def validate_climate_mode_update(

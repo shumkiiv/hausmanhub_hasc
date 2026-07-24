@@ -44,11 +44,40 @@ HOME_PAYLOAD = {
 }
 WINDOWS_PAYLOAD = {
     "rooms": [
-        {"id": "living", "name": "Гостиная", "window_entity_id": None},
-        {"id": "kids", "name": "Детская", "window_entity_id": "binary_sensor.kids_window"},
+        {
+            "id": "living",
+            "name": "Гостиная",
+            "window_entity_id": None,
+            "presence_entity_ids": [],
+        },
+        {
+            "id": "kids",
+            "name": "Детская",
+            "window_entity_id": "binary_sensor.kids_window",
+            "presence_entity_ids": [],
+        },
     ],
     "candidates": [
-        {"entity_id": "binary_sensor.living_window", "name": "Окно гостиной", "available": True},
+        {
+            "entity_id": "binary_sensor.living_window",
+            "name": "Окно гостиной",
+            "available": True,
+            "device_class": "window",
+        },
+    ],
+    "presence_candidates": [
+        {
+            "entity_id": "binary_sensor.living_motion",
+            "name": "Движение гостиной",
+            "available": True,
+            "device_class": "motion",
+        },
+        {
+            "entity_id": "binary_sensor.living_occupancy",
+            "name": "Присутствие гостиной",
+            "available": True,
+            "device_class": "occupancy",
+        },
     ],
 }
 DISPLAY_NAMES = {
@@ -149,8 +178,11 @@ def panel_script(get_payloads: dict, post_table: dict, assertions: str) -> str:
         addEventListener(type, handler) {{
           (this._listeners[type] = this._listeners[type] || []).push(handler);
         }}
-        fire(type) {{
-          (this._listeners[type] || []).forEach((handler) => handler());
+        fire(type, event = {{}}) {{
+          (this._listeners[type] || []).forEach((handler) => handler(event));
+        }}
+        focus() {{
+          this.focused = true;
         }}
         set innerHTML(value) {{
           if (value === "") this.children = [];
@@ -266,11 +298,132 @@ class PanelSettingsSectionsTest(unittest.TestCase):
         if (!text.includes("Включение станет доступно после настройки")) {
           throw new Error("contour prerequisite hint missing");
         }
+        if (panel._activeSection !== "contour" || panel._shell.sectionNodes.contour.hidden) {
+          throw new Error("unconfigured setup did not open contour section");
+        }
         const buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
         const enable = buttons.find((node) => node.textContent === "Включить управление");
         if (!enable) throw new Error("enable button missing");
         if (enable.disabled !== true) throw new Error("enable button must stay disabled without a contour");
         if (text.includes("Сохранить профили")) throw new Error("profiles editor rendered without setup");
+            """,
+        )
+        completed = run_panel_script(script)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_six_tabs_switch_locally_keep_dirty_values_and_support_keyboard(self) -> None:
+        script = panel_script(
+            GET_PATHS,
+            {},
+            """
+        const tabs = findAll(panel.shadowRoot, (node) =>
+          node.tagName === "BUTTON" && String(node.className).split(" ").includes("tab"));
+        const labels = tabs.map((node) => node.textContent);
+        const expected = ["Обзор", "Контур", "Профили", "Расписание", "Дом", "Сигналы комнат"];
+        if (JSON.stringify(labels) !== JSON.stringify(expected)) {
+          throw new Error("tab labels mismatch: " + JSON.stringify(labels));
+        }
+        if (panel._activeSection !== "overview" || panel._shell.sectionNodes.overview.hidden) {
+          throw new Error("configured setup did not default to overview");
+        }
+        if (tabs[0]["aria-current"] !== "page") throw new Error("overview aria-current missing");
+        const getCount = calls.filter((call) => call.method === "GET").length;
+        tabs[2].fire("click");
+        const dayTemperature = findAll(panel.shadowRoot, (node) => node.type === "number")
+          .find((node) => String(node.value) === "23");
+        dayTemperature.value = "24.5";
+        dayTemperature.fire("input");
+        tabs[4].fire("click");
+        tabs[2].fire("click");
+        if (dayTemperature.value !== "24.5" || panel._dirty.profiles !== true) {
+          throw new Error("tab switch discarded dirty profile value");
+        }
+        if (!String(tabs[2].className).includes("is-dirty")) {
+          throw new Error("dirty tab indicator missing");
+        }
+        if (calls.filter((call) => call.method === "GET").length !== getCount) {
+          throw new Error("tab switch called an API");
+        }
+        let prevented = false;
+        tabs[2].fire("keydown", {
+          key: "ArrowRight",
+          preventDefault: () => { prevented = true; },
+        });
+        if (!prevented || panel._activeSection !== "schedule" || !tabs[3].focused) {
+          throw new Error("keyboard tab navigation failed");
+        }
+            """,
+        )
+        completed = run_panel_script(script)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_panel_shell_has_status_accessibility_and_responsive_rules(self) -> None:
+        script = panel_script(
+            GET_PATHS,
+            {},
+            """
+        const text = textOf(panel.shadowRoot);
+        if (!text.includes("Климат, комнаты и сценарии — в одном месте")) {
+          throw new Error("header subtitle missing");
+        }
+        if (!text.includes("Управление климатом выключено")) {
+          throw new Error("translated status missing");
+        }
+        const style = findAll(panel.shadowRoot, (node) => node.tagName === "STYLE")[0];
+        const css = String(style.textContent);
+        for (const rule of [
+          "max-width:1440px",
+          "overflow-x:auto",
+          "@media (max-width:640px)",
+          "@media (max-width:380px)",
+          "grid-template-columns:minmax(0,1fr)",
+          ":focus-visible",
+        ]) {
+          if (!css.includes(rule)) throw new Error("responsive/accessibility CSS missing: " + rule);
+        }
+        const active = panel._shell.sectionNodes.overview;
+        const hidden = Object.entries(panel._shell.sectionNodes)
+          .filter(([name]) => name !== "overview")
+          .every(([, node]) => node.hidden === true);
+        if (active.hidden || !hidden) throw new Error("inactive sections are not hidden");
+            """,
+        )
+        completed = run_panel_script(script)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_room_presence_is_searchable_and_selected_items_render_first(self) -> None:
+        payloads = dict(GET_PATHS)
+        windows = json.loads(json.dumps(WINDOWS_PAYLOAD))
+        windows["rooms"][0]["presence_entity_ids"] = [
+            "binary_sensor.living_occupancy"
+        ]
+        payloads["hausman_hub/v1/admin/climate-room-signals"] = windows
+        script = panel_script(
+            payloads,
+            {},
+            """
+        const searches = findAll(panel.shadowRoot, (node) => node.type === "search");
+        const presenceSearch = searches.find((node) =>
+          String(node.placeholder).includes("датчик присутствия"));
+        if (!presenceSearch) throw new Error("presence search missing");
+        const presenceBoxes = findAll(panel.shadowRoot, (node) =>
+          node.type === "checkbox" && String(node.value).startsWith("binary_sensor.living_"));
+        if (presenceBoxes[0].value !== "binary_sensor.living_occupancy") {
+          throw new Error("selected presence candidate is not first");
+        }
+        const labels = findAll(panel.shadowRoot, (node) =>
+          String(node.className).split(" ").includes("device-option"));
+        const findLabel = (value) => labels.find((label) =>
+          label.children.some((child) => child.type === "checkbox" && child.value === value));
+        const selected = findLabel("binary_sensor.living_occupancy");
+        const motion = findLabel("binary_sensor.living_motion");
+        presenceSearch.value = "motion";
+        presenceSearch.fire("input");
+        if (!selected.hidden || motion.hidden) throw new Error("presence search filter failed");
+        const text = textOf(panel.shadowRoot);
+        if (!text.includes("пока не меняет температуру мгновенно")) {
+          throw new Error("room-presence policy distinction missing");
+        }
             """,
         )
         completed = run_panel_script(script)
@@ -285,7 +438,9 @@ class PanelSettingsSectionsTest(unittest.TestCase):
         if (!text.includes("Профили «День» и «Ночь»")) throw new Error("profiles heading missing");
         if (!text.includes("Расписание")) throw new Error("schedule heading missing");
         if (!text.includes("Сигналы дома")) throw new Error("home heading missing");
-        if (!text.includes("Окна комнат")) throw new Error("windows heading missing");
+        if (!text.includes("Сигналы комнат")) throw new Error("room signals heading missing");
+        if (!text.includes("Общее присутствие дома")) throw new Error("general presence label missing");
+        if (!text.includes("Датчики присутствия")) throw new Error("room presence label missing");
         const numbers = findAll(panel.shadowRoot, (node) => node.type === "number");
         const temperatures = numbers.filter((node) => String(node.value) === "23");
         if (!temperatures.length) throw new Error("saved day temperature not rendered");
@@ -369,10 +524,11 @@ class PanelSettingsSectionsTest(unittest.TestCase):
             {"hausman_hub/v1/admin/climate-schedule": {"status": "saved"}},
             """
         const boxes = findAll(panel.shadowRoot, (node) => node.type === "checkbox");
-        if (boxes.length !== 1) throw new Error("schedule checkbox missing");
-        if (boxes[0].disabled) throw new Error("schedule checkbox must be enabled in managed mode");
-        boxes[0].checked = true;
-        boxes[0].fire("change");
+        const enabled = boxes.find((node) => node.value === "");
+        if (!enabled) throw new Error("schedule checkbox missing");
+        if (enabled.disabled) throw new Error("schedule checkbox must be enabled in managed mode");
+        enabled.checked = true;
+        enabled.fire("change");
         const buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
         const save = buttons.find((node) => node.textContent === "Сохранить расписание");
         save.fire("click");
@@ -433,14 +589,126 @@ class PanelSettingsSectionsTest(unittest.TestCase):
         living.value = "binary_sensor.living_window";
         living.fire("change");
         const buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
-        const save = buttons.find((node) => node.textContent === "Сохранить привязки окон");
+        const save = buttons.find((node) => node.textContent === "Сохранить сигналы комнат");
         save.fire("click");
         await tick();
         const posts = calls.filter((call) => call.method === "POST" && call.path === "hausman_hub/v1/admin/climate-room-signals");
         if (posts.length !== 1) throw new Error("expected exactly one window POST, got " + posts.length);
-        const expected = { room_id: "living", window_entity_id: "binary_sensor.living_window" };
+        const expected = {
+          rooms: [{
+            room_id: "living",
+            window_entity_id: "binary_sensor.living_window",
+            presence_entity_ids: [],
+          }],
+        };
         if (JSON.stringify(posts[0].payload) !== JSON.stringify(expected)) {
           throw new Error("window payload mismatch: " + JSON.stringify(posts[0].payload));
+        }
+            """,
+        )
+        completed = run_panel_script(script)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_room_signal_save_posts_multiple_presence_sensors(self) -> None:
+        script = panel_script(
+            GET_PATHS,
+            {"hausman_hub/v1/admin/climate-room-signals": {"rooms": []}},
+            """
+        const boxes = findAll(panel.shadowRoot, (node) => node.type === "checkbox");
+        const motion = boxes.find((node) => node.value === "binary_sensor.living_motion");
+        const occupancy = boxes.find((node) => node.value === "binary_sensor.living_occupancy");
+        if (!motion || !occupancy) throw new Error("room presence choices missing");
+        motion.checked = true;
+        motion.fire("change");
+        occupancy.checked = true;
+        occupancy.fire("change");
+        const buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
+        const save = buttons.find((node) => node.textContent === "Сохранить сигналы комнат");
+        save.fire("click");
+        await tick();
+        const posts = calls.filter((call) => call.method === "POST"
+          && call.path === "hausman_hub/v1/admin/climate-room-signals");
+        if (posts.length !== 1) throw new Error("expected one room signal POST");
+        const expected = {
+          rooms: [{
+            room_id: "living",
+            window_entity_id: null,
+            presence_entity_ids: [
+              "binary_sensor.living_motion",
+              "binary_sensor.living_occupancy",
+            ].sort(),
+          }],
+        };
+        if (JSON.stringify(posts[0].payload) !== JSON.stringify(expected)) {
+          throw new Error("room presence payload mismatch: " + JSON.stringify(posts[0].payload));
+        }
+            """,
+        )
+        completed = run_panel_script(script)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
+    def test_room_presence_move_posts_both_rooms_in_one_atomic_batch(self) -> None:
+        payloads = dict(GET_PATHS)
+        payloads["hausman_hub/v1/admin/climate-room-signals"] = {
+            "rooms": [
+                {
+                    "id": "living",
+                    "name": "Гостиная",
+                    "window_entity_id": None,
+                    "presence_entity_ids": [],
+                },
+                {
+                    "id": "kids",
+                    "name": "Детская",
+                    "window_entity_id": None,
+                    "presence_entity_ids": ["binary_sensor.shared_motion"],
+                },
+            ],
+            "candidates": [],
+            "presence_candidates": [
+                {
+                    "entity_id": "binary_sensor.shared_motion",
+                    "name": "Движение",
+                    "available": True,
+                    "device_class": "motion",
+                }
+            ],
+        }
+        script = panel_script(
+            payloads,
+            {"hausman_hub/v1/admin/climate-room-signals": {"rooms": []}},
+            """
+        const boxes = findAll(panel.shadowRoot, (node) =>
+          node.type === "checkbox" && node.value === "binary_sensor.shared_motion");
+        if (boxes.length !== 2 || !boxes[1].checked) {
+          throw new Error("saved room presence assignment missing");
+        }
+        boxes[0].checked = true;
+        boxes[0].fire("change");
+        if (boxes[1].checked) throw new Error("sensor remained assigned to two rooms");
+        const buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
+        const save = buttons.find((node) => node.textContent === "Сохранить сигналы комнат");
+        save.fire("click");
+        await tick();
+        const posts = calls.filter((call) => call.method === "POST"
+          && call.path === "hausman_hub/v1/admin/climate-room-signals");
+        if (posts.length !== 1) throw new Error("presence move was not atomic");
+        const expected = {
+          rooms: [
+            {
+              room_id: "living",
+              window_entity_id: null,
+              presence_entity_ids: ["binary_sensor.shared_motion"],
+            },
+            {
+              room_id: "kids",
+              window_entity_id: null,
+              presence_entity_ids: [],
+            },
+          ],
+        };
+        if (JSON.stringify(posts[0].payload) !== JSON.stringify(expected)) {
+          throw new Error("presence move payload mismatch: " + JSON.stringify(posts[0].payload));
         }
             """,
         )
@@ -528,7 +796,7 @@ class PanelSettingsSectionsTest(unittest.TestCase):
         living.value = "binary_sensor.living_window";
         living.fire("change");
         const buttons = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON");
-        const save = buttons.find((node) => node.textContent === "Сохранить привязки окон");
+        const save = buttons.find((node) => node.textContent === "Сохранить сигналы комнат");
         save.fire("click");
         save.fire("click");
         await tick();

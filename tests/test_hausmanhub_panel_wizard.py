@@ -193,8 +193,11 @@ def panel_script(get_table: dict, post_table: dict, assertions: str) -> str:
         addEventListener(type, handler) {{
           (this._listeners[type] = this._listeners[type] || []).push(handler);
         }}
-        fire(type) {{
-          (this._listeners[type] || []).forEach((handler) => handler());
+        fire(type, event = {{}}) {{
+          (this._listeners[type] || []).forEach((handler) => handler(event));
+        }}
+        focus() {{
+          this.focused = true;
         }}
         set innerHTML(value) {{
           if (value === "") this.children = [];
@@ -345,6 +348,18 @@ class PanelContourWizardTest(unittest.TestCase):
           throw new Error("multiple temperature sensors missing");
         }
         const living = panel._wizardFields.rooms.living;
+        if (!living.editor.hidden || living.expander["aria-expanded"] !== "false") {
+          throw new Error("selected room editor did not start collapsed");
+        }
+        if (living.expander.tagName !== "BUTTON") {
+          throw new Error("room expander must use native keyboard button semantics");
+        }
+        living.expander.fire("click");
+        if (living.editor.hidden || living.expander["aria-expanded"] !== "true") {
+          throw new Error("room expansion failed");
+        }
+        living.expander.fire("click");
+        if (!living.editor.hidden) throw new Error("room collapse failed");
         const temperatureSensors = living.devices.filter((choice) => choice.type === "temperature_sensor");
         if (temperatureSensors.length !== 2) throw new Error("expected two selectable temperature sensors");
         if (!temperatureSensors.every((choice) => choice.checkbox.checked)) {
@@ -362,6 +377,15 @@ class PanelContourWizardTest(unittest.TestCase):
         const style = findAll(panel.shadowRoot, (node) => node.tagName === "STYLE")[0];
         if (!style || !String(style.textContent).includes("grid-template-columns")) {
           throw new Error("responsive form grid CSS missing");
+        }
+        if (!panel._wizardFields.rooms.kids.editor.hidden) {
+          throw new Error("all room editors must start collapsed");
+        }
+        const searches = findAll(panel.shadowRoot, (node) => node.type === "search");
+        const groups = findAll(panel.shadowRoot, (node) =>
+          String(node.className).split(" ").includes("entity-group"));
+        if (searches.length < 2 || groups.length < 2) {
+          throw new Error("grouped searchable device candidates missing");
         }
         panel._wizardFields.name.value = "Несохранённый контур";
         panel._wizardFields.name.fire("input");
@@ -611,6 +635,9 @@ class PanelContourWizardTest(unittest.TestCase):
         if (!textOf(panel.shadowRoot).includes("18-28 °C")) {
           throw new Error("temperature contract hint missing");
         }
+        if (panel._activeSection !== "contour" || living.editor.hidden || !living.temperature.focused) {
+          throw new Error("temperature error did not reveal and focus its room");
+        }
         living.temperature.value = "22";
         living.temperature.fire("input");
         living.humidity.value = "41";
@@ -620,6 +647,7 @@ class PanelContourWizardTest(unittest.TestCase):
         if (!textOf(panel.shadowRoot).includes("шаг 5 %")) {
           throw new Error("humidity contract hint missing");
         }
+        if (!living.humidity.focused) throw new Error("humidity error field was not focused");
         if (calls.some((call) => call.method === "POST")) {
           throw new Error("invalid comfort values reached backend");
         }
@@ -653,13 +681,14 @@ class PanelContourWizardTest(unittest.TestCase):
           throw new Error("configured summary fetched options eagerly");
         }
         const initial = textOf(panel.shadowRoot);
-        const order = ["Состояние", "Контур", "Комнаты", "Профили", "Расписание", "Сигналы дома", "Окна комнат"];
+        const order = ["Обзор", "Контур", "Профили", "Расписание", "Дом", "Сигналы комнат"];
         let cursor = -1;
         order.forEach((heading) => {
           const next = initial.indexOf(heading, cursor + 1);
           if (next <= cursor) throw new Error("section order broken at " + heading);
           cursor = next;
         });
+        if (panel._activeSection !== "overview") throw new Error("configured default tab mismatch");
         const edit = findAll(panel.shadowRoot, (node) => node.tagName === "BUTTON")
           .find((node) => node.textContent === "Изменить контур");
         edit.fire("click");

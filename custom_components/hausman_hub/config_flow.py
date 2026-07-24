@@ -3654,11 +3654,32 @@ class HausmanHubOptionsFlow(config_entries.OptionsFlow):
             if not isinstance(rooms, list):
                 errors["base"] = "invalid_climate_registry"
             else:
+                existing = next(
+                    (
+                        value
+                        for value in rooms
+                        if isinstance(value, Mapping)
+                        and value.get("id") == user_input.get(CLIMATE_ROOM_ID_FIELD)
+                    ),
+                    None,
+                )
                 room = {
                     "id": user_input.get(CLIMATE_ROOM_ID_FIELD),
                     "name": user_input.get(CLIMATE_ROOM_NAME_FIELD),
-                    "window_entity_id": None,
+                    "window_entity_id": (
+                        existing.get("window_entity_id")
+                        if existing is not None
+                        else None
+                    ),
                 }
+                if (
+                    existing is not None
+                    and isinstance(existing.get("presence_entity_ids"), list)
+                    and existing["presence_entity_ids"]
+                ):
+                    room["presence_entity_ids"] = list(
+                        existing["presence_entity_ids"]
+                    )
                 candidate["rooms"] = [
                     value
                     for value in rooms

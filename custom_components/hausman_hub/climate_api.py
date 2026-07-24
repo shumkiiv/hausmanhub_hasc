@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from http import HTTPStatus
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address
 from typing import TYPE_CHECKING, Any, Final
@@ -30,6 +31,8 @@ from .application.climate_signal_settings import (
     ClimateSignalSettingsViolation,
     validate_climate_mode_update,
     validate_home_environment_update,
+    validate_room_signal_update,
+    validate_room_signal_updates,
     validate_room_window_update,
 )
 from .application.contour_apply import ContourApplyViolation
@@ -979,7 +982,7 @@ class ClimateAdminHomeEnvironmentView(_ClimateView):
 
 
 class ClimateAdminRoomSignalsView(_ClimateView):
-    """Read or atomically replace one room window signal binding."""
+    """Read or atomically replace one room's window and presence bindings."""
 
     url = ADMIN_ROOM_SIGNALS_PATH
     name = "api:hausman_hub:climate_admin_room_signals"
@@ -1001,6 +1004,7 @@ class ClimateAdminRoomSignalsView(_ClimateView):
             {
                 "rooms": _room_signal_payloads(payload),
                 "candidates": candidates,
+                "presence_candidates": candidates,
             },
             headers=NO_STORE_HEADERS,
         )
@@ -1017,7 +1021,7 @@ class ClimateAdminRoomSignalsView(_ClimateView):
             payload = await _request_json(request)
         except ValueError:
             return self.json_message(
-                "Тело привязки окна комнаты заполнено неверно.",
+                "Тело привязки сигналов комнаты заполнено неверно.",
                 HTTPStatus.BAD_REQUEST,
                 headers=NO_STORE_HEADERS,
             )
@@ -1026,24 +1030,57 @@ class ClimateAdminRoomSignalsView(_ClimateView):
             room_ids = frozenset(
                 room["id"] for room in _room_signal_payloads(registry)
             )
-            room_id, entity_id = validate_room_window_update(
-                payload,
-                room_ids=room_ids,
-                entity_known=runtime.signal_entity_known,
-            )
+            if isinstance(payload, Mapping) and set(payload) == {"rooms"}:
+                updates = validate_room_signal_updates(
+                    payload,
+                    room_ids=room_ids,
+                    entity_known=runtime.signal_entity_known,
+                )
+                room_id = None
+                entity_id = None
+                presence_entity_ids = None
+            elif isinstance(payload, Mapping) and "presence_entity_ids" in payload:
+                room_id, entity_id, presence_entity_ids = (
+                    validate_room_signal_update(
+                        payload,
+                        room_ids=room_ids,
+                        entity_known=runtime.signal_entity_known,
+                    )
+                )
+                updates = None
+            else:
+                room_id, entity_id = validate_room_window_update(
+                    payload,
+                    room_ids=room_ids,
+                    entity_known=runtime.signal_entity_known,
+                )
+                presence_entity_ids = None
+                updates = None
         except ClimateSignalSettingsViolation:
             return self.json_message(
-                "Привязка окна комнаты заполнена неверно.",
+                "Привязка сигналов комнаты заполнена неверно.",
                 HTTPStatus.BAD_REQUEST,
                 headers=NO_STORE_HEADERS,
             )
         except Exception:
             return self._unavailable()
         try:
-            result = await runtime.async_update_room_window(room_id, entity_id)
+            result = (
+                await runtime.async_update_room_signal_batch(updates)
+                if updates is not None
+                else (
+                    await runtime.async_update_room_window(room_id, entity_id)
+                    if presence_entity_ids is None
+                    else await runtime.async_update_room_signals(
+                        room_id,
+                        entity_id,
+                        presence_entity_ids,
+                    )
+                )
+            )
         except ClimateRegistryViolation:
             return self.json_message(
-                "Привязка окна комнаты заполнена неверно.",
+                "Привязка сигналов комнаты заполнена неверно.",
                 HTTPStatus.BAD_REQUEST,
                 headers=NO_STORE_HEADERS,
             )
@@ -1056,7 +1093,7 @@ class ClimateAdminRoomSignalsView(_ClimateView):
 
 
 def _room_signal_payloads(registry_payload: dict[str, object]) -> list[dict[str, object]]:
-    """Reduce a registry payload to the bounded per-room window bindings."""
+    """Reduce a registry payload to bounded per-room signal bindings."""
 
     rooms = registry_payload.get("rooms")
     if not isinstance(rooms, list):
@@ -1066,6 +1103,11 @@ def _room_signal_payloads(registry_payload: dict[str, object]) -> list[dict[str,
             "id": room.get("id"),
             "name": room.get("name"),
             "window_entity_id": room.get("window_entity_id"),
+            "presence_entity_ids": (
+                room.get("presence_entity_ids")
+                if isinstance(room.get("presence_entity_ids"), list)
+                else []
+            ),
         }
         for room in rooms
         if isinstance(room, dict)

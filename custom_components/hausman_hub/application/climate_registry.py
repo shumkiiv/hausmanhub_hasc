@@ -15,6 +15,7 @@ from ..domain.climate import (
     ClimateEndpoint,
     ClimateEndpointRole,
     ClimateHomeEnvironment,
+    MAX_ROOM_PRESENCE_ENTITIES,
     ClimateModelViolation,
     ClimateRegistry,
     ClimateRoom,
@@ -66,11 +67,7 @@ def registry_to_payload(registry: ClimateRegistry) -> dict[str, object]:
         "version": registry.version,
         "home": home,
         "rooms": [
-            {
-                "id": room.room_id,
-                "name": room.name,
-                "window_entity_id": room.window_entity_id,
-            }
+            _room_payload(room)
             for room in registry.rooms
         ],
         "devices": [
@@ -225,11 +222,25 @@ def reconcile_climate_registry(
 
 
 def _room(value: object, index: int) -> ClimateRoom:
-    item = _exact_mapping(value, {"id", "name", "window_entity_id"}, f"room {index}")
+    item = _exact_mapping(
+        value,
+        {"id", "name", "window_entity_id", "presence_entity_ids"},
+        f"room {index}",
+        optional={"presence_entity_ids"},
+    )
+    presence_entity_ids = _bounded_list(
+        item.get("presence_entity_ids", []),
+        "room presence entities",
+        MAX_ROOM_PRESENCE_ENTITIES,
+    )
     return ClimateRoom(
         room_id=item["id"],  # type: ignore[arg-type]
         name=item["name"],  # type: ignore[arg-type]
         window_entity_id=_optional_entity(item["window_entity_id"], "window entity"),
+        presence_entity_ids=tuple(
+            _required_entity(entity_id, "room presence entity")
+            for entity_id in presence_entity_ids
+        ),
     )
 
 
@@ -244,6 +255,23 @@ def _optional_entity(value: object, label: str) -> str | None:
     if not isinstance(value, str):
         raise ClimateRegistryViolation(f"{label} must be an entity or unavailable")
     return value
+
+
+def _required_entity(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise ClimateRegistryViolation(f"{label} must be an entity")
+    return value
+
+
+def _room_payload(room: ClimateRoom) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": room.room_id,
+        "name": room.name,
+        "window_entity_id": room.window_entity_id,
+    }
+    if room.presence_entity_ids:
+        payload["presence_entity_ids"] = list(room.presence_entity_ids)
+    return payload
 
 
 def _optional_threshold(value: object, default: float, label: str) -> float:

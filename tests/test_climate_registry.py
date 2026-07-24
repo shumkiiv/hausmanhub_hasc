@@ -208,6 +208,64 @@ class ClimateRegistryTest(unittest.TestCase):
         with self.assertRaisesRegex(ClimateModelViolation, "window entity"):
             ClimateRoom("living", "Living room", window_entity_id="not an entity")
 
+    def test_room_accepts_multiple_unique_binary_presence_sensors(self) -> None:
+        room = ClimateRoom(
+            "living",
+            "Living room",
+            presence_entity_ids=(
+                "binary_sensor.living_motion",
+                "binary_sensor.living_occupancy",
+            ),
+        )
+        self.assertEqual(
+            (
+                "binary_sensor.living_motion",
+                "binary_sensor.living_occupancy",
+            ),
+            room.presence_entity_ids,
+        )
+        with self.assertRaisesRegex(ClimateModelViolation, "immutable"):
+            ClimateRoom(
+                "living",
+                "Living room",
+                presence_entity_ids=["binary_sensor.living_motion"],  # type: ignore[arg-type]
+            )
+        with self.assertRaisesRegex(ClimateModelViolation, "must be unique"):
+            ClimateRoom(
+                "living",
+                "Living room",
+                presence_entity_ids=(
+                    "binary_sensor.living_motion",
+                    "binary_sensor.living_motion",
+                ),
+            )
+        with self.assertRaisesRegex(ClimateModelViolation, "room presence entity"):
+            ClimateRoom(
+                "living",
+                "Living room",
+                presence_entity_ids=("person.ivan",),
+            )
+
+    def test_one_room_presence_sensor_cannot_belong_to_two_rooms(self) -> None:
+        with self.assertRaisesRegex(
+            ClimateModelViolation,
+            "room presence entities across rooms",
+        ):
+            ClimateRegistry(
+                rooms=(
+                    ClimateRoom(
+                        "living",
+                        "Living room",
+                        presence_entity_ids=("binary_sensor.shared_motion",),
+                    ),
+                    ClimateRoom(
+                        "kids",
+                        "Kids",
+                        presence_entity_ids=("binary_sensor.shared_motion",),
+                    ),
+                )
+            )
+
     def test_home_environment_bindings_stay_optional_and_domain_strict(self) -> None:
         home = ClimateHomeEnvironment(
             outdoor_temperature_entity_id="sensor.outdoor_temperature",
@@ -302,6 +360,10 @@ class ClimateRegistryPayloadTest(unittest.TestCase):
                     "living",
                     "Living room",
                     window_entity_id="binary_sensor.living_window",
+                    presence_entity_ids=(
+                        "binary_sensor.living_motion",
+                        "binary_sensor.living_occupancy",
+                    ),
                 ),
             ),
             devices=(
@@ -350,6 +412,7 @@ class ClimateRegistryPayloadTest(unittest.TestCase):
             payload["home"],
         )
         self.assertIsNone(payload["rooms"][0]["window_entity_id"])  # type: ignore[index]
+        self.assertNotIn("presence_entity_ids", payload["rooms"][0])  # type: ignore[operator,index]
         self.assertEqual(registry, registry_from_payload(payload))
 
     def test_payload_rejects_unknown_fields_and_wrong_version(self) -> None:
@@ -399,6 +462,7 @@ class ClimateRegistryPayloadTest(unittest.TestCase):
             restored.home,
         )
         self.assertIsNone(restored.rooms[0].window_entity_id)
+        self.assertEqual((), restored.rooms[0].presence_entity_ids)
         self.assertEqual("living_ac", restored.devices[0].device_id)
 
     def test_migration_rejects_unknown_storage_version_and_shape(self) -> None:

@@ -190,12 +190,15 @@ class HomeAssistantClimateStateView:
             if len(state.state) > MAX_STATE_LENGTH:
                 continue
             friendly_name = state.attributes.get("friendly_name")
+            device_class = state.attributes.get("device_class")
             entries.append(
                 ClimateHaCatalogEntry(
                     entity_id=state.entity_id,
                     domain=domain,
                     state=state.state,
-                    device_class=None,
+                    device_class=(
+                        device_class if isinstance(device_class, str) else None
+                    ),
                     supported_features=0,
                     friendly_name=(
                         friendly_name if isinstance(friendly_name, str) else None
