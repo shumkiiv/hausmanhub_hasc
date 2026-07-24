@@ -4,26 +4,26 @@ Last updated: 2026-07-24.
 
 ## Project state
 
-- Version 1.20.0 is published as the latest stable GitHub release.
-  The HausmanHub page now creates and edits the climate contour, explicitly
-  assigns multiple temperature/humidity sensors to each room, and aggregates
-  fresh same-kind readings by median. Draft editing requires both snapshot and
-  setup revisions; the editor pins the opening revision across background
-  refreshes. Rebuilding preserves day/night profiles, schedule, temporary
-  targets, home/window bindings, and stable device ids. The final staged gate
-  passed 667 tests plus all package/version/naming/repository checks. Kimi could
-  not review because of monthly-quota HTTP 403 in sessions
-  `ses_06d2c2c5dffeN0XSTyHEP2COU5` and
-  `ses_06d2bd4bfffemV5aBst01z8SFG`; OpenAI fallback review first found and
-  reproduced two revision races in `ses_06d2b5149ffeS2TLwe5BIXroYF`. One fix
-  iteration closed both, and final read-only review passed in
-  `ses_06d1aaeceffeott73dPiL0oZhk`. Release commit `2e7a6e0` passed GitHub
-  Actions run `30074063964`; stable release `v1.20.0` is published at
-  https://github.com/shumkiiv/hausmanhub_hacs/releases/tag/v1.20.0, and the
-  remote tag resolves exactly to
-  `2e7a6e0bd2bb5f5b720094bd3027324c10a6b349`. No live Home Assistant change
-  occurred. Next: refresh HACS, install `1.20.0`, restart Home Assistant, and
-  hard-refresh the browser.
+- Version 1.20.1 is published as the latest stable GitHub release. It fixes the
+  first contour bootstrap by projecting Home Assistant areas and resolving an
+  entity's explicit area before its device's inherited area. The page now uses
+  responsive field grids, ordered checkbox rows, clearly disabled buttons,
+  explicit save guidance, and a room/device refresh action. The complete staged
+  release gate passed 670 tests plus all fixture, package, version, naming, and
+  repository-safety checks; Chrome verification passed at desktop and mobile
+  widths. Kimi primary and proit review attempts failed on monthly-quota HTTP
+  403 (`ses_06cec922fffeRdUNA2pb0SgMjm`,
+  `ses_06cec3df7ffeYzFBwMleiAJRNs`); the ivsh profile was stopped after it
+  returned no review (`ses_06cec3e2affeQF4t8pgI0kR7GI`). The exact unchanged
+  staged hash then passed the bounded read-only OpenAI Oracle review in
+  `ses_06ce3405dffeI59okayEMK5gMp` (root supervision session
+  `ses_06ce9deeeffem2CDMesJGSVEXj`). Release commit
+  `91ee1909ecdeacd2374c542723e8e316fcefd70a` passed GitHub Actions run
+  `30077032795`; stable release `v1.20.1` is published at
+  https://github.com/shumkiiv/hausmanhub_hacs/releases/tag/v1.20.1, and the
+  remote tag resolves exactly to the release commit. No live Home Assistant
+  change occurred. Next: refresh HACS, install `1.20.1`, restart Home
+  Assistant, and hard-refresh the browser.
 
 - Product and Home Assistant integration name: **HausmanHub**. **HACS** is only
   the installation/update mechanism and is never the product name. The old
@@ -2473,5 +2473,5 @@ Engineering and review rules are in
 
 - Obsidian/context index: `LLM_WIKI/00_Index.md`.
 - Latest generated context: `LLM_WIKI/Context.md`.
-- Last sync: 2026-07-24T10:04:02+03:00.
+- Last sync: 2026-07-24T10:47:32+03:00.
 <!-- llm-wiki-sync:end -->

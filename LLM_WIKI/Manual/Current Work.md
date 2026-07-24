@@ -1,5 +1,31 @@
 # Current Work
 
+## 2026-07-24 - HausmanHub 1.20.1 published
+
+- The 1.20.0 page incident had two causes: ordinary labels rendered controls
+  inline with their text, and native discovery ignored Home Assistant
+  area/entity/device registries, leaving a fresh installation with no room from
+  which to create its first contour.
+- Release 1.20.1 projects bounded HA areas as rooms, prefers an entity's
+  explicit area, inherits its associated device area when needed, and keeps
+  unassigned entities manually assignable. The page uses responsive
+  two-column/one-column fields, ordered checkboxes, visibly disabled buttons,
+  save prerequisites, blocked-state explanations, and an explicit refresh.
+- The full staged release gate passed 670 tests and all fixture, package,
+  version, naming, Android compatibility, and repository-safety checks.
+  Headless Chrome checks passed at 1224x1500 and 420x1400.
+- Kimi primary and proit attempts failed on quota HTTP 403; the ivsh attempt
+  returned no review and was stopped. The unchanged staged candidate passed
+  the bounded read-only OpenAI Oracle review in
+  `ses_06ce3405dffeI59okayEMK5gMp`.
+- Release commit `91ee1909ecdeacd2374c542723e8e316fcefd70a` was pushed and
+  passed GitHub Actions run `30077032795`. Stable release `v1.20.1` is
+  published at
+  https://github.com/shumkiiv/hausmanhub_hacs/releases/tag/v1.20.1; its remote
+  tag resolves exactly to that commit and the release is Latest.
+- No live Home Assistant change occurred. Next: refresh HACS, install
+  `1.20.1`, restart Home Assistant, and hard-refresh the browser.
+
 ## 2026-07-24 - HausmanHub 1.20.0 published
 
 - The page-owned contour wizard now supports initial creation and safe editing,
